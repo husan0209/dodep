@@ -1,0 +1,173 @@
+# Default values for wallet-core
+
+replicaCount: 3
+
+image:
+  repository: opus-casino/wallet-core
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+
+podSecurityContext:
+  fsGroup: 1000
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+# gRPC service
+service:
+  type: ClusterIP
+  grpcPort: 50053
+  httpPort: 3003
+  metricsPort: 9003
+
+# gRPC ingress (Istio)
+ingress:
+  enabled: true
+  className: istio
+  annotations:
+    istio.io/rev: "stable"
+  hosts:
+    - host: wallet-core.opus-casino.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+# Resource limits
+resources:
+  limits:
+    cpu: 2000m
+    memory: 2Gi
+  requests:
+    cpu: 500m
+    memory: 512Mi
+
+# Autoscaling
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 20
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Affinity
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - wallet-core
+          topologyKey: kubernetes.io/hostname
+
+# Configuration
+config:
+  app:
+    env: "production"
+    name: "wallet-core"
+    version: "0.1.0"
+  
+  database:
+    host: "postgres.opus-casino.svc.cluster.local"
+    port: 5432
+    name: "opus_casino"
+    maxConnections: 20
+    minConnections: 5
+  
+  redis:
+    host: "dragonfly.opus-casino.svc.cluster.local"
+    port: 6379
+    db: 0
+    maxConnections: 10
+  
+  grpc:
+    addr: "0.0.0.0:50053"
+    maxMessageSizeMb: 4
+  
+  http:
+    addr: "0.0.0.0:3003"
+  
+  metrics:
+    enabled: true
+    addr: "0.0.0.0:9003"
+  
+  tracing:
+    enabled: true
+    otlpEndpoint: "http://otel-collector.opus-casino.svc.cluster.local:4317"
+    serviceName: "wallet-core"
+
+# Secrets (reference to external secrets)
+secrets:
+  databasePassword:
+    secretName: "wallet-core-secrets"
+    key: "database-password"
+  redisPassword:
+    secretName: "wallet-core-secrets"
+    key: "redis-password"
+
+# Probes
+probes:
+  liveness:
+    path: /live
+    port: 3003
+    initialDelaySeconds: 10
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readiness:
+    path: /ready
+    port: 3003
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  startup:
+    path: /health
+    port: 3003
+    initialDelaySeconds: 0
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 30
+
+# PodDisruptionBudget
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+
+# NetworkPolicy
+networkPolicy:
+  enabled: true
+  allowIngressFrom:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: istio-system
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: monitoring

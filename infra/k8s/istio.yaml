@@ -1,0 +1,77 @@
+# Istio configuration for Opus Casino
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: opus-casino-gateway
+  namespace: opus-casino
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  - port:
+      number: 443
+      name: https
+      protocol: HTTPS
+    tls:
+      mode: SIMPLE
+      credentialName: opus-casino-tls
+    hosts:
+    - "api.opus-casino.com"
+    - "app.opus-casino.com"
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: opus-casino-routing
+  namespace: opus-casino
+spec:
+  hosts:
+  - "api.opus-casino.com"
+  - "app.opus-casino.com"
+  gateways:
+  - opus-casino-gateway
+  http:
+  - match:
+    - uri:
+        prefix: /api/auth
+    route:
+    - destination:
+        host: auth
+        port:
+          number: 8080
+  - match:
+    - uri:
+        prefix: /api/betting
+    route:
+    - destination:
+        host: betting-engine
+        port:
+          number: 8080
+  - match:
+    - uri:
+        prefix: /api/wallet
+    route:
+    - destination:
+        host: wallet-core
+        port:
+          number: 8080
+---
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: default
+  namespace: opus-casino
+spec:
+  mtls:
+    mode: STRICT
+---
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: default
+  namespace: opus-casino
+spec:
+  rules:
+  - from:
+    - source:
+        principals: ["cluster.local/ns/opus-casino/sa/opus-casino"]

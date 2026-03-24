@@ -1,0 +1,124 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "wallet-core.fullname" . }}
+  labels:
+    {{- include "wallet-core.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "wallet-core.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "wallet-core.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "wallet-core.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: grpc
+              containerPort: 50053
+              protocol: TCP
+            - name: http
+              containerPort: 3003
+              protocol: TCP
+            - name: metrics
+              containerPort: 9003
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.probes.liveness.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.liveness.failureThreshold }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.probes.readiness.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.readiness.failureThreshold }}
+          startupProbe:
+            httpGet:
+              path: {{ .Values.probes.startup.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.probes.startup.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.startup.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.startup.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.startup.failureThreshold }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          env:
+            - name: APP__ENV
+              value: {{ .Values.config.app.env | quote }}
+            - name: APP__NAME
+              value: {{ .Values.config.app.name | quote }}
+            - name: APP__VERSION
+              value: {{ .Values.config.app.version | quote }}
+            - name: DATABASE__HOST
+              value: {{ .Values.config.database.host | quote }}
+            - name: DATABASE__PORT
+              value: {{ .Values.config.database.port | quote }}
+            - name: DATABASE__DATABASE
+              value: {{ .Values.config.database.name | quote }}
+            - name: DATABASE__MAX_CONNECTIONS
+              value: {{ .Values.config.database.maxConnections | quote }}
+            - name: DATABASE__MIN_CONNECTIONS
+              value: {{ .Values.config.database.minConnections | quote }}
+            - name: REDIS__HOST
+              value: {{ .Values.config.redis.host | quote }}
+            - name: REDIS__PORT
+              value: {{ .Values.config.redis.port | quote }}
+            - name: REDIS__DB
+              value: {{ .Values.config.redis.db | quote }}
+            - name: GRPC__ADDR
+              value: {{ .Values.config.grpc.addr | quote }}
+            - name: HTTP__ADDR
+              value: {{ .Values.config.http.addr | quote }}
+            - name: METRICS__ENABLED
+              value: {{ .Values.config.metrics.enabled | quote }}
+            - name: METRICS__ADDR
+              value: {{ .Values.config.metrics.addr | quote }}
+            - name: TRACING__ENABLED
+              value: {{ .Values.config.tracing.enabled | quote }}
+            - name: TRACING__OTLP_ENDPOINT
+              value: {{ .Values.config.tracing.otlpEndpoint | quote }}
+            - name: TRACING__SERVICE_NAME
+              value: {{ .Values.config.tracing.serviceName | quote }}
+          envFrom:
+            - secretRef:
+                name: {{ include "wallet-core.fullname" . }}-secrets
+                optional: true
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

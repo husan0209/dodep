@@ -1,0 +1,280 @@
+// Casino Service - gRPC service definition
+// Orchestrates casino games and provider integrations
+
+syntax = "proto3";
+
+package casino.v1;
+
+option go_package = "github.com/opus-casino/proto/gen/go/casino/v1";
+option java_multiple_files = true;
+option java_package = "com.opuscasino.proto.casino.v1";
+
+import "common/v1/types.proto";
+import "common/v1/money.proto";
+import "common/v1/pagination.proto";
+import "common/v1/error.proto";
+import "google/protobuf/timestamp.proto";
+
+// CasinoService handles casino game operations
+service CasinoService {
+  // GetGames returns available casino games
+  rpc GetGames(GetGamesRequest) returns (GetGamesResponse);
+
+  // GetGame returns game details
+  rpc GetGame(GetGameRequest) returns (GetGameResponse);
+
+  // LaunchGame launches a game session
+  rpc LaunchGame(LaunchGameRequest) returns (LaunchGameResponse);
+
+  // GetGameSession returns game session details
+  rpc GetGameSession(GetGameSessionRequest) returns (GetGameSessionResponse);
+
+  // EndGameSession ends a game session
+  rpc EndGameSession(EndGameSessionRequest) returns (EndGameSessionResponse);
+
+  // GetGameHistory returns user's game history
+  rpc GetGameHistory(GetGameHistoryRequest) returns (GetGameHistoryResponse);
+
+  // GetRoundHistory returns round history for a game session
+  rpc GetRoundHistory(GetRoundHistoryRequest) returns (GetRoundHistoryResponse);
+
+  // GetProviders returns game providers
+  rpc GetProviders(GetProvidersRequest) returns (GetProvidersResponse);
+
+  // GetProvider returns provider details
+  rpc GetProvider(GetProviderRequest) returns (GetProviderResponse);
+}
+
+// ============ Games ============
+
+message GetGamesRequest {
+  optional string provider_id = 1;
+  optional GameCategory category = 2;
+  repeated string tags = 3;
+  optional string search = 4;
+  common.v1.PageRequest pagination = 5;
+}
+
+message GetGamesResponse {
+  repeated Game games = 1;
+  common.v1.PageResponse pagination = 2;
+}
+
+message GetGameRequest {
+  string game_id = 1;
+}
+
+message GetGameResponse {
+  Game game = 1;
+}
+
+// ============ Launch Game ============
+
+message LaunchGameRequest {
+  common.v1.UserId user_id = 1;
+  string game_id = 2;
+  string device_type = 3;
+  string lobby_url = 4;  // URL to return to after game
+}
+
+message LaunchGameResponse {
+  GameSession session = 1;
+  string launch_url = 2;   // URL to launch game provider
+  string token = 3;        // Session token for provider
+  common.v1.ErrorDetails error = 4;
+}
+
+// ============ Game Session ============
+
+message GetGameSessionRequest {
+  string session_id = 1;
+}
+
+message GetGameSessionResponse {
+  GameSession session = 1;
+}
+
+message EndGameSessionRequest {
+  string session_id = 1;
+}
+
+message EndGameSessionResponse {
+  bool success = 1;
+  GameSessionSummary summary = 2;
+  common.v1.ErrorDetails error = 3;
+}
+
+// ============ Game History ============
+
+message GetGameHistoryRequest {
+  common.v1.UserId user_id = 1;
+  optional string game_id = 2;
+  optional common.v1.DateRange date_range = 3;
+  common.v1.PageRequest pagination = 4;
+}
+
+message GetGameHistoryResponse {
+  repeated GameSessionSummary sessions = 1;
+  common.v1.PageResponse pagination = 2;
+}
+
+message GetRoundHistoryRequest {
+  string session_id = 1;
+  common.v1.PageRequest pagination = 2;
+}
+
+message GetRoundHistoryResponse {
+  repeated GameRound rounds = 1;
+  common.v1.PageResponse pagination = 2;
+}
+
+// ============ Providers ============
+
+message GetProvidersRequest {
+  optional bool is_active = 1;
+}
+
+message GetProvidersResponse {
+  repeated Provider providers = 1;
+}
+
+message GetProviderRequest {
+  string provider_id = 1;
+}
+
+message GetProviderResponse {
+  Provider provider = 1;
+}
+
+// ============ Domain Models ============
+
+message Game {
+  string id = 1;
+  string name = 2;
+  string provider_id = 3;
+  string provider_name = 4;
+  GameCategory category = 5;
+  repeated string tags = 6;
+  string description = 7;
+  string image_url = 8;
+  string thumbnail_url = 9;
+  repeated string supported_currencies = 10;
+  MoneyRange bet_range = 11;
+  GameFeatures features = 12;
+  GameStats stats = 13;
+  bool is_active = 14;
+  bool is_demo_available = 15;
+  repeated string restricted_countries = 16;
+  int32 popularity_score = 17;
+  google.protobuf.Timestamp released_at = 18;
+  map<string, string> metadata = 19;
+}
+
+message Provider {
+  string id = 1;
+  string name = 2;
+  string logo_url = 3;
+  string description = 4;
+  bool is_active = 5;
+  int32 games_count = 6;
+  repeated string supported_currencies = 7;
+  repeated string restricted_countries = 8;
+  map<string, string> metadata = 9;
+}
+
+message GameSession {
+  string id = 1;
+  common.v1.UserId user_id = 2;
+  string game_id = 3;
+  string provider_id = 4;
+  GameSessionStatus status = 5;
+  common.v1.Money balance_at_start = 6;
+  google.protobuf.Timestamp started_at = 7;
+  google.protobuf.Timestamp last_activity = 8;
+  optional google.protobuf.Timestamp ended_at = 9;
+  string device_type = 10;
+  string lobby_url = 11;
+  string launch_url = 12;
+  string token = 13;
+  map<string, string> metadata = 14;
+}
+
+message GameSessionSummary {
+  string session_id = 1;
+  string game_id = 2;
+  string game_name = 3;
+  common.v1.Money total_bet = 4;
+  common.v1.Money total_win = 5;
+  common.v1.Money net_result = 6;
+  int32 rounds_played = 7;
+  google.protobuf.Timestamp started_at = 8;
+  google.protobuf.Timestamp ended_at = 9;
+  int64 duration_seconds = 10;
+}
+
+message GameRound {
+  string id = 1;
+  string session_id = 2;
+  string round_id = 3;  // Provider's round ID
+  common.v1.Money bet_amount = 4;
+  common.v1.Money win_amount = 5;
+  common.v1.Money net_result = 6;
+  GameRoundStatus status = 7;
+  google.protobuf.Timestamp started_at = 8;
+  google.protobuf.Timestamp ended_at = 9;
+  map<string, string> game_state = 10;
+  map<string, string> metadata = 11;
+}
+
+message MoneyRange {
+  common.v1.Money min = 1;
+  common.v1.Money max = 2;
+}
+
+message GameFeatures {
+  bool has_free_spins = 1;
+  bool has_bonus_buy = 2;
+  bool has_jackpot = 3;
+  bool has_multiplayer = 4;
+  bool has_live_dealer = 5;
+  repeated string bonus_features = 6;
+}
+
+message GameStats {
+  double rtp = 1;           // Return to Player (0.96 = 96%)
+  string volatility = 2;    // "low", "medium", "high", "very_high"
+  int64 total_plays = 3;
+  common.v1.Money total_paid = 4;
+  common.v1.Money biggest_win = 5;
+}
+
+enum GameCategory {
+  GAME_CATEGORY_UNSPECIFIED = 0;
+  GAME_CATEGORY_SLOTS = 1;
+  GAME_CATEGORY_TABLE_GAMES = 2;
+  GAME_CATEGORY_BLACKJACK = 3;
+  GAME_CATEGORY_ROULETTE = 4;
+  GAME_CATEGORY_BACCARAT = 5;
+  GAME_CATEGORY_POKER = 6;
+  GAME_CATEGORY_LIVE_CASINO = 7;
+  GAME_CATEGORY_GAME_SHOWS = 8;
+  GAME_CATEGORY_CRASH = 9;
+  GAME_CATEGORY_LOTTERY = 10;
+  GAME_CATEGORY_SCRATCH_CARDS = 11;
+}
+
+enum GameSessionStatus {
+  GAME_SESSION_STATUS_UNSPECIFIED = 0;
+  GAME_SESSION_STATUS_ACTIVE = 1;
+  GAME_SESSION_STATUS_PAUSED = 2;
+  GAME_SESSION_STATUS_ENDED = 3;
+  GAME_SESSION_STATUS_DISCONNECTED = 4;
+}
+
+enum GameRoundStatus {
+  GAME_ROUND_STATUS_UNSPECIFIED = 0;
+  GAME_ROUND_STATUS_IN_PROGRESS = 1;
+  GAME_ROUND_STATUS_COMPLETED = 2;
+  GAME_ROUND_STATUS_FAILED = 3;
+  GAME_ROUND_STATUS_VOID = 4;
+}

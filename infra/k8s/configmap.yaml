@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: opus-casino
+data:
+  RUST_LOG: "info"
+  GO_ENV: "production"
+  PYTHON_ENV: "production"
+  
+  # Database
+  POSTGRES_HOST: "postgres.opus-casino.svc.cluster.local"
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: "opus_casino"
+  
+  # Redis/Dragonfly
+  REDIS_HOST: "dragonfly.opus-casino.svc.cluster.local"
+  REDIS_PORT: "6379"
+  
+  # ClickHouse
+  CLICKHOUSE_HOST: "clickhouse.opus-casino.svc.cluster.local"
+  CLICKHOUSE_PORT: "8123"
+  
+  # Redpanda
+  REDPANDA_BROKERS: "redpanda-0.redpanda.opus-casino.svc.cluster.local:9092"
+  
+  # gRPC endpoints
+  BETTING_ENGINE_GRPC: "betting-engine.opus-casino.svc.cluster.local:50051"
+  WALLET_CORE_GRPC: "wallet-core.opus-casino.svc.cluster.local:50051"
+  AUTH_GRPC: "auth.opus-casino.svc.cluster.local:50051"

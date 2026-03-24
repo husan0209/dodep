@@ -1,0 +1,196 @@
+name: CI - Python Fraud ML
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'services/python/fraud-ml/**'
+      - 'libs/proto/**'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'services/python/fraud-ml/**'
+      - 'libs/proto/**'
+
+env:
+  PYTHON_VERSION: '3.11'
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: opus-casino
+
+jobs:
+  lint:
+    name: Lint Python Code
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: services/python/fraud-ml/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          cd services/python/fraud-ml
+          pip install --upgrade pip
+          pip install ruff black mypy
+          pip install -r requirements.txt
+
+      - name: Lint with ruff
+        run: |
+          cd services/python/fraud-ml
+          ruff check .
+
+      - name: Check formatting with black
+        run: |
+          cd services/python/fraud-ml
+          black --check .
+
+      - name: Type check with mypy
+        run: |
+          cd services/python/fraud-ml
+          mypy . --ignore-missing-imports
+
+  test:
+    name: Test Python ML
+    runs-on: ubuntu-latest
+    needs: lint
+    services:
+      clickhouse:
+        image: clickhouse/clickhouse-server:23.12
+        ports:
+          - 9000:9000
+          - 8123:8123
+        options: >-
+          --health-cmd "clickhouse-client --query 'SELECT 1'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redpanda:
+        image: docker.redpanda.com/redpandadata/redpanda:v23.3.5
+        ports:
+          - 9092:9092
+        command: >-
+          redpanda start
+          --smp 1
+          --overprovisioned
+          --node-id 0
+          --kafka-addr PLAINTEXT://0.0.0.0:29092,OUTSIDE://0.0.0.0:9092
+          --advertise-kafka-addr PLAINTEXT://redpanda:29092,OUTSIDE://localhost:9092
+          --pandaproxy-addr 0.0.0.0:8082
+          --advertise-pandaproxy-addr localhost:8082
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: services/python/fraud-ml/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          cd services/python/fraud-ml
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio pytest-cov
+
+      - name: Run tests
+        run: |
+          cd services/python/fraud-ml
+          pytest tests/ -v --cov=. --cov-report=xml
+        env:
+          CLICKHOUSE_HOST: localhost
+          CLICKHOUSE_PORT: 9000
+          REDPANDA_BROKERS: localhost:9092
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+        with:
+          files: services/python/fraud-ml/coverage.xml
+          flags: fraud-ml
+          name: fraud-ml-coverage
+
+  build:
+    name: Build and Push Docker Image
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Fraud ML Service
+        uses: docker/build-push-action@v5
+        with:
+          context: services/python/fraud-ml
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/fraud-ml:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/fraud-ml:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
+          build-args: |
+            APP_VERSION=${{ github.sha }}
+
+  deploy-dev:
+    name: Deploy to Dev
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: dev
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: v3.13.0
+
+      - name: Configure kubectl
+        uses: azure/k8s-set-context@v3
+        with:
+          method: kubeconfig
+          kubeconfig: ${{ secrets.KUBE_CONFIG_DEV }}
+
+      - name: Deploy Fraud ML Service
+        run: |
+          helm upgrade --install fraud-ml infra/helm/charts/fraud-ml \
+            --namespace platform-dev \
+            --set image.tag=${{ github.sha }} \
+            --set env=dev \
+            --wait --timeout 10m
+
+      - name: Run smoke tests
+        run: |
+          kubectl wait --for=condition=available deployment/fraud-ml -n platform-dev --timeout=300s
+          
+          # Health check
+          curl -f https://dev-api.opus.casino/health
+          curl -f https://dev-api.opus.casino/ready
+          
+          # Check models status
+          curl -f https://dev-api.opus.casino/api/v1/fraud/models/status

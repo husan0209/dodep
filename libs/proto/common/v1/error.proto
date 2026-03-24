@@ -1,0 +1,159 @@
+// Error types and status codes for Opus Casino platform
+
+syntax = "proto3";
+
+package common.v1;
+
+option go_package = "github.com/opus-casino/proto/gen/go/common/v1";
+option java_multiple_files = true;
+option java_package = "com.opuscasino.proto.common.v1";
+
+// ErrorCode represents application-specific error codes
+enum ErrorCode {
+  ERROR_CODE_UNSPECIFIED = 0;
+  
+  // Authentication errors (1000-1999)
+  ERROR_CODE_AUTH_INVALID_CREDENTIALS = 1001;
+  ERROR_CODE_AUTH_TOKEN_EXPIRED = 1002;
+  ERROR_CODE_AUTH_TOKEN_INVALID = 1003;
+  ERROR_CODE_AUTH_SESSION_EXPIRED = 1004;
+  ERROR_CODE_AUTH_SESSION_INVALID = 1005;
+  ERROR_CODE_AUTH_2FA_REQUIRED = 1006;
+  ERROR_CODE_AUTH_2FA_INVALID = 1007;
+  ERROR_CODE_AUTH_ACCOUNT_LOCKED = 1008;
+  ERROR_CODE_AUTH_ACCOUNT_DISABLED = 1009;
+  
+  // Authorization errors (2000-2999)
+  ERROR_CODE_FORBIDDEN = 2001;
+  ERROR_CODE_PERMISSION_DENIED = 2002;
+  ERROR_CODE_ROLE_REQUIRED = 2003;
+  
+  // Validation errors (3000-3999)
+  ERROR_CODE_VALIDATION_ERROR = 3001;
+  ERROR_CODE_INVALID_ARGUMENT = 3002;
+  ERROR_CODE_MISSING_REQUIRED_FIELD = 3003;
+  ERROR_CODE_INVALID_FORMAT = 3004;
+  ERROR_CODE_OUT_OF_RANGE = 3005;
+  
+  // User errors (4000-4999)
+  ERROR_CODE_USER_NOT_FOUND = 4001;
+  ERROR_CODE_USER_ALREADY_EXISTS = 4002;
+  ERROR_CODE_EMAIL_ALREADY_REGISTERED = 4003;
+  ERROR_CODE_USERNAME_TAKEN = 4004;
+  
+  // Wallet errors (5000-5999)
+  ERROR_CODE_WALLET_NOT_FOUND = 5001;
+  ERROR_CODE_INSUFFICIENT_BALANCE = 5002;
+  ERROR_CODE_INSUFFICIENT_AVAILABLE_BALANCE = 5003;
+  ERROR_CODE_WALLET_INACTIVE = 5004;
+  ERROR_CODE_WALLET_LOCKED = 5005;
+  ERROR_CODE_CURRENCY_MISMATCH = 5006;
+  
+  // Transaction errors (6000-6999)
+  ERROR_CODE_TRANSACTION_NOT_FOUND = 6001;
+  ERROR_CODE_TRANSACTION_FAILED = 6002;
+  ERROR_CODE_TRANSACTION_DUPLICATE = 6003;
+  ERROR_CODE_TRANSACTION_LIMIT_EXCEEDED = 6004;
+  ERROR_CODE_TRANSACTION_PENDING = 6005;
+  
+  // Bet errors (7000-7999)
+  ERROR_CODE_BET_NOT_FOUND = 7001;
+  ERROR_CODE_BET_INVALID = 7002;
+  ERROR_CODE_BET_ALREADY_SETTLED = 7003;
+  ERROR_CODE_BET_CANCELLED = 7004;
+  ERROR_CODE_BET_LIMIT_EXCEEDED = 7005;
+  ERROR_CODE_BET_MINIMUM_NOT_MET = 7006;
+  ERROR_CODE_BET_ODDS_CHANGED = 7007;
+  ERROR_CODE_BET_EVENT_SUSPENDED = 7008;
+  ERROR_CODE_BET_SELECTION_INVALID = 7009;
+  
+  // Payment errors (8000-8999)
+  ERROR_CODE_PAYMENT_FAILED = 8001;
+  ERROR_CODE_PAYMENT_METHOD_INVALID = 8002;
+  ERROR_CODE_PAYMENT_METHOD_NOT_SUPPORTED = 8003;
+  ERROR_CODE_PAYMENT_DECLINED = 8004;
+  ERROR_CODE_PAYMENT_LIMIT_EXCEEDED = 8005;
+  ERROR_CODE_PAYMENT_DUPLICATE = 8006;
+  
+  // Bonus errors (9000-9999)
+  ERROR_CODE_BONUS_NOT_FOUND = 9001;
+  ERROR_CODE_BONUS_INELIGIBLE = 9002;
+  ERROR_CODE_BONUS_WAGERING_NOT_MET = 9003;
+  ERROR_CODE_BONUS_EXPIRED = 9004;
+  ERROR_CODE_BONUS_MAX_BET_EXCEEDED = 9005;
+  
+  // KYC errors (10000-10999)
+  ERROR_CODE_KYC_NOT_VERIFIED = 10001;
+  ERROR_CODE_KYC_REQUIRED = 10002;
+  ERROR_CODE_KYC_REJECTED = 10003;
+  ERROR_CODE_KYC_PENDING = 10004;
+  ERROR_CODE_KYC_DOCUMENT_INVALID = 10005;
+  
+  // System errors (11000-11999)
+  ERROR_CODE_INTERNAL_ERROR = 11001;
+  ERROR_CODE_SERVICE_UNAVAILABLE = 11002;
+  ERROR_CODE_DATABASE_ERROR = 11003;
+  ERROR_CODE_CACHE_ERROR = 11004;
+  ERROR_CODE_RATE_LIMIT_EXCEEDED = 11005;
+  ERROR_CODE_MAINTENANCE_MODE = 11006;
+  
+  // Fraud errors (12000-12999)
+  ERROR_CODE_FRAUD_SUSPECTED = 12001;
+  ERROR_CODE_FRAUD_BLOCKED = 12002;
+  ERROR_CODE_FRAUD_REVIEW_REQUIRED = 12003;
+  ERROR_CODE_ACCOUNT_UNDER_REVIEW = 12004;
+  
+  // Geo errors (13000-13999)
+  ERROR_CODE_GEO_RESTRICTED = 13001;
+  ERROR_CODE_COUNTRY_NOT_SUPPORTED = 13002;
+  ERROR_CODE_JURISDICTION_RESTRICTED = 13003;
+}
+
+// ErrorDetails provides structured error information
+message ErrorDetails {
+  // Application-specific error code
+  ErrorCode error_code = 1;
+  // Human-readable error message
+  string error_message = 2;
+  // Additional error metadata
+  map<string, string> metadata = 3;
+  // Field-specific validation errors
+  repeated FieldError field_errors = 4;
+  // Error trace ID for debugging
+  string trace_id = 5;
+}
+
+// FieldError represents a validation error for a specific field
+message FieldError {
+  // Field name that has the error
+  string field = 1;
+  // Error code for this field
+  string error_code = 2;
+  // Human-readable error message
+  string error_message = 3;
+}
+
+// HealthStatus represents service health
+enum HealthStatus {
+  HEALTH_STATUS_UNSPECIFIED = 0;
+  HEALTH_STATUS_HEALTHY = 1;
+  HEALTH_STATUS_DEGRADED = 2;
+  HEALTH_STATUS_UNHEALTHY = 3;
+}
+
+// HealthCheckResponse for service health endpoints
+message HealthCheckResponse {
+  string service_name = 1;
+  HealthStatus status = 2;
+  google.protobuf.Timestamp timestamp = 3;
+  map<string, ComponentHealth> components = 4;
+  string version = 5;
+}
+
+// ComponentHealth represents health of a specific component
+message ComponentHealth {
+  string name = 1;
+  HealthStatus status = 2;
+  optional string message = 3;
+  optional int64 latency_ms = 4;
+}

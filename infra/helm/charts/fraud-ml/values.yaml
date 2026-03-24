@@ -1,0 +1,168 @@
+# Fraud ML Service Helm Chart Values
+# ML service for fraud detection
+
+replicaCount: 2
+
+image:
+  repository: ghcr.io/opus-casino/fraud-ml
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+serviceAccount:
+  create: true
+  annotations:
+    eks.amazonaws.com/role-arn: ""
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+
+podSecurityContext:
+  fsGroup: 1000
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  capabilities:
+    drop:
+      - ALL
+
+service:
+  type: ClusterIP
+  httpPort: 8000
+  httpTargetPort: 8000
+
+ingress:
+  enabled: true
+  className: "alb"
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/healthcheck-path: /health
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+  hosts:
+    - host: api.opus.casino
+      paths:
+        - path: /api/v1/fraud
+          pathType: Prefix
+  tls:
+    - secretName: opus-casino-tls
+      hosts:
+        - api.opus.casino
+
+resources:
+  limits:
+    cpu: 4000m
+    memory: 8Gi
+  requests:
+    cpu: 1000m
+    memory: 2Gi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 60
+  targetMemoryUtilizationPercentage: 70
+
+nodeSelector:
+  node-type: ml
+
+healthCheck:
+  path: /health
+  port: 8000
+  liveness:
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 10
+    failureThreshold: 3
+  readiness:
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+env:
+  - name: APP_ENV
+    valueFrom:
+      configMapKeyRef:
+        name: fraud-ml-config
+        key: app-env
+  - name: CLICKHOUSE_HOST
+    valueFrom:
+      configMapKeyRef:
+        name: fraud-ml-config
+        key: clickhouse-host
+  - name: REDPANDA_BROKERS
+    valueFrom:
+      configMapKeyRef:
+        name: fraud-ml-config
+        key: redpanda-brokers
+  - name: MODEL_PATH
+    value: "/app/models"
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+networkPolicy:
+  enabled: true
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: istio-system
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+      ports:
+        - protocol: TCP
+          port: 8000
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: data
+      ports:
+        - protocol: TCP
+          port: 9000
+        - protocol: TCP
+          port: 5432
+        - protocol: TCP
+          port: 9092
+
+serviceMonitor:
+  enabled: true
+  interval: 30s
+  scrapeTimeout: 10s
+  path: /metrics
+  port: metrics
+
+# ML-specific settings
+ml:
+  modelUpdateFreqHours: 24
+  thresholds:
+    bet_anomaly: 0.7
+    bonus_abuse: 0.6
+    payment_fraud: 0.65
+    account_takeover: 0.75
+  
+  # ClickHouse
+  clickhouse:
+    host: "clickhouse-data"
+    port: 9000
+    database: "opus_casino"
+    user: "fraud_ml"
+    
+  # Redpanda
+  redpanda:
+    brokers: "redpanda-data:9092"
+    consumer_group: "fraud-ml-service"
+    topics:
+      - bets.placed
+      - bets.settled
+      - payments.initiated
+      - payments.completed
+      - users.logins
+      - bonus.activated

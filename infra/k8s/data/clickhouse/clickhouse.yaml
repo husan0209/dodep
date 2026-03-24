@@ -1,0 +1,680 @@
+# ClickHouse K8s Deployment
+# Author: DATA_ENGINEER
+# Date: 2026-03-24
+# Cluster: main_cluster (3 shards × 2 replicas)
+# ClickHouse Keeper replaces ZooKeeper
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: data
+  labels:
+    app.kubernetes.io/part-of: opus-casino
+
+---
+# ConfigMap: ClickHouse server configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: clickhouse-config
+  namespace: data
+data:
+  config.xml: |
+    <clickhouse>
+        <logger>
+            <level>information</level>
+            <console>true</console>
+        </logger>
+
+        <listen_host>0.0.0.0</listen_host>
+        <http_port>8123</http_port>
+        <tcp_port>9000</tcp_port>
+        <interserver_http_port>9009</interserver_http_port>
+
+        <!-- Cluster: main_cluster -->
+        <remote_servers>
+            <main_cluster>
+                <shard>
+                    <replica>
+                        <host>clickhouse-0.clickhouse.data.svc.cluster.local</host>
+                        <port>9000</port>
+                    </replica>
+                    <replica>
+                        <host>clickhouse-1.clickhouse.data.svc.cluster.local</host>
+                        <port>9000</port>
+                    </replica>
+                </shard>
+                <shard>
+                    <replica>
+                        <host>clickhouse-2.clickhouse.data.svc.cluster.local</host>
+                        <port>9000</port>
+                    </replica>
+                    <replica>
+                        <host>clickhouse-3.clickhouse.data.svc.cluster.local</host>
+                        <port>9000</port>
+                    </replica>
+                </shard>
+                <shard>
+                    <replica>
+                        <host>clickhouse-4.clickhouse.data.svc.cluster.local</host>
+                        <port>9000</port>
+                    </replica>
+                    <replica>
+                        <host>clickhouse-5.clickhouse.data.svc.cluster.local</host>
+                        <port>9000</port>
+                    </replica>
+                </shard>
+            </main_cluster>
+        </remote_servers>
+
+        <!-- ClickHouse Keeper -->
+        <zookeeper>
+            <node>
+                <host>clickhouse-keeper-0.clickhouse-keeper.data.svc.cluster.local</host>
+                <port>2181</port>
+            </node>
+            <node>
+                <host>clickhouse-keeper-1.clickhouse-keeper.data.svc.cluster.local</host>
+                <port>2181</port>
+            </node>
+            <node>
+                <host>clickhouse-keeper-2.clickhouse-keeper.data.svc.cluster.local</host>
+                <port>2181</port>
+            </node>
+        </zookeeper>
+
+        <!-- Macros: set per-pod via env vars -->
+        <macros>
+            <shard>0</shard>
+            <replica>clickhouse-0</replica>
+        </macros>
+
+        <!-- Storage -->
+        <path>/var/lib/clickhouse</path>
+        <tmp_path>/var/lib/clickhouse/tmp</tmp_path>
+        <user_files_path>/var/lib/clickhouse/user_files</user_files_path>
+
+        <!-- Performance -->
+        <max_connections>4096</max_connections>
+        <max_concurrent_queries>200</max_concurrent_queries>
+        <max_memory_usage>20000000000</max_memory_usage>  <!-- 20GB -->
+        <max_memory_usage_for_all_queries>60000000000</max_memory_usage_for_all_queries>  <!-- 60GB -->
+        <max_server_memory_usage_to_ram_ratio>0.8</max_server_memory_usage_to_ram_ratio>
+
+        <!-- MergeTree settings -->
+        <merge_tree>
+            <max_suspicious_broken_parts>5</max_suspicious_broken_parts>
+            <parts_to_delay_insert>300</parts_to_delay_insert>
+            <parts_to_throw_insert>600</parts_to_throw_insert>
+            <max_bytes_to_merge_at_max_space_in_pool>161061273600</max_bytes_to_merge_at_max_space_in_pool>
+        </merge_tree>
+
+        <!-- Distributed DDL -->
+        <distributed_ddl>
+            <path>/clickhouse/task_queue/ddl</path>
+        </distributed_ddl>
+
+        <!-- Query log -->
+        <query_log>
+            <database>system</database>
+            <table>query_log</table>
+            <partition_by>toYYYYMM(event_date)</partition_by>
+            <ttl>event_date + INTERVAL 30 DAY</ttl>
+        </query_log>
+
+        <!-- Prometheus metrics -->
+        <prometheus>
+            <endpoint>/metrics</endpoint>
+            <port>9363</port>
+            <metrics>true</metrics>
+            <events>true</events>
+            <asynchronous_metrics>true</asynchronous_metrics>
+        </prometheus>
+    </clickhouse>
+
+  users.xml: |
+    <clickhouse>
+        <profiles>
+            <default>
+                <max_memory_usage>10000000000</max_memory_usage>
+                <max_execution_time>30</max_execution_time>
+                <max_rows_to_read>1000000000</max_rows_to_read>
+                <readonly>0</readonly>
+            </default>
+            <readonly>
+                <readonly>1</readonly>
+                <max_memory_usage>5000000000</max_memory_usage>
+                <max_execution_time>60</max_execution_time>
+            </readonly>
+        </profiles>
+        <users>
+            <default>
+                <password></password>
+                <profile>default</profile>
+                <quota>default</quota>
+                <access_management>0</access_management>
+                <named_collection_control>0</named_collection_control>
+            </default>
+            <analytics>
+                <password_sha256_hex></password_sha256_hex>
+                <profile>readonly</profile>
+                <quota>default</quota>
+                <allow_databases>
+                    <database>default</database>
+                    <database>system</database>
+                </allow_databases>
+            </analytics>
+        </users>
+        <quotas>
+            <default>
+                <interval>
+                    <duration>3600</duration>
+                    <queries>10000</queries>
+                    <errors>1000</errors>
+                    <result_rows>10000000000</result_rows>
+                    <read_rows>100000000000</read_rows>
+                    <execution_time>36000</execution_time>
+                </interval>
+            </default>
+        </quotas>
+    </clickhouse>
+
+---
+# ConfigMap: ClickHouse Keeper configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: clickhouse-keeper-config
+  namespace: data
+data:
+  keeper_config.xml: |
+    <clickhouse>
+        <listen_host>0.0.0.0</listen_host>
+        <keeper_server>
+            <tcp_port>2181</tcp_port>
+            <server_id>0</server_id>
+
+            <log_storage_path>/var/lib/clickhouse/coordination/log</log_storage_path>
+            <snapshot_storage_path>/var/lib/clickhouse/coordination/snapshots</snapshot_storage_path>
+
+            <coordination_settings>
+                <operation_timeout_ms>10000</operation_timeout_ms>
+                <session_timeout_ms>30000</session_timeout_ms>
+                <raft_logs_level>information</raft_logs_level>
+                <rotate_log_storage_interval>100000</rotate_log_storage_interval>
+            </coordination_settings>
+
+            <raft_configuration>
+                <server>
+                    <id>0</id>
+                    <hostname>clickhouse-keeper-0.clickhouse-keeper.data.svc.cluster.local</hostname>
+                    <port>9234</port>
+                </server>
+                <server>
+                    <id>1</id>
+                    <hostname>clickhouse-keeper-1.clickhouse-keeper.data.svc.cluster.local</hostname>
+                    <port>9234</port>
+                </server>
+                <server>
+                    <id>2</id>
+                    <hostname>clickhouse-keeper-2.clickhouse-keeper.data.svc.cluster.local</hostname>
+                    <port>9234</port>
+                </server>
+            </raft_configuration>
+        </keeper_server>
+
+        <path>/var/lib/clickhouse</path>
+
+        <logger>
+            <level>information</level>
+            <console>true</console>
+        </logger>
+    </clickhouse>
+
+---
+# StatefulSet: ClickHouse Keeper (3 nodes for quorum)
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: clickhouse-keeper
+  namespace: data
+  labels:
+    app: clickhouse-keeper
+    component: coordination
+spec:
+  serviceName: clickhouse-keeper
+  replicas: 3
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app: clickhouse-keeper
+  template:
+    metadata:
+      labels:
+        app: clickhouse-keeper
+        component: coordination
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9363"
+        prometheus.io/path: "/metrics"
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app: clickhouse-keeper
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: keeper
+          image: clickhouse/clickhouse-server:23.12-alpine
+          command:
+            - /bin/bash
+            - -c
+            - |
+              # Set server_id from pod ordinal
+              SERVER_ID=${HOSTNAME##*-}
+              sed -i "s|<server_id>0</server_id>|<server_id>${SERVER_ID}</server_id>|g" /etc/clickhouse-server/keeper_config.xml
+              exec clickhouse-keeper --config-file=/etc/clickhouse-server/keeper_config.xml
+          ports:
+            - containerPort: 2181
+              name: client
+            - containerPort: 9234
+              name: raft
+            - containerPort: 9363
+              name: metrics
+          resources:
+            requests:
+              cpu: "1"
+              memory: "4Gi"
+            limits:
+              cpu: "2"
+              memory: "8Gi"
+          volumeMounts:
+            - name: config
+              mountPath: /etc/clickhouse-server/keeper_config.xml
+              subPath: keeper_config.xml
+            - name: data
+              mountPath: /var/lib/clickhouse
+          readinessProbe:
+            exec:
+              command:
+                - /bin/bash
+                - -c
+                - echo ruok | nc localhost 2181 | grep -q imok
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            exec:
+              command:
+                - /bin/bash
+                - -c
+                - echo ruok | nc localhost 2181 | grep -q imok
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+      volumes:
+        - name: config
+          configMap:
+            name: clickhouse-keeper-config
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: gp3
+        resources:
+          requests:
+            storage: 50Gi
+
+---
+# Service: ClickHouse Keeper headless
+apiVersion: v1
+kind: Service
+metadata:
+  name: clickhouse-keeper
+  namespace: data
+  labels:
+    app: clickhouse-keeper
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+    - port: 2181
+      targetPort: 2181
+      name: client
+    - port: 9234
+      targetPort: 9234
+      name: raft
+  selector:
+    app: clickhouse-keeper
+
+---
+# StatefulSet: ClickHouse Server (3 shards × 2 replicas = 6 pods)
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: clickhouse
+  namespace: data
+  labels:
+    app: clickhouse
+    component: analytics
+spec:
+  serviceName: clickhouse
+  replicas: 6
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app: clickhouse
+  template:
+    metadata:
+      labels:
+        app: clickhouse
+        component: analytics
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9363"
+        prometheus.io/path: "/metrics"
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: clickhouse
+                topologyKey: kubernetes.io/hostname
+      initContainers:
+        - name: set-macros
+          image: busybox:1.36
+          command:
+            - /bin/sh
+            - -c
+            - |
+              # Calculate shard and replica from pod ordinal
+              ORDINAL=${HOSTNAME##*-}
+              SHARD=$((ORDINAL / 2))
+              REPLICA="clickhouse-${ORDINAL}"
+
+              # Write macros config
+              cat > /tmp/macros.xml <<EOF
+              <clickhouse>
+                  <macros>
+                      <shard>${SHARD}</shard>
+                      <replica>${REPLICA}</replica>
+                  </macros>
+              </clickhouse>
+              EOF
+              cp /tmp/macros.xml /etc/clickhouse-server/config.d/macros.xml
+          volumeMounts:
+            - name: config-d
+              mountPath: /etc/clickhouse-server/config.d
+      containers:
+        - name: clickhouse
+          image: clickhouse/clickhouse-server:23.12-alpine
+          ports:
+            - containerPort: 8123
+              name: http
+            - containerPort: 9000
+              name: tcp
+            - containerPort: 9009
+              name: interserver
+            - containerPort: 9363
+              name: metrics
+          resources:
+            requests:
+              cpu: "8"
+              memory: "64Gi"
+            limits:
+              cpu: "16"
+              memory: "128Gi"
+          volumeMounts:
+            - name: config
+              mountPath: /etc/clickhouse-server/config.xml
+              subPath: config.xml
+            - name: users-config
+              mountPath: /etc/clickhouse-server/users.xml
+              subPath: users.xml
+            - name: config-d
+              mountPath: /etc/clickhouse-server/config.d
+            - name: data
+              mountPath: /var/lib/clickhouse
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: 8123
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: 8123
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 5
+      volumes:
+        - name: config
+          configMap:
+            name: clickhouse-config
+            items:
+              - key: config.xml
+                path: config.xml
+        - name: users-config
+          configMap:
+            name: clickhouse-config
+            items:
+              - key: users.xml
+                path: users.xml
+        - name: config-d
+          emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: gp3
+        resources:
+          requests:
+            storage: 500Gi
+
+---
+# Service: ClickHouse headless (for StatefulSet DNS)
+apiVersion: v1
+kind: Service
+metadata:
+  name: clickhouse
+  namespace: data
+  labels:
+    app: clickhouse
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+    - port: 8123
+      targetPort: 8123
+      name: http
+    - port: 9000
+      targetPort: 9000
+      name: tcp
+    - port: 9363
+      targetPort: 9363
+      name: metrics
+  selector:
+    app: clickhouse
+
+---
+# Service: ClickHouse Cluster (load balanced)
+apiVersion: v1
+kind: Service
+metadata:
+  name: clickhouse-cluster
+  namespace: data
+  labels:
+    app: clickhouse
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8123
+      targetPort: 8123
+      name: http
+    - port: 9000
+      targetPort: 9000
+      name: tcp
+  selector:
+    app: clickhouse
+
+---
+# PodDisruptionBudget: at least 4 ClickHouse nodes available (2/3 of cluster)
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: clickhouse-pdb
+  namespace: data
+spec:
+  minAvailable: 4
+  selector:
+    matchLabels:
+      app: clickhouse
+
+---
+# PodDisruptionBudget: at least 2 Keeper nodes available (quorum)
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: clickhouse-keeper-pdb
+  namespace: data
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: clickhouse-keeper
+
+---
+# NetworkPolicy: ClickHouse accessible from platform and data namespaces
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: clickhouse-network-policy
+  namespace: data
+spec:
+  podSelector:
+    matchLabels:
+      app: clickhouse
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # HTTP API from platform and data namespaces
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: platform
+        - namespaceSelector:
+            matchLabels:
+              name: data
+      ports:
+        - protocol: TCP
+          port: 8123
+    # Native TCP from platform and data namespaces
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: platform
+        - namespaceSelector:
+            matchLabels:
+              name: data
+      ports:
+        - protocol: TCP
+          port: 9000
+    # Inter-server replication
+    - from:
+        - podSelector:
+            matchLabels:
+              app: clickhouse
+      ports:
+        - protocol: TCP
+          port: 9009
+  egress:
+    # ClickHouse Keeper
+    - to:
+        - podSelector:
+            matchLabels:
+              app: clickhouse-keeper
+      ports:
+        - protocol: TCP
+          port: 2181
+    # Inter-server replication
+    - to:
+        - podSelector:
+            matchLabels:
+              app: clickhouse
+      ports:
+        - protocol: TCP
+          port: 9009
+    # Redpanda (Kafka consumers)
+    - to:
+        - podSelector:
+            matchLabels:
+              app: redpanda
+      ports:
+        - protocol: TCP
+          port: 9092
+    # DNS resolution
+    - to: []
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+
+---
+# NetworkPolicy: ClickHouse Keeper accessible only from ClickHouse
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: clickhouse-keeper-network-policy
+  namespace: data
+spec:
+  podSelector:
+    matchLabels:
+      app: clickhouse-keeper
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Client connections from ClickHouse
+    - from:
+        - podSelector:
+            matchLabels:
+              app: clickhouse
+      ports:
+        - protocol: TCP
+          port: 2181
+    # Raft inter-keeper communication
+    - from:
+        - podSelector:
+            matchLabels:
+              app: clickhouse-keeper
+      ports:
+        - protocol: TCP
+          port: 9234
+  egress:
+    # Raft inter-keeper communication
+    - to:
+        - podSelector:
+            matchLabels:
+              app: clickhouse-keeper
+      ports:
+        - protocol: TCP
+          port: 9234
+    # DNS resolution
+    - to: []
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53

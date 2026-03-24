@@ -1,0 +1,372 @@
+# Grafana Alerting Rules
+# Alert rules for infrastructure and applications
+
+---
+# Alerting Rules ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-alerting-rules
+  namespace: monitoring
+data:
+  alerting-rules.yaml: |
+    groups:
+      # =============================================================================
+      # Infrastructure Alerts
+      # =============================================================================
+      - name: Infrastructure
+        interval: 1m
+        rules:
+          - uid: high-cpu-usage
+            title: High CPU Usage
+            condition: C
+            data:
+              - refId: A
+                datasourceUid: VictoriaMetrics
+                model:
+                  expr: avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100
+              - refId: C
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: A
+                  reducer: last
+                  comparator: gt
+                  threshold: 80
+            for: 5m
+            annotations:
+              summary: "High CPU usage detected"
+              description: "CPU usage is above 80% for more than 5 minutes"
+            labels:
+              severity: warning
+              
+          - uid: high-memory-usage
+            title: High Memory Usage
+            condition: C
+            data:
+              - refId: A
+                datasourceUid: VictoriaMetrics
+                model:
+                  expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100
+              - refId: C
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: A
+                  reducer: last
+                  comparator: gt
+                  threshold: 85
+            for: 5m
+            annotations:
+              summary: "High memory usage detected"
+              description: "Memory usage is above 85% for more than 5 minutes"
+            labels:
+              severity: warning
+              
+          - uid: disk-usage-critical
+            title: Disk Usage Critical
+            condition: C
+            data:
+              - refId: A
+                datasourceUid: VictoriaMetrics
+                model:
+                  expr: (1 - (node_filesystem_avail_bytes / node_filesystem_size_bytes)) * 100
+              - refId: C
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: A
+                  reducer: last
+                  comparator: gt
+                  threshold: 85
+            for: 2m
+            annotations:
+              summary: "Disk usage critical"
+              description: "Disk usage is above 85%"
+            labels:
+              severity: critical
+              
+          - uid: node-down
+            title: Node Down
+            condition: C
+            data:
+              - refId: A
+                datasourceUid: VictoriaMetrics
+                model:
+                  expr: up{job="node-exporter"} == 0
+              - refId: C
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: A
+                  reducer: last
+                  comparator: eq
+                  threshold: 0
+            for: 2m
+            annotations:
+              summary: "Node is down"
+              description: "Node {{ $labels.instance }} is down"
+            labels:
+              severity: critical
+                
+      # =============================================================================
+      # Application Alerts
+      # =============================================================================
+      - name: Application
+        interval: 1m
+        rules:
+          - uid: high-error-rate
+            title: High Error Rate
+            condition: C
+            data:
+              - refId: A
+                datasourceUid: VictoriaMetrics
+                model:
+                  expr: sum(rate(http_requests_total{status=~"5.."}[5m])) / sum(rate(http_requests_total[5m])) * 100
+              - refId: C
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: A
+                  reducer: last
+                  comparator: gt
+                  threshold: 1
+            for: 5m
+            annotations:
+              summary: "High error rate detected"
+              description: "Error rate is above 1% for more than 5 minutes"
+            labels:
+              severity: critical
+              
+          - uid: high-p99-latency
+            title: High P99 Latency
+            condition: C
+            data:
+              - refId: A
+                datasourceUid: VictoriaMetrics
+                model:
+                  expr: histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))
+              - refId: C
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: A
+                  reducer: last
+                  comparator: gt
+                  threshold: 0.5
+            for: 10m
+            annotations:
+              summary: "High P99 latency detected"
+              description: "P99 latency is above 500ms for more than 10 minutes"
+            labels:
+              severity: warning
+              
+          - uid: pod-crashloop
+            title: Pod CrashLoopBackOff
+            condition: C
+            data:
+              - refId: A
+                datasourceUid: VictoriaMetrics
+                model:
+                  expr: rate(kube_pod_container_status_restarts_total[15m]) > 0
+              - refId: C
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: A
+                  reducer: last
+                  comparator: gt
+                  threshold: 0
+            for: 5m
+            annotations:
+              summary: "Pod is in CrashLoopBackOff"
+              description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} is restarting"
+            labels:
+              severity: warning
+              
+      # =============================================================================
+      # Database Alerts
+      # =============================================================================
+      - name: Database
+        interval: 1m
+        rules:
+          - uid: db-connection-pool-exhausted
+            title: Database Connection Pool Exhausted
+            condition: C
+            data:
+              - refId: A
+                datasourceUid: VictoriaMetrics
+                model:
+                  expr: pg_stat_activity_count / pg_settings_max_connections * 100
+              - refId: C
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: A
+                  reducer: last
+                  comparator: gt
+                  threshold: 90
+            for: 2m
+            annotations:
+              summary: "Database connection pool exhausted"
+              description: "Database connection pool is above 90%"
+            labels:
+              severity: critical
+              
+          - uid: db-replication-lag
+            title: Database Replication Lag
+            condition: C
+            data:
+              - refId: A
+                datasourceUid: VictoriaMetrics
+                model:
+                  expr: pg_replication_lag_seconds
+              - refId: C
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: A
+                  reducer: last
+                  comparator: gt
+                  threshold: 30
+            for: 5m
+            annotations:
+              summary: "Database replication lag"
+              description: "Replication lag is above 30 seconds"
+            labels:
+              severity: warning
+              
+      # =============================================================================
+      # Business Alerts
+      # =============================================================================
+      - name: Business
+        interval: 1m
+        rules:
+          - uid: abnormal-bet-pattern
+            title: Abnormal Bet Pattern Detected
+            condition: C
+            data:
+              - refId: A
+                datasourceUid: VictoriaMetrics
+                model:
+                  expr: sum(rate(bets_total[5m])) > 10000
+              - refId: C
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: A
+                  reducer: last
+                  comparator: gt
+                  threshold: 10000
+            for: 5m
+            annotations:
+              summary: "Abnormal bet pattern detected"
+              description: "Bet rate is abnormally high (>10K bets/min)"
+            labels:
+              severity: warning
+              
+          - uid: payment-failure-rate
+            title: High Payment Failure Rate
+            condition: C
+            data:
+              - refId: A
+                datasourceUid: VictoriaMetrics
+                model:
+                  expr: sum(rate(payment_transactions_total{status="failed"}[5m])) / sum(rate(payment_transactions_total[5m])) * 100
+              - refId: C
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: A
+                  reducer: last
+                  comparator: gt
+                  threshold: 5
+            for: 5m
+            annotations:
+              summary: "High payment failure rate"
+              description: "Payment failure rate is above 5%"
+            labels:
+              severity: critical
+
+---
+# Notification Policies
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-notification-policies
+  namespace: monitoring
+data:
+  notification-policies.yaml: |
+    apiVersion: 1
+    policies:
+      - orgId: 1
+        receiver: pagerduty-critical
+        group_by: ['alertname', 'severity', 'namespace']
+        group_wait: 30s
+        group_interval: 5m
+        repeat_interval: 4h
+        routes:
+          - receiver: pagerduty-critical
+            group_by: ['alertname']
+            matchers:
+              - severity = critical
+            continue: false
+          - receiver: slack-warnings
+            group_by: ['alertname']
+            matchers:
+              - severity = warning
+            continue: false
+          - receiver: email-info
+            group_by: ['alertname']
+            matchers:
+              - severity = info
+            continue: false
+            
+    receivers:
+      - orgId: 1
+        name: pagerduty-critical
+        type: pagerduty
+        settings:
+          integrationKey: ${PAGERDUTY_INTEGRATION_KEY}
+          severity: critical
+          class: infrastructure
+          component: opus-casino
+          group: platform
+          summary: "{{ .CommonAnnotations.summary }}"
+          
+      - orgId: 1
+        name: slack-warnings
+        type: slack
+        settings:
+          url: ${SLACK_WEBHOOK_URL}
+          channel: "#alerts-warnings"
+          username: Grafana
+          icon_emoji: ":warning:"
+          title: "{{ .CommonAnnotations.summary }}"
+          text: "{{ .CommonAnnotations.description }}"
+          
+      - orgId: 1
+        name: email-info
+        type: email
+        settings:
+          addresses: platform@opus.casino
+          singleEmail: true
+          message: "{{ .CommonAnnotations.description }}"
+          
+    contactPoints:
+      - orgId: 1
+        name: PagerDuty
+        receivers:
+          - uid: pagerduty-receiver
+            type: pagerduty
+            settings:
+              integrationKey: ${PAGERDUTY_INTEGRATION_KEY}
+              
+      - orgId: 1
+        name: Slack
+        receivers:
+          - uid: slack-receiver
+            type: slack
+            settings:
+              url: ${SLACK_WEBHOOK_URL}
+              channel: "#alerts"

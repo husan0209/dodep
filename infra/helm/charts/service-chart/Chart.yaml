@@ -1,0 +1,14 @@
+apiVersion: v2
+name: service-chart
+description: Base Helm chart for Opus Casino microservices
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - casino
+  - microservices
+  - gambling
+home: https://opus.casino
+maintainers:
+  - name: Platform Team
+    email: platform@opus.casino

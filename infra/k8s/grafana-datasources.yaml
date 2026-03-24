@@ -1,0 +1,39 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  namespace: opus-casino
+data:
+  datasources.yml: |
+    apiVersion: 1
+    
+    datasources:
+    - name: VictoriaMetrics
+      type: prometheus
+      access: proxy
+      url: http://victoria-metrics.opus-casino.svc.cluster.local:8428
+      isDefault: true
+      editable: true
+      jsonData:
+        timeInterval: "15s"
+        queryTimeout: "60s"
+    
+    - name: Jaeger
+      type: jaeger
+      access: proxy
+      url: http://jaeger-query.opus-casino.svc.cluster.local:16686
+      isDefault: false
+      editable: true
+    
+    - name: ClickHouse
+      type: vertamedia-clickhouse-datasource
+      access: proxy
+      url: http://clickhouse.opus-casino.svc.cluster.local:8123
+      isDefault: false
+      editable: true
+      jsonData:
+        defaultDatabase: opus_casino
+        useYandexCloudAuthorization: false
+        addCorsHeader: true
+        usePOST: true
+        useCompression: true

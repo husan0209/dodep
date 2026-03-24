@@ -1,0 +1,59 @@
+# Betting Engine - Dev Environment Values
+# Development окружение - минимальные ресурсы
+
+replicaCount: 1
+
+image:
+  tag: "dev"
+
+# Smaller resources for dev
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+# Disable autoscaling in dev
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 3
+
+# Dev environment variables
+env:
+  - name: RUST_LOG
+    value: "debug"
+  - name: RUST_BACKTRACE
+    value: "full"
+  - name: APP_ENV
+    value: "development"
+  - name: DATABASE_URL
+    valueFrom:
+      secretKeyRef:
+        name: betting-engine-secrets-dev
+        key: database-url
+  - name: REDIS_URL
+    valueFrom:
+      secretKeyRef:
+        name: betting-engine-secrets-dev
+        key: redis-url
+  - name: KAFKA_BROKERS
+    value: "redpanda.data.svc.cluster.local:9092"
+
+# Disable PDB in dev
+podDisruptionBudget:
+  enabled: false
+
+# Simpler network policy for dev
+networkPolicy:
+  enabled: false
+
+# Disable service monitor in dev (uses less resources)
+serviceMonitor:
+  enabled: false
+
+# No TLS in dev
+ingress:
+  enabled: false

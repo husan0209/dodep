@@ -1,0 +1,179 @@
+# Reusable Composite Action для security scanning
+# Opus Casino - Production CI/CD
+
+name: 'Security Scan'
+description: 'Run security scans (Trivy, Semgrep, dependency check)'
+branding:
+  icon: 'shield'
+  color: 'red'
+
+inputs:
+  language:
+    description: 'Programming language (rust, go, python, node)'
+    required: true
+  working-directory:
+    description: 'Working directory for scans'
+    required: false
+    default: '.'
+  fail-on-severity:
+    description: 'Minimum severity to fail (LOW, MEDIUM, HIGH, CRITICAL)'
+    required: false
+    default: 'HIGH'
+  semgrep-rules:
+    description: 'Semgrep rules to use'
+    required: false
+    default: 'auto'
+  enable-trivy:
+    description: 'Enable Trivy filesystem scan'
+    required: false
+    default: 'true'
+  enable-semgrep:
+    description: 'Enable Semgrep SAST scan'
+    required: false
+    default: 'true'
+  enable-dependency-check:
+    description: 'Enable dependency vulnerability check'
+    required: false
+    default: 'true'
+
+outputs:
+  trivy-exit-code:
+    description: 'Trivy scan exit code'
+    value: ${{ steps.trivy.outputs.exit-code }}
+  semgrep-exit-code:
+    description: 'Semgrep scan exit code'
+    value: ${{ steps.semgrep.outputs.exit-code }}
+  dependency-exit-code:
+    description: 'Dependency check exit code'
+    value: ${{ steps.dependencies.outputs.exit-code }}
+
+runs:
+  using: 'composite'
+  steps:
+    # ==========================================================================
+    # Trivy Filesystem Scan
+    # ==========================================================================
+    - name: Install Trivy
+      if: inputs.enable-trivy == 'true'
+      shell: bash
+      run: |
+        curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin v0.50.0
+
+    - name: Run Trivy filesystem scan
+      id: trivy
+      if: inputs.enable-trivy == 'true'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        SEVERITY: ${{ inputs.fail-on-severity }}
+      run: |
+        trivy fs \
+          --severity ${SEVERITY},CRITICAL \
+          --timeout 10m \
+          --format sarif \
+          --output trivy-fs-results.sarif \
+          --exit-code 1 \
+          . || echo "exit-code=$?" >> $GITHUB_OUTPUT
+        
+        # Generate table report
+        trivy fs \
+          --severity ${SEVERITY},CRITICAL \
+          --timeout 10m \
+          --format table \
+          --output trivy-fs-report.html \
+          . || true
+
+    - name: Upload Trivy FS results
+      if: always() && inputs.enable-trivy == 'true'
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ inputs.working-directory }}/trivy-fs-results.sarif
+        category: trivy-fs-${{ inputs.language }}
+
+    # ==========================================================================
+    # Semgrep SAST Scan
+    # ==========================================================================
+    - name: Run Semgrep
+      id: semgrep
+      if: inputs.enable-semgrep == 'true'
+      uses: returntocorp/semgrep-action@v1
+      with:
+        config: ${{ inputs.semgrep-rules }}
+        auditOn: push
+        generateSarif: "1"
+
+    - name: Upload Semgrep results
+      if: always() && inputs.enable-semgrep == 'true'
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: semgrep.sarif
+        category: semgrep-${{ inputs.language }}
+
+    # ==========================================================================
+    # Dependency Vulnerability Check
+    # ==========================================================================
+    - name: Install dependency check tools
+      if: inputs.enable-dependency-check == 'true'
+      shell: bash
+      run: |
+        # Install cargo-audit for Rust
+        if [ "${{ inputs.language }}" = "rust" ]; then
+          cargo install cargo-audit --locked || true
+        fi
+        
+        # Install govulncheck for Go
+        if [ "${{ inputs.language }}" = "go" ]; then
+          go install golang.org/x/vuln/cmd/govulncheck@latest || true
+        fi
+        
+        # Install pip-audit for Python
+        if [ "${{ inputs.language }}" = "python" ]; then
+          pip install pip-audit || true
+        fi
+        
+        # Install npm audit (built-in) for Node.js
+        echo "Dependency check tools installed"
+
+    - name: Run Rust dependency audit
+      id: dependencies-rust
+      if: inputs.enable-dependency-check == 'true' && inputs.language == 'rust'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        cargo audit --deny warnings 2>&1 | tee cargo-audit.txt || echo "exit-code=$?" >> $GITHUB_OUTPUT
+
+    - name: Run Go vulnerability check
+      id: dependencies-go
+      if: inputs.enable-dependency-check == 'true' && inputs.language == 'go'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        govulncheck ./... 2>&1 | tee govulncheck.txt || echo "exit-code=$?" >> $GITHUB_OUTPUT
+
+    - name: Run Python dependency audit
+      id: dependencies-python
+      if: inputs.enable-dependency-check == 'true' && inputs.language == 'python'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        pip-audit 2>&1 | tee pip-audit.txt || echo "exit-code=$?" >> $GITHUB_OUTPUT
+
+    - name: Run npm audit
+      id: dependencies-node
+      if: inputs.enable-dependency-check == 'true' && inputs.language == 'node'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        npm audit --audit-level=high 2>&1 | tee npm-audit.txt || echo "exit-code=$?" >> $GITHUB_OUTPUT
+
+    - name: Upload dependency audit results
+      if: always() && inputs.enable-dependency-check == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: dependency-audit-${{ inputs.language }}
+        path: |
+          ${{ inputs.working-directory }}/cargo-audit.txt
+          ${{ inputs.working-directory }}/govulncheck.txt
+          ${{ inputs.working-directory }}/pip-audit.txt
+          ${{ inputs.working-directory }}/npm-audit.txt
+        retention-days: 30

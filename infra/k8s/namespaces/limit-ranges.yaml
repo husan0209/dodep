@@ -1,0 +1,187 @@
+# Limit Ranges для namespaces
+# Ограничивает потребление ресурсов на pod/container
+
+---
+# Development Limit Range
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: dev-limits
+  namespace: dev
+spec:
+  limits:
+    # Container limits
+    - type: Container
+      default:
+        cpu: "500m"
+        memory: 512Mi
+      defaultRequest:
+        cpu: "100m"
+        memory: 128Mi
+      max:
+        cpu: "4"
+        memory: 8Gi
+      min:
+        cpu: "50m"
+        memory: 64Mi
+      
+    # Pod limits
+    - type: Pod
+      max:
+        cpu: "8"
+        memory: 16Gi
+      
+    # PVC limits
+    - type: PersistentVolumeClaim
+      max:
+        storage: 50Gi
+      min:
+        storage: 1Gi
+
+---
+# Staging Limit Range
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: staging-limits
+  namespace: staging
+spec:
+  limits:
+    # Container limits
+    - type: Container
+      default:
+        cpu: "1"
+        memory: 1Gi
+      defaultRequest:
+        cpu: "250m"
+        memory: 256Mi
+      max:
+        cpu: "8"
+        memory: 16Gi
+      min:
+        cpu: "50m"
+        memory: 64Mi
+      
+    # Pod limits
+    - type: Pod
+      max:
+        cpu: "16"
+        memory: 32Gi
+      
+    # PVC limits
+    - type: PersistentVolumeClaim
+      max:
+        storage: 100Gi
+      min:
+        storage: 1Gi
+
+---
+# Production Limit Range
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: production-limits
+  namespace: production
+spec:
+  limits:
+    # Container limits
+    - type: Container
+      default:
+        cpu: "2"
+        memory: 2Gi
+      defaultRequest:
+        cpu: "500m"
+        memory: 512Mi
+      max:
+        cpu: "16"
+        memory: 32Gi
+      min:
+        cpu: "100m"
+        memory: 128Mi
+      
+    # Pod limits
+    - type: Pod
+      max:
+        cpu: "32"
+        memory: 64Gi
+      
+    # PVC limits
+    - type: PersistentVolumeClaim
+      max:
+        storage: 200Gi
+      min:
+        storage: 1Gi
+
+---
+# Data Services Limit Range
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: data-limits
+  namespace: data
+spec:
+  limits:
+    # Container limits
+    - type: Container
+      default:
+        cpu: "4"
+        memory: 8Gi
+      defaultRequest:
+        cpu: "1"
+        memory: 2Gi
+      max:
+        cpu: "32"
+        memory: 64Gi
+      min:
+        cpu: "500m"
+        memory: 1Gi
+      
+    # Pod limits
+    - type: Pod
+      max:
+        cpu: "64"
+        memory: 128Gi
+      
+    # PVC limits
+    - type: PersistentVolumeClaim
+      max:
+        storage: 1Ti
+      min:
+        storage: 10Gi
+
+---
+# Monitoring Limit Range
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: monitoring-limits
+  namespace: monitoring
+spec:
+  limits:
+    # Container limits
+    - type: Container
+      default:
+        cpu: "2"
+        memory: 4Gi
+      defaultRequest:
+        cpu: "500m"
+        memory: 1Gi
+      max:
+        cpu: "8"
+        memory: 16Gi
+      min:
+        cpu: "100m"
+        memory: 256Mi
+      
+    # Pod limits
+    - type: Pod
+      max:
+        cpu: "16"
+        memory: 32Gi
+      
+    # PVC limits
+    - type: PersistentVolumeClaim
+      max:
+        storage: 500Gi
+      min:
+        storage: 10Gi

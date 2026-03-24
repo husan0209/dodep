@@ -1,0 +1,279 @@
+# Vault Configuration
+# Secret engines, policies, auth methods
+
+---
+# Enable KV v2 secrets engine
+apiVersion: vault.upbound.io/v1alpha1
+kind: Mount
+metadata:
+  name: secret
+spec:
+  type: kv
+  description: "KV v2 secrets engine"
+  version: 2
+  path: secret/
+
+---
+# Enable Database secrets engine
+apiVersion: vault.upbound.io/v1alpha1
+kind: Mount
+metadata:
+  name: database
+spec:
+  type: database
+  description: "Database secrets engine"
+  path: database/
+
+---
+# Enable PKI secrets engine
+apiVersion: vault.upbound.io/v1alpha1
+kind: Mount
+metadata:
+  name: pki
+spec:
+  type: pki
+  description: "PKI secrets engine"
+  path: pki/
+  config:
+    defaultLeaseTTL: "1h"
+    maxLeaseTTL: "87600h"  # 10 years
+
+---
+# Enable Transit secrets engine
+apiVersion: vault.upbound.io/v1alpha1
+kind: Mount
+metadata:
+  name: transit
+spec:
+  type: transit
+  description: "Transit secrets engine"
+  path: transit/
+
+---
+# Enable Kubernetes auth method
+apiVersion: vault.upbound.io/v1alpha1
+kind: AuthBackend
+metadata:
+  name: kubernetes
+spec:
+  type: kubernetes
+  description: "Kubernetes auth method"
+  path: kubernetes/
+
+---
+# Vault Policy for Betting Engine
+apiVersion: vault.upbound.io/v1alpha1
+kind: Policy
+metadata:
+  name: betting-engine
+spec:
+  name: betting-engine
+  policy: |
+    # Read secrets from secret/
+    path "secret/data/betting-engine/*" {
+      capabilities = ["read", "list"]
+    }
+    
+    # Read database credentials
+    path "database/creds/betting-engine" {
+      capabilities = ["read"]
+    }
+    
+    # Use transit encryption
+    path "transit/encrypt/betting-engine-key" {
+      capabilities = ["update"]
+    }
+    path "transit/decrypt/betting-engine-key" {
+      capabilities = ["update"]
+    }
+
+---
+# Vault Policy for Wallet Core
+apiVersion: vault.upbound.io/v1alpha1
+kind: Policy
+metadata:
+  name: wallet-core
+spec:
+  name: wallet-core
+  policy: |
+    # Read secrets from secret/
+    path "secret/data/wallet-core/*" {
+      capabilities = ["read", "list"]
+    }
+    
+    # Read database credentials
+    path "database/creds/wallet-core" {
+      capabilities = ["read"]
+    }
+    
+    # Use transit encryption
+    path "transit/encrypt/wallet-core-key" {
+      capabilities = ["update"]
+    }
+    path "transit/decrypt/wallet-core-key" {
+      capabilities = ["update"]
+    }
+    
+    # Access KMS keys
+    path "secret/data/kms/*" {
+      capabilities = ["read"]
+    }
+
+---
+# Vault Policy for Auth Service
+apiVersion: vault.upbound.io/v1alpha1
+kind: Policy
+metadata:
+  name: auth
+spec:
+  name: auth
+  policy: |
+    # Read secrets from secret/
+    path "secret/data/auth/*" {
+      capabilities = ["read", "list"]
+    }
+    
+    # Read database credentials
+    path "database/creds/auth" {
+      capabilities = ["read"]
+    }
+    
+    # Read JWT secrets
+    path "secret/data/jwt/*" {
+      capabilities = ["read"]
+    }
+
+---
+# Kubernetes Auth Role for Betting Engine
+apiVersion: vault.upbound.io/v1alpha1
+kind: KubernetesAuthBackendRole
+metadata:
+  name: betting-engine
+spec:
+  name: betting-engine
+  backendRef:
+    name: kubernetes
+  boundServiceAccountNames:
+    - betting-engine
+  boundServiceAccountNamespaces:
+    - production
+    - staging
+    - dev
+  ttl: "1h"
+  maxTtl: "24h"
+  policies:
+    - betting-engine
+
+---
+# Kubernetes Auth Role for Wallet Core
+apiVersion: vault.upbound.io/v1alpha1
+kind: KubernetesAuthBackendRole
+metadata:
+  name: wallet-core
+spec:
+  name: wallet-core
+  backendRef:
+    name: kubernetes
+  boundServiceAccountNames:
+    - wallet-core
+  boundServiceAccountNamespaces:
+    - production
+    - staging
+    - dev
+  ttl: "1h"
+  maxTtl: "24h"
+  policies:
+    - wallet-core
+
+---
+# Kubernetes Auth Role for Auth Service
+apiVersion: vault.upbound.io/v1alpha1
+kind: KubernetesAuthBackendRole
+metadata:
+  name: auth
+spec:
+  name: auth
+  backendRef:
+    name: kubernetes
+  boundServiceAccountNames:
+    - auth
+  boundServiceAccountNamespaces:
+    - production
+    - staging
+    - dev
+  ttl: "1h"
+  maxTtl: "24h"
+  policies:
+    - auth
+
+---
+# Database Connection for PostgreSQL
+apiVersion: vault.upbound.io/v1alpha1
+kind: DatabaseSecretEngineConfig
+metadata:
+  name: postgresql
+spec:
+  backendRef:
+    name: database
+  name: postgresql
+  pluginName: postgresql-database-plugin
+  allowedRoles:
+    - betting-engine
+    - wallet-core
+    - auth
+  connectionUrl: "postgresql://{{username}}:{{password}}@postgresql.data.svc.cluster.local:5432/opus_casino?sslmode=require"
+  username: vault-admin
+  passwordSecretRef:
+    name: vault-db-admin
+    key: password
+
+---
+# Database Role for Betting Engine
+apiVersion: vault.upbound.io/v1alpha1
+kind: DatabaseSecretEngineRole
+metadata:
+  name: betting-engine
+spec:
+  backendRef:
+    name: database
+  name: betting-engine
+  dbName: postgresql
+  creationStatements:
+    - "CREATE ROLE \"{{name}}\" WITH LOGIN PASSWORD '{{password}}' VALID UNTIL '{{expiration}}';"
+    - "GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE bets, odds TO \"{{name}}\";"
+  defaultTtl: "1h"
+  maxTtl: "24h"
+
+---
+# Database Role for Wallet Core
+apiVersion: vault.upbound.io/v1alpha1
+kind: DatabaseSecretEngineRole
+metadata:
+  name: wallet-core
+spec:
+  backendRef:
+    name: database
+  name: wallet-core
+  dbName: postgresql
+  creationStatements:
+    - "CREATE ROLE \"{{name}}\" WITH LOGIN PASSWORD '{{password}}' VALID UNTIL '{{expiration}}';"
+    - "GRANT SELECT, INSERT, UPDATE ON TABLE wallets, transactions TO \"{{name}}\";"
+  defaultTtl: "1h"
+  maxTtl: "24h"
+
+---
+# Database Role for Auth Service
+apiVersion: vault.upbound.io/v1alpha1
+kind: DatabaseSecretEngineRole
+metadata:
+  name: auth
+spec:
+  backendRef:
+    name: database
+  name: auth
+  dbName: postgresql
+  creationStatements:
+    - "CREATE ROLE \"{{name}}\" WITH LOGIN PASSWORD '{{password}}' VALID UNTIL '{{expiration}}';"
+    - "GRANT SELECT, INSERT, UPDATE ON TABLE users, sessions TO \"{{name}}\";"
+  defaultTtl: "1h"
+  maxTtl: "24h"

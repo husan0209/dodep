@@ -1,0 +1,6 @@
+[build]
+target-dir = "target"
+
+[alias]
+lint = "clippy -- -D warnings"
+test-coverage = "tarpaulin --out Html"

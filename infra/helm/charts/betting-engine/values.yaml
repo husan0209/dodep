@@ -1,0 +1,172 @@
+# Betting Engine Helm Chart Values
+# Базовые значения для всех окружений
+
+replicaCount: 2
+
+image:
+  repository: ghcr.io/opus-casino/betting-engine
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+# Service account с доступом к Secrets
+serviceAccount:
+  create: true
+  annotations:
+    eks.amazonaws.com/role-arn: ""  # Заполняется для окружения
+
+# Pod annotations для tracing
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8080"
+  prometheus.io/path: "/metrics"
+
+# Security context для Rust приложения
+podSecurityContext:
+  fsGroup: 1000
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+# Service
+service:
+  type: ClusterIP
+  port: 8080
+  targetPort: 8080
+  annotations:
+    prometheus.io/scrape: "true"
+
+# Ingress
+ingress:
+  enabled: true
+  className: "alb"
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/healthcheck-path: /health
+    alb.ingress.kubernetes.io/success-codes: "200"
+    alb.ingress.kubernetes.io/protocol: HTTP
+  hosts:
+    - host: api.opus.casino
+      paths:
+        - path: /api/v1/bets
+          pathType: Prefix
+        - path: /api/v1/odds
+          pathType: Prefix
+  tls:
+    - secretName: opus-casino-tls
+      hosts:
+        - api.opus.casino
+
+# Resources для Rust приложения (эффективное использование памяти)
+resources:
+  limits:
+    cpu: 2000m
+    memory: 2Gi
+  requests:
+    cpu: 500m
+    memory: 512Mi
+
+# Autoscaling для обработки пиковых нагрузок
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 20
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+# Node selector для placement на application nodes
+nodeSelector:
+  node-type: application
+
+# Health checks
+healthCheck:
+  path: /health
+  port: 8080
+  liveness:
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readiness:
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+# Environment variables
+env:
+  - name: RUST_LOG
+    value: "info"
+  - name: RUST_BACKTRACE
+    value: "1"
+  - name: APP_ENV
+    valueFrom:
+      configMapKeyRef:
+        name: betting-engine-config
+        key: app-env
+  - name: DATABASE_URL
+    valueFrom:
+      secretKeyRef:
+        name: betting-engine-secrets
+        key: database-url
+  - name: REDIS_URL
+    valueFrom:
+      secretKeyRef:
+        name: betting-engine-secrets
+        key: redis-url
+  - name: KAFKA_BROKERS
+    valueFrom:
+      configMapKeyRef:
+        name: betting-engine-config
+        key: kafka-brokers
+
+# Pod disruption budget для высокой доступности
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# Network policy
+networkPolicy:
+  enabled: true
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: istio-system
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: data
+      ports:
+        - protocol: TCP
+          port: 5432
+        - protocol: TCP
+          port: 6379
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: data
+      ports:
+        - protocol: TCP
+          port: 9092
+
+# Service monitor для Prometheus
+serviceMonitor:
+  enabled: true
+  interval: 15s
+  scrapeTimeout: 10s
+  path: /metrics
+  port: metrics

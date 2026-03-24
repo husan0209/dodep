@@ -1,0 +1,10 @@
+# Generated code - DO NOT COMMIT
+# Run `buf generate` to regenerate
+
+/gen/
+/gen/go/
+/gen/rust/
+/gen/typescript/
+
+# Build artifacts
+build/

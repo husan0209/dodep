@@ -1,0 +1,10 @@
+apiVersion: v2
+name: admin
+description: Opus Casino Admin Panel - React SPA
+version: 0.1.0
+appVersion: "0.1.0"
+type: application
+dependencies:
+  - name: service-chart
+    version: "0.1.0"
+    repository: "file://../service-chart"

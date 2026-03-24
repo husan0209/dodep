@@ -1,0 +1,347 @@
+# Sentry Error Tracking
+# Application error tracking and performance monitoring
+
+---
+# Sentry ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sentry-config
+  namespace: monitoring
+data:
+  config.yaml: |
+    # Sentry configuration
+    system:
+      url-prefix: https://sentry.opus.casino
+      secret-key: ${SENTRY_SECRET_KEY}
+      
+    redis:
+      cluster:
+        hosts:
+          - host: redis.data.svc.cluster.local
+            port: 6379
+            
+    postgres:
+      host: postgresql.data.svc.cluster.local
+      port: 5432
+      name: sentry
+      user: sentry
+      password: ${SENTRY_DB_PASSWORD}
+      
+    kafka:
+      brokers:
+        - redpanda.data.svc.cluster.local:9092
+        
+    symbolicator:
+      enabled: true
+      url: http://symbolicator:3021
+      
+    mail:
+      host: smtp.gmail.com
+      port: 587
+      user: ${SMTP_USER}
+      password: ${SMTP_PASSWORD}
+      use-tls: true
+      
+    slack:
+      client-id: ${SLACK_CLIENT_ID}
+      client-secret: ${SLACK_CLIENT_SECRET}
+      signing-secret: ${SLACK_SIGNING_SECRET}
+
+---
+# Sentry PostgreSQL Database
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sentry-db-init
+  namespace: monitoring
+data:
+  init.sql: |
+    -- Create Sentry database
+    CREATE DATABASE sentry;
+    CREATE USER sentry WITH PASSWORD 'sentry-password';
+    GRANT ALL PRIVILEGES ON DATABASE sentry TO sentry;
+
+---
+# Sentry ServiceAccount
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sentry
+  namespace: monitoring
+
+---
+# Note: For production, use the official Sentry Helm chart
+# This is a simplified deployment for reference
+
+# Sentry Web Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sentry-web
+  namespace: monitoring
+  labels:
+    app: sentry-web
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: sentry-web
+  template:
+    metadata:
+      labels:
+        app: sentry-web
+    spec:
+      serviceAccountName: sentry
+      containers:
+        - name: sentry-web
+          image: sentry:24.1.0
+          command: ["sentry", "run", "web"]
+          ports:
+            - name: http
+              containerPort: 9000
+          env:
+            - name: SENTRY_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: sentry-secrets
+                  key: secret-key
+            - name: SENTRY_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: sentry-secrets
+                  key: db-password
+            - name: C_FORCE_ROOT
+              value: "true"
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: 1000m
+              memory: 2Gi
+          livenessProbe:
+            httpGet:
+              path: /_health/
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /_health/
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 5
+
+---
+# Sentry Worker Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sentry-worker
+  namespace: monitoring
+  labels:
+    app: sentry-worker
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: sentry-worker
+  template:
+    metadata:
+      labels:
+        app: sentry-worker
+    spec:
+      serviceAccountName: sentry
+      containers:
+        - name: sentry-worker
+          image: sentry:24.1.0
+          command: ["sentry", "run", "worker"]
+          env:
+            - name: SENTRY_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: sentry-secrets
+                  key: secret-key
+            - name: SENTRY_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: sentry-secrets
+                  key: db-password
+            - name: C_FORCE_ROOT
+              value: "true"
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: 1000m
+              memory: 2Gi
+
+---
+# Sentry Cron Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sentry-cron
+  namespace: monitoring
+  labels:
+    app: sentry-cron
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sentry-cron
+  template:
+    metadata:
+      labels:
+        app: sentry-cron
+    spec:
+      serviceAccountName: sentry
+      containers:
+        - name: sentry-cron
+          image: sentry:24.1.0
+          command: ["sentry", "run", "cron"]
+          env:
+            - name: SENTRY_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: sentry-secrets
+                  key: secret-key
+            - name: SENTRY_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: sentry-secrets
+                  key: db-password
+            - name: C_FORCE_ROOT
+              value: "true"
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+
+---
+# Sentry Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: sentry
+  namespace: monitoring
+  labels:
+    app: sentry
+spec:
+  ports:
+    - name: http
+      port: 9000
+      targetPort: http
+  selector:
+    app: sentry-web
+  type: ClusterIP
+
+---
+# Sentry Ingress
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: sentry
+  namespace: monitoring
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+spec:
+  ingressClassName: alb
+  rules:
+    - host: sentry.opus.casino
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: sentry
+                port:
+                  number: 9000
+  tls:
+    - hosts:
+        - sentry.opus.casino
+      secretName: sentry-tls
+
+---
+# Example: Rust Sentry Integration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sentry-examples
+  namespace: monitoring
+data:
+  rust-integration.rs: |
+    // Rust Sentry integration example
+    use sentry::{init, capture_message, Level};
+    
+    pub fn init_sentry() {
+        let _guard = sentry::init((
+            "https://public-key@sentry.opus.casino/1",
+            sentry::ClientOptions {
+                release: sentry::release_name!(),
+                environment: Some("production".into()),
+                traces_sample_rate: 0.1,
+                ..Default::default()
+            }
+        ));
+        
+        // Capture a message
+        capture_message!("Something happened!", Level::Info);
+        
+        // Capture an error
+        if let Err(err) = some_operation() {
+            capture_error!(err);
+        }
+    }
+    
+  go-integration.go: |
+    // Go Sentry integration example
+    import (
+        "github.com/getsentry/sentry-go"
+    )
+    
+    func initSentry() {
+        sentry.Init(sentry.ClientOptions{
+            Dsn:              "https://public-key@sentry.opus.casino/1",
+            Environment:      "production",
+            TracesSampleRate: 0.1,
+        })
+        
+        // Capture message
+        sentry.CaptureMessage("Something happened!")
+        
+        // Capture error
+        if err := someOperation(); err != nil {
+            sentry.CaptureException(err)
+        }
+    }
+    
+  python-integration.py: |
+    # Python Sentry integration example
+    import sentry_sdk
+    from sentry_sdk.integrations.fastapi import FastApiIntegration
+    
+    def init_sentry():
+        sentry_sdk.init(
+            dsn="https://public-key@sentry.opus.casino/1",
+            integrations=[
+                FastApiIntegration(),
+            ],
+            environment="production",
+            traces_sample_rate=0.1,
+            profiles_sample_rate=0.1,
+        )
+        
+    # Capture exception
+    try:
+        some_operation()
+    except Exception as e:
+        sentry_sdk.capture_exception(e)

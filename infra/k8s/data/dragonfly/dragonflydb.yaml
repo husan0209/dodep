@@ -1,0 +1,200 @@
+# DragonflyDB K8s Deployment
+# Author: DATA_ENGINEER
+# Date: 2026-03-24
+# 3-node cluster, Redis API compatible, multi-threaded
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: data
+  labels:
+    app.kubernetes.io/part-of: opus-casino
+
+---
+# ConfigMap: DragonflyDB configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dragonfly-config
+  namespace: data
+data:
+  # DragonflyDB flags
+  maxmemory: "64gb"
+  cache_mode: "true"
+  keys_output_limit: "8192"
+  dbnum: "1"
+  requirepass: "" # Auth via network policy, not password in dev
+  maxclients: "10000"
+  hz: "100"
+  primary_port: "6379"
+  admin_port: "6380"
+  # Snapshot every 5 min
+  save_schedule: "*:300"
+  dir: "/data"
+  # Logging
+  logtostderr: "true"
+  v: "0"
+
+---
+# StatefulSet: DragonflyDB (3 nodes)
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: dragonfly
+  namespace: data
+  labels:
+    app: dragonfly
+spec:
+  serviceName: dragonfly
+  replicas: 3
+  selector:
+    matchLabels:
+      app: dragonfly
+  template:
+    metadata:
+      labels:
+        app: dragonfly
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "6380"
+        prometheus.io/path: "/metrics"
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: dragonfly
+                topologyKey: kubernetes.io/hostname
+      containers:
+        - name: dragonfly
+          image: docker.dragonflydb.io/dragonflydb/dragonfly:v1.15.1
+          ports:
+            - containerPort: 6379
+              name: redis
+            - containerPort: 6380
+              name: admin
+          args:
+            - "--maxmemory=64gb"
+            - "--cache_mode=true"
+            - "--maxclients=10000"
+            - "--save_schedule=*:300"
+            - "--dir=/data"
+            - "--dbnum=1"
+            - "--hz=100"
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          resources:
+            requests:
+              cpu: "4"
+              memory: "68Gi"
+            limits:
+              cpu: "8"
+              memory: "72Gi"
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - redis-cli -p 6379 PING | grep -q PONG
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - redis-cli -p 6379 PING | grep -q PONG
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: gp3
+        resources:
+          requests:
+            storage: 100Gi
+
+---
+# Service: DragonflyDB (headless for StatefulSet)
+apiVersion: v1
+kind: Service
+metadata:
+  name: dragonfly
+  namespace: data
+  labels:
+    app: dragonfly
+spec:
+  clusterIP: None
+  ports:
+    - port: 6379
+      targetPort: 6379
+      name: redis
+    - port: 6380
+      targetPort: 6380
+      name: admin
+  selector:
+    app: dragonfly
+
+---
+# Service: DragonflyDB Cluster (load balanced)
+apiVersion: v1
+kind: Service
+metadata:
+  name: dragonfly-cluster
+  namespace: data
+  labels:
+    app: dragonfly
+spec:
+  type: ClusterIP
+  ports:
+    - port: 6379
+      targetPort: 6379
+      name: redis
+  selector:
+    app: dragonfly
+
+---
+# PodDisruptionBudget
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: dragonfly-pdb
+  namespace: data
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: dragonfly
+
+---
+# NetworkPolicy: DragonflyDB accessible only from platform namespace
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: dragonfly-network-policy
+  namespace: data
+spec:
+  podSelector:
+    matchLabels:
+      app: dragonfly
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: platform
+        - namespaceSelector:
+            matchLabels:
+              name: data
+      ports:
+        - protocol: TCP
+          port: 6379

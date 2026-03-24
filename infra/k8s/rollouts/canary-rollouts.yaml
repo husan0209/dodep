@@ -1,0 +1,311 @@
+# Argo Rollouts Configuration for Production Services
+# Canary deployment strategy с автоматическим rollback
+
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: betting-engine
+  namespace: platform
+  labels:
+    app: betting-engine
+    version: stable
+spec:
+  replicas: 6
+  strategy:
+    canary:
+      steps:
+        # Step 1: Set canary to 5% traffic
+        - setWeight: 5
+        # Step 2: Pause for 5 minutes for manual verification
+        - pause: { duration: 5m }
+        
+        # Step 3: Run automated analysis
+        - analysis:
+            templates:
+              - templateName: success-rate
+              - templateName: latency-p99
+            args:
+              - name: service-name
+                value: betting-engine
+            startingStep: 1
+            duration: 10m
+            interval: 1m
+            successfulRunHistoryLimit: 3
+            unsuccessfulRunHistoryLimit: 1
+        
+        # Step 4: Increase to 25% if analysis passes
+        - setWeight: 25
+        - pause: { duration: 5m }
+        
+        # Step 5: Run second analysis at higher traffic
+        - analysis:
+            templates:
+              - templateName: success-rate
+              - templateName: latency-p99
+            duration: 5m
+            interval: 1m
+        
+        # Step 6: Increase to 50%
+        - setWeight: 50
+        - pause: { duration: 5m }
+        
+        # Step 7: Final analysis before full rollout
+        - analysis:
+            templates:
+              - templateName: success-rate
+              - templateName: latency-p99
+            duration: 5m
+            interval: 1m
+        
+        # Step 8: Full rollout
+        - setWeight: 100
+      
+      # Traffic routing via Istio
+      trafficRouting:
+        istio:
+          virtualService:
+            name: betting-engine-vs
+            routes:
+              - primary
+      
+      # Canary service
+      canaryService: betting-engine-canary
+      
+      # Stable service
+      stableService: betting-engine-stable
+      
+      # Anti-affinity to spread canary pods
+      antiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchLabels:
+                app: betting-engine
+            topologyKey: topology.kubernetes.io/zone
+      
+      # Scale down stale replicas
+      scaleDownDelayRevisionLimit: 5
+      scaleDownDelayDuration: 60s
+      
+      # Failure handling
+      abortScaleDownDelaySeconds: 300
+      
+      # Metrics provider
+      metricsProvider:
+        prometheus:
+          address: http://prometheus.monitoring.svc.cluster.local:9090
+
+  # Template for pods
+  template:
+    metadata:
+      labels:
+        app: betting-engine
+    spec:
+      serviceAccountName: betting-engine
+      containers:
+        - name: betting-engine
+          image: ghcr.io/opus-casino/betting-engine:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: metrics
+              containerPort: 9090
+              protocol: TCP
+          env:
+            - name: ENVIRONMENT
+              value: production
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: 2000m
+              memory: 2Gi
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            initialDelaySeconds: 0
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 30
+          volumeMounts:
+            - name: config
+              mountPath: /app/config
+              readOnly: true
+            - name: secrets
+              mountPath: /app/secrets
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: betting-engine-config
+        - name: secrets
+          secret:
+            secretName: betting-engine-secrets
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: betting-engine
+                topologyKey: kubernetes.io/hostname
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: betting-engine
+
+  # Update strategy
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+
+  # Revision history limit
+  revisionHistoryLimit: 10
+
+  # Progress deadline
+  progressDeadlineSeconds: 600
+
+---
+# Analysis Template: Success Rate
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: success-rate
+  namespace: platform
+spec:
+  args:
+    - name: service-name
+  metrics:
+    - name: success-rate
+      interval: 1m
+      successCondition: result[0] >= 0.99
+      failureLimit: 1
+      provider:
+        prometheus:
+          address: http://prometheus.monitoring.svc.cluster.local:9090
+          query: |
+            sum(rate(http_requests_total{
+              service="{{args.service-name}}",
+              status=~"2..",
+              namespace="platform"
+            }[5m])) 
+            / 
+            sum(rate(http_requests_total{
+              service="{{args.service-name}}",
+              namespace="platform"
+            }[5m]))
+
+---
+# Analysis Template: P99 Latency
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: latency-p99
+  namespace: platform
+spec:
+  args:
+    - name: service-name
+  metrics:
+    - name: latency-p99
+      interval: 1m
+      successCondition: result[0] <= 0.5
+      failureLimit: 1
+      provider:
+        prometheus:
+          address: http://prometheus.monitoring.svc.cluster.local:9090
+          query: |
+            histogram_quantile(0.99, 
+              sum(rate(http_request_duration_seconds_bucket{
+                service="{{args.service-name}}",
+                namespace="platform"
+              }[5m])) by (le)
+            )
+
+---
+# Analysis Template: Error Rate
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: error-rate
+  namespace: platform
+spec:
+  args:
+    - name: service-name
+  metrics:
+    - name: error-rate
+      interval: 1m
+      successCondition: result[0] <= 0.01
+      failureLimit: 1
+      provider:
+        prometheus:
+          address: http://prometheus.monitoring.svc.cluster.local:9090
+          query: |
+            sum(rate(http_requests_total{
+              service="{{args.service-name}}",
+              status=~"5..",
+              namespace="platform"
+            }[5m])) 
+            / 
+            sum(rate(http_requests_total{
+              service="{{args.service-name}}",
+              namespace="platform"
+            }[5m]))
+
+---
+# Analysis Template: Business Metrics (Bets per second)
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: business-metrics
+  namespace: platform
+spec:
+  args:
+    - name: service-name
+  metrics:
+    - name: bets-per-second
+      interval: 1m
+      successCondition: result[0] >= 10
+      failureLimit: 3
+      provider:
+        prometheus:
+          address: http://prometheus.monitoring.svc.cluster.local:9090
+          query: |
+            sum(rate(bets_placed_total{
+              service="{{args.service-name}}",
+              namespace="platform"
+            }[5m]))

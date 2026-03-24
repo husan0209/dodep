@@ -1,0 +1,155 @@
+import { create } from "zustand";
+import { authApi } from "@/lib/api/auth";
+import { getErrorMessage } from "@/lib/api/errors";
+
+interface User {
+  id: number;
+  uuid: string;
+  email: string;
+  username: string;
+  phone?: string;
+  country: string;
+  currency: string;
+  kyc_level: number;
+  status: "pending" | "active" | "blocked" | "suspended";
+  created_at: string;
+  updated_at: string;
+  last_login_at?: string;
+}
+
+interface AuthState {
+  // State
+  user: User | null;
+  accessToken: string | null;
+  refreshToken: string | null;
+  isAuthenticated: boolean;
+  isLoading: boolean;
+  error: string | null;
+
+  // Actions
+  login: (email: string, password: string) => Promise<void>;
+  register: (email: string, password: string, username: string) => Promise<void>;
+  logout: () => Promise<void>;
+  fetchUser: () => Promise<void>;
+  clearError: () => void;
+  setTokens: (accessToken: string, refreshToken: string) => void;
+  refreshTokens: () => Promise<void>;
+}
+
+export const useAuthStore = create<AuthState>((set, get) => ({
+  // Initial state
+  user: null,
+  accessToken: null,
+  refreshToken: null,
+  isAuthenticated: false,
+  isLoading: false,
+  error: null,
+
+  setTokens: (accessToken: string, refreshToken: string) => {
+    set({ accessToken, refreshToken, isAuthenticated: true });
+  },
+
+  login: async (email: string, password: string) => {
+    set({ isLoading: true, error: null });
+    try {
+      const response = await authApi.login({ email, password });
+      set({
+        accessToken: response.access_token,
+        refreshToken: response.refresh_token,
+        user: response.user,
+        isAuthenticated: true,
+        isLoading: false,
+      });
+    } catch (error) {
+      set({
+        isLoading: false,
+        error: getErrorMessage(error),
+      });
+      throw error;
+    }
+  },
+
+  register: async (email: string, password: string, username: string) => {
+    set({ isLoading: true, error: null });
+    try {
+      const response = await authApi.register({ email, password, username });
+      set({
+        accessToken: response.access_token,
+        refreshToken: response.refresh_token,
+        user: response.user,
+        isAuthenticated: true,
+        isLoading: false,
+      });
+    } catch (error) {
+      set({
+        isLoading: false,
+        error: getErrorMessage(error),
+      });
+      throw error;
+    }
+  },
+
+  logout: async () => {
+    try {
+      await authApi.logout();
+    } catch (error) {
+      console.error("Logout error:", error);
+    } finally {
+      set({
+        user: null,
+        accessToken: null,
+        refreshToken: null,
+        isAuthenticated: false,
+        error: null,
+      });
+    }
+  },
+
+  fetchUser: async () => {
+    const { accessToken } = get();
+    if (!accessToken) {
+      set({ isAuthenticated: false });
+      return;
+    }
+
+    set({ isLoading: true });
+    try {
+      const user = await authApi.me();
+      set({
+        user,
+        isAuthenticated: true,
+        isLoading: false,
+      });
+    } catch (error) {
+      set({
+        isAuthenticated: false,
+        user: null,
+        isLoading: false,
+      });
+    }
+  },
+
+  refreshTokens: async () => {
+    const { refreshToken } = get();
+    if (!refreshToken) {
+      throw new Error("No refresh token");
+    }
+
+    try {
+      const response = await authApi.refresh(refreshToken);
+      set({
+        accessToken: response.access_token,
+        refreshToken: response.refresh_token,
+      });
+    } catch (error) {
+      set({
+        accessToken: null,
+        refreshToken: null,
+        isAuthenticated: false,
+      });
+      throw error;
+    }
+  },
+
+  clearError: () => set({ error: null }),
+}));

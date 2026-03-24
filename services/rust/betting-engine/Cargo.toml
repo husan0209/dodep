@@ -1,0 +1,47 @@
+[package]
+name = "betting-engine"
+version = "0.1.0"
+edition = "2021"
+description = "High-performance betting engine — p99 < 5ms"
+
+[dependencies]
+# Workspace deps
+tokio.workspace = true
+axum.workspace = true
+tower.workspace = true
+tower-http.workspace = true
+tonic.workspace = true
+prost.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sqlx.workspace = true
+fred.workspace = true
+rdkafka.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+rust_decimal.workspace = true
+validator.workspace = true
+config.workspace = true
+dotenvy.workspace = true
+metrics.workspace = true
+rand.workspace = true
+bytes.workspace = true
+
+[dev-dependencies]
+tokio-test.workspace = true
+testcontainers.workspace = true
+
+[build-dependencies]
+tonic-build.workspace = true
+
+[[bin]]
+name = "betting-engine"
+path = "src/main.rs"
+
+[lib]
+name = "betting_engine"
+path = "src/lib.rs"

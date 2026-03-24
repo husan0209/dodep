@@ -1,0 +1,198 @@
+// Betting Engine Service - gRPC service definition
+// Handles bet placement, settlement, and odds management
+
+syntax = "proto3";
+
+package betting.v1;
+
+option go_package = "github.com/opus-casino/proto/gen/go/betting/v1";
+option java_multiple_files = true;
+option java_package = "com.opuscasino.proto.betting.v1";
+
+import "common/v1/types.proto";
+import "common/v1/money.proto";
+import "common/v1/pagination.proto";
+import "common/v1/error.proto";
+import "google/protobuf/timestamp.proto";
+
+// BettingEngineService handles all betting operations
+service BettingEngineService {
+  // PlaceBet creates a new bet for a user
+  // Idempotent via client_request_id
+  rpc PlaceBet(PlaceBetRequest) returns (PlaceBetResponse);
+
+  // CancelBet cancels a pending bet
+  rpc CancelBet(CancelBetRequest) returns (CancelBetResponse);
+
+  // GetBet returns a bet by ID
+  rpc GetBet(GetBetRequest) returns (GetBetResponse);
+
+  // GetUserBets returns paginated bets for a user
+  rpc GetUserBets(GetUserBetsRequest) returns (GetUserBetsResponse);
+
+  // SettleBet settles a bet (called by risk engine after event results)
+  rpc SettleBet(SettleBetRequest) returns (SettleBetResponse);
+
+  // GetOdds returns current odds for an event
+  rpc GetOdds(GetOddsRequest) returns (GetOddsResponse);
+
+  // StreamOdds streams real-time odds updates
+  rpc StreamOdds(OddsStreamRequest) returns (stream OddsUpdate);
+}
+
+// ============ Place Bet ============
+
+message PlaceBetRequest {
+  common.v1.UserId user_id = 1;
+  common.v1.BetType bet_type = 2;
+  string event_id = 3;
+  string market_id = 4;
+  string selection_id = 5;
+  common.v1.Money stake = 6;
+  string odds = 7;  // Decimal odds as string (e.g., "2.50")
+  string client_request_id = 8;  // For idempotency (UUID v4)
+  string device_id = 9;
+  string ip_address = 10;
+  map<string, string> metadata = 11;
+}
+
+message PlaceBetResponse {
+  Bet bet = 1;
+  common.v1.ErrorDetails error = 2;
+}
+
+// ============ Cancel Bet ============
+
+message CancelBetRequest {
+  common.v1.BetId bet_id = 1;
+  common.v1.UserId user_id = 2;
+  string reason = 3;
+}
+
+message CancelBetResponse {
+  bool success = 1;
+  common.v1.ErrorDetails error = 2;
+}
+
+// ============ Get Bet ============
+
+message GetBetRequest {
+  common.v1.BetId bet_id = 1;
+}
+
+message GetBetResponse {
+  Bet bet = 1;
+}
+
+// ============ GetUser Bets ============
+
+message GetUserBetsRequest {
+  common.v1.UserId user_id = 1;
+  optional common.v1.BetStatus status = 2;
+  optional common.v1.BetType bet_type = 3;
+  optional common.v1.DateRange date_range = 4;
+  common.v1.PageRequest pagination = 5;
+}
+
+message GetUserBetsResponse {
+  repeated Bet bets = 1;
+  common.v1.PageResponse pagination = 2;
+}
+
+// ============ Settle Bet ============
+
+message SettleBetRequest {
+  common.v1.BetId bet_id = 1;
+  BetResult result = 2;
+  common.v1.Money actual_win = 3;  // 0 if lost
+  string settlement_reference = 4;  // External result source reference
+}
+
+message SettleBetResponse {
+  bool success = 1;
+  common.v1.ErrorDetails error = 2;
+}
+
+// ============ Odds ============
+
+message GetOddsRequest {
+  string event_id = 1;
+  optional string market_id = 2;
+}
+
+message GetOddsResponse {
+  string event_id = 1;
+  repeated MarketOdds markets = 2;
+  google.protobuf.Timestamp timestamp = 3;
+}
+
+message OddsStreamRequest {
+  repeated string event_ids = 1;
+  repeated string market_ids = 2;
+}
+
+message OddsUpdate {
+  string event_id = 1;
+  string market_id = 2;
+  string selection_id = 3;
+  string odds = 4;  // Decimal odds as string
+  google.protobuf.Timestamp timestamp = 5;
+  OddsChangeType change_type = 6;
+}
+
+enum OddsChangeType {
+  ODDS_CHANGE_TYPE_UNSPECIFIED = 0;
+  ODDS_CHANGE_TYPE_UP = 1;
+  ODDS_CHANGE_TYPE_DOWN = 2;
+  ODDS_CHANGE_TYPE_SUSPENDED = 3;
+  ODDS_CHANGE_TYPE_RESUMED = 4;
+}
+
+// ============ Domain Models ============
+
+// Bet represents a placed bet
+message Bet {
+  common.v1.BetId id = 1;
+  common.v1.UserId user_id = 2;
+  common.v1.BetType type = 3;
+  common.v1.BetStatus status = 4;
+  common.v1.Money stake = 5;
+  common.v1.Money potential_win = 6;
+  common.v1.Money actual_win = 7;
+  string event_id = 8;
+  string market_id = 9;
+  string selection_id = 10;
+  string odds = 11;
+  google.protobuf.Timestamp placed_at = 12;
+  google.protobuf.Timestamp settled_at = 13;
+  string client_request_id = 14;
+  string device_id = 15;
+  string ip_address = 16;
+  map<string, string> metadata = 17;
+}
+
+// MarketOdds represents odds for a market with multiple selections
+message MarketOdds {
+  string market_id = 1;
+  string market_name = 2;
+  repeated SelectionOdds selections = 3;
+  bool is_suspended = 4;
+}
+
+// SelectionOdds represents odds for a single selection
+message SelectionOdds {
+  string selection_id = 1;
+  string selection_name = 2;
+  string odds = 3;  // Decimal odds as string
+  bool is_available = 4;
+}
+
+// BetResult represents the result of a settled bet
+enum BetResult {
+  BET_RESULT_UNSPECIFIED = 0;
+  BET_RESULT_WON = 1;
+  BET_RESULT_LOST = 2;
+  BET_RESULT_VOID = 3;
+  BET_RESULT_HALF_WON = 4;
+  BET_RESULT_HALF_LOST = 5;
+}

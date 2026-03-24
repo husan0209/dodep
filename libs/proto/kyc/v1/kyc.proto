@@ -1,0 +1,294 @@
+// KYC Service - gRPC service definition
+// Handles Know Your Customer verification
+
+syntax = "proto3";
+
+package kyc.v1;
+
+option go_package = "github.com/opus-casino/proto/gen/go/kyc/v1";
+option java_multiple_files = true;
+option java_package = "com.opuscasino.proto.kyc.v1";
+
+import "common/v1/types.proto";
+import "common/v1/error.proto";
+import "google/protobuf/timestamp.proto";
+
+// KYCService handles KYC verification operations
+service KYCService {
+  // GetKYCStatus returns user's KYC status
+  rpc GetKYCStatus(GetKYCStatusRequest) returns (GetKYCStatusResponse);
+
+  // SubmitDocument submits a KYC document for verification
+  rpc SubmitDocument(SubmitDocumentRequest) returns (SubmitDocumentResponse);
+
+  // GetDocument returns document details
+  rpc GetDocument(GetDocumentRequest) returns (GetDocumentResponse);
+
+  // ListDocuments returns user's KYC documents
+  rpc ListDocuments(ListDocumentsRequest) returns (ListDocumentsResponse);
+
+  // DeleteDocument deletes a draft document
+  rpc DeleteDocument(DeleteDocumentRequest) returns (DeleteDocumentResponse);
+
+  // VerifyDocument (Admin) verifies a submitted document
+  rpc VerifyDocument(VerifyDocumentRequest) returns (VerifyDocumentResponse);
+
+  // RejectDocument (Admin) rejects a submitted document
+  rpc RejectDocument(RejectDocumentRequest) returns (RejectDocumentResponse);
+
+  // GetVerificationLevel returns user's verification level and limits
+  rpc GetVerificationLevel(GetVerificationLevelRequest) returns (GetVerificationLevelResponse);
+
+  // UpgradeVerificationLevel requests verification level upgrade
+  rpc UpgradeVerificationLevel(UpgradeVerificationLevelRequest) returns (UpgradeVerificationLevelResponse);
+}
+
+// ============ KYC Status ============
+
+message GetKYCStatusRequest {
+  common.v1.UserId user_id = 1;
+}
+
+message GetKYCStatusResponse {
+  KYCStatus status = 1;
+  KYCLevel current_level = 2;
+  repeated DocumentRequirement required_documents = 3;
+  repeated DocumentSummary submitted_documents = 4;
+  google.protobuf.Timestamp last_updated = 5;
+  string rejection_reason = 6;
+}
+
+// ============ Submit Document ============
+
+message SubmitDocumentRequest {
+  common.v1.UserId user_id = 1;
+  DocumentType document_type = 2;
+  DocumentSide document_side = 3;  // For multi-page documents
+  string file_id = 4;              // Reference to uploaded file
+  string document_number = 5;      // Optional: document number
+  string issuing_country = 6;      // ISO 3166-1 alpha-2
+  google.protobuf.Timestamp expiry_date = 7;
+  map<string, string> metadata = 8;
+}
+
+message SubmitDocumentResponse {
+  DocumentSummary document = 1;
+  common.v1.ErrorDetails error = 2;
+}
+
+// ============ Get Document ============
+
+message GetDocumentRequest {
+  common.v1.UserId user_id = 1;
+  string document_id = 2;
+}
+
+message GetDocumentResponse {
+  Document document = 1;
+}
+
+// ============ List Documents ============
+
+message ListDocumentsRequest {
+  common.v1.UserId user_id = 1;
+  optional DocumentType document_type = 2;
+  optional DocumentStatus status = 3;
+  common.v1.PageRequest pagination = 4;
+}
+
+message ListDocumentsResponse {
+  repeated DocumentSummary documents = 1;
+  common.v1.PageResponse pagination = 2;
+}
+
+// ============ Delete Document ============
+
+message DeleteDocumentRequest {
+  common.v1.UserId user_id = 1;
+  string document_id = 2;
+}
+
+message DeleteDocumentResponse {
+  bool success = 1;
+  common.v1.ErrorDetails error = 2;
+}
+
+// ============ Verify Document (Admin) ============
+
+message VerifyDocumentRequest {
+  string document_id = 1;
+  string verified_by = 2;         // Admin ID
+  string verification_notes = 3;
+  map<string, string> extracted_data = 4;  // OCR extracted data
+}
+
+message VerifyDocumentResponse {
+  bool success = 1;
+  common.v1.ErrorDetails error = 2;
+}
+
+// ============ Reject Document (Admin) ============
+
+message RejectDocumentRequest {
+  string document_id = 1;
+  string rejected_by = 2;         // Admin ID
+  string rejection_reason = 3;
+  repeated string required_actions = 4;  // What user needs to fix
+}
+
+message RejectDocumentResponse {
+  bool success = 1;
+  common.v1.ErrorDetails error = 2;
+}
+
+// ============ Verification Level ============
+
+message GetVerificationLevelRequest {
+  common.v1.UserId user_id = 1;
+}
+
+message GetVerificationLevelResponse {
+  KYCLevel level = 1;
+  VerificationLimits limits = 2;
+  repeated LevelRequirement pending_requirements = 3;
+}
+
+message UpgradeVerificationLevelRequest {
+  common.v1.UserId user_id = 1;
+  KYCLevel target_level = 2;
+}
+
+message UpgradeVerificationLevelResponse {
+  KYCLevel new_level = 1;
+  repeated DocumentRequirement required_documents = 2;
+  common.v1.ErrorDetails error = 3;
+}
+
+// ============ Domain Models ============
+
+message KYCStatus {
+  common.v1.UserId user_id = 1;
+  KYCLevel level = 2;
+  KYCVerificationStatus verification_status = 3;
+  google.protobuf.Timestamp submitted_at = 4;
+  google.protobuf.Timestamp verified_at = 5;
+  google.protobuf.Timestamp last_reviewed_at = 6;
+  string reviewed_by = 7;
+}
+
+message DocumentRequirement {
+  DocumentType document_type = 1;
+  string description = 2;
+  repeated string accepted_formats = 3;
+  DocumentRequirements requirements = 4;
+  bool is_required = 5;
+  bool is_submitted = 6;
+}
+
+message DocumentRequirements {
+  bool color_required = 1;
+  bool both_sides_required = 2;
+  bool selfie_required = 3;
+  bool proof_of_address_required = 4;
+  int32 max_file_size_mb = 5;
+  int32 min_resolution_width = 6;
+  int32 min_resolution_height = 7;
+}
+
+message DocumentSummary {
+  string id = 1;
+  common.v1.UserId user_id = 2;
+  DocumentType document_type = 3;
+  DocumentStatus status = 4;
+  google.protobuf.Timestamp submitted_at = 5;
+  google.protobuf.Timestamp reviewed_at = 6;
+  string rejection_reason = 7;
+}
+
+message Document {
+  string id = 1;
+  common.v1.UserId user_id = 2;
+  DocumentType document_type = 3;
+  DocumentSide document_side = 4;
+  DocumentStatus status = 5;
+  string file_id = 6;
+  string file_url = 7;         // Signed URL (admin only)
+  string document_number = 8;
+  string issuing_country = 9;
+  google.protobuf.Timestamp expiry_date = 10;
+  google.protobuf.Timestamp submitted_at = 11;
+  google.protobuf.Timestamp reviewed_at = 12;
+  string reviewed_by = 13;
+  string rejection_reason = 14;
+  repeated string required_actions = 15;
+  map<string, string> extracted_data = 16;
+  string verification_notes = 17;
+  google.protobuf.Timestamp created_at = 18;
+  google.protobuf.Timestamp updated_at = 19;
+}
+
+message VerificationLimits {
+  KYCLevel level = 1;
+  common.v1.Money daily_deposit_limit = 2;
+  common.v1.Money daily_withdrawal_limit = 3;
+  common.v1.Money monthly_deposit_limit = 4;
+  common.v1.Money monthly_withdrawal_limit = 5;
+  common.v1.Money max_bet_limit = 6;
+  bool can_trade_crypto = 7;
+  bool can_use_bonus = 8;
+}
+
+message LevelRequirement {
+  KYCLevel level = 1;
+  string description = 2;
+  repeated DocumentType required_documents = 3;
+  VerificationLimits limits = 4;
+}
+
+enum KYCLevel {
+  KYC_LEVEL_UNSPECIFIED = 0;
+  KYC_LEVEL_NONE = 1;          // No verification
+  KYC_LEVEL_BASIC = 2;         // Email + phone
+  KYC_LEVEL_IDENTITY = 3;      // ID document verified
+  KYC_LEVEL_ENHANCED = 4;      // ID + address verified
+  KYC_LEVEL_VIP = 5;           // Enhanced + source of funds
+}
+
+enum KYCVerificationStatus {
+  KYC_VERIFICATION_STATUS_UNSPECIFIED = 0;
+  KYC_VERIFICATION_STATUS_NOT_STARTED = 1;
+  KYC_VERIFICATION_STATUS_IN_PROGRESS = 2;
+  KYC_VERIFICATION_STATUS_PENDING_REVIEW = 3;
+  KYC_VERIFICATION_STATUS_VERIFIED = 4;
+  KYC_VERIFICATION_STATUS_REJECTED = 5;
+  KYC_VERIFICATION_STATUS_EXPIRED = 6;
+}
+
+enum DocumentType {
+  DOCUMENT_TYPE_UNSPECIFIED = 0;
+  DOCUMENT_TYPE_PASSPORT = 1;
+  DOCUMENT_TYPE_DRIVERS_LICENSE = 2;
+  DOCUMENT_TYPE_NATIONAL_ID = 3;
+  DOCUMENT_TYPE_RESIDENCE_PERMIT = 4;
+  DOCUMENT_TYPE_PROOF_OF_ADDRESS = 5;
+  DOCUMENT_TYPE_BANK_STATEMENT = 6;
+  DOCUMENT_TYPE_SELFIE = 7;
+  DOCUMENT_TYPE_SOURCE_OF_FUNDS = 8;
+}
+
+enum DocumentSide {
+  DOCUMENT_SIDE_UNSPECIFIED = 0;
+  DOCUMENT_SIDE_FRONT = 1;
+  DOCUMENT_SIDE_BACK = 2;
+  DOCUMENT_SIDE_SINGLE = 3;
+}
+
+enum DocumentStatus {
+  DOCUMENT_STATUS_UNSPECIFIED = 0;
+  DOCUMENT_STATUS_DRAFT = 1;
+  DOCUMENT_STATUS_SUBMITTED = 2;
+  DOCUMENT_STATUS_IN_REVIEW = 3;
+  DOCUMENT_STATUS_APPROVED = 4;
+  DOCUMENT_STATUS_REJECTED = 5;
+  DOCUMENT_STATUS_EXPIRED = 6;
+}

@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "service-chart.fullname" . }}-config
+  labels:
+    {{- include "service-chart.labels" . | nindent 4 }}
+data:
+  app-env: {{ .Values.env | dig "APP_ENV" "production" | quote }}
+  {{- range $key, $value := .Values.configMap }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}

@@ -1,0 +1,158 @@
+# KYC Service Helm Chart Values
+# Сервис верификации (Know Your Customer)
+
+replicaCount: 2
+
+image:
+  repository: ghcr.io/opus-casino/kyc
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+serviceAccount:
+  create: true
+  annotations:
+    eks.amazonaws.com/role-arn: ""
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+
+podSecurityContext:
+  fsGroup: 1000
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+service:
+  type: ClusterIP
+  httpPort: 8080
+  httpTargetPort: 8080
+  grpcPort: 9090
+  grpcTargetPort: 9090
+
+ingress:
+  enabled: true
+  className: "alb"
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/healthcheck-path: /health
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+  hosts:
+    - host: api.opus.casino
+      paths:
+        - path: /api/v1/kyc
+          pathType: Prefix
+  tls:
+    - secretName: opus-casino-tls
+      hosts:
+        - api.opus.casino
+
+resources:
+  limits:
+    cpu: 2000m
+    memory: 2Gi
+  requests:
+    cpu: 500m
+    memory: 512Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 8
+  targetCPUUtilizationPercentage: 60
+  targetMemoryUtilizationPercentage: 70
+
+nodeSelector:
+  node-type: application
+
+healthCheck:
+  path: /health
+  port: 8080
+  liveness:
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readiness:
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+env:
+  - name: GIN_MODE
+    value: "release"
+  - name: APP_ENV
+    valueFrom:
+      configMapKeyRef:
+        name: kyc-config
+        key: app-env
+  - name: DATABASE_URL
+    valueFrom:
+      secretKeyRef:
+        name: kyc-secrets
+        key: database-url
+  - name: REDIS_URL
+    valueFrom:
+      secretKeyRef:
+        name: kyc-secrets
+        key: redis-url
+  - name: REDPANDA_BROKERS
+    valueFrom:
+      configMapKeyRef:
+        name: kyc-config
+        key: redpanda-brokers
+  - name: JUMIO_API_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: kyc-secrets
+        key: jumio-api-token
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+networkPolicy:
+  enabled: true
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: istio-system
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+      ports:
+        - protocol: TCP
+          port: 8080
+        - protocol: TCP
+          port: 9090
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: data
+      ports:
+        - protocol: TCP
+          port: 5432
+        - protocol: TCP
+          port: 6379
+        - protocol: TCP
+          port: 9092
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 443
+
+serviceMonitor:
+  enabled: true
+  interval: 30s
+  scrapeTimeout: 10s
+  path: /metrics
+  port: metrics

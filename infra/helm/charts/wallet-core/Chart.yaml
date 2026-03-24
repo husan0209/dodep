@@ -1,0 +1,16 @@
+apiVersion: v2
+name: wallet-core
+description: Wallet Core Service - Financial operations for Opus Casino
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - wallet
+  - payments
+  - financial
+  - rust
+home: https://github.com/opus-casino/opus-casino
+maintainers:
+  - name: Opus Casino Team
+
+dependencies: []

@@ -1,0 +1,168 @@
+# Vault Installation using Helm Chart
+apiVersion: helm.toolkit.fluxcd.io/v2beta1
+kind: HelmRelease
+metadata:
+  name: vault
+  namespace: security
+spec:
+  interval: 30m
+  chart:
+    spec:
+      chart: vault
+      version: 0.25.0
+      sourceRef:
+        kind: HelmRepository
+        name: hashicorp
+        namespace: security
+      interval: 12h
+      
+  values:
+    # Global settings
+    global:
+      tlsDisable: false
+      
+    # Server configuration
+    server:
+      # HA configuration
+      ha:
+        enabled: true
+        raft:
+          enabled: true
+          config: |
+            ui = true
+            
+            listener "tcp" {
+              address = "[::]:8200"
+              cluster_address = "[::]:8201"
+              tls_cert_file = "/vault/userconfig/tls/tls.crt"
+              tls_key_file = "/vault/userconfig/tls/tls.key"
+              tls_min_version = "tls12"
+            }
+            
+            storage "raft" {
+              path = "/vault/data"
+            }
+            
+            service_registration "kubernetes" {}
+            
+      # Extra environment variables
+      extraEnvironmentVars:
+        VAULT_CACERT: /vault/userconfig/tls/ca.crt
+        
+      # Extra volumes for TLS
+      extraVolumes:
+        - name: tls
+          secret:
+            secretName: vault-tls
+            
+      extraVolumeMounts:
+        - name: tls
+          mountPath: /vault/userconfig/tls
+          readOnly: true
+          
+      # StatefulSet configuration
+      statefulSet:
+        replicas: 3
+        securityContext:
+          fsGroup: 1000
+        pod:
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 100
+          affinity:
+            podAntiAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                - labelSelector:
+                    matchLabels:
+                      app.kubernetes.io/name: vault
+                  topologyKey: kubernetes.io/hostname
+                  
+      # Service configuration
+      service:
+        enabled: true
+        port: 8200
+        tlsPort: 8200
+        annotations:
+          prometheus.io/scrape: "true"
+          prometheus.io/port: "9102"
+          
+      # Ingress configuration
+      ingress:
+        enabled: true
+        ingressClassName: alb
+        annotations:
+          alb.ingress.kubernetes.io/scheme: internal
+          alb.ingress.kubernetes.io/target-type: ip
+          alb.ingress.kubernetes.io/ssl-redirect: "443"
+        hosts:
+          - host: vault.internal.opus.casino
+            paths:
+              - /
+        tls:
+          - secretName: vault-tls
+            hosts:
+              - vault.internal.opus.casino
+              
+      # Resources
+      resources:
+        requests:
+          cpu: 250m
+          memory: 256Mi
+        limits:
+          cpu: 1000m
+          memory: 2Gi
+          
+      # Audit logging
+      auditStorage:
+        enabled: true
+        
+      # Extra secrets for TLS
+      extraSecrets:
+        vault-tls:
+          type: kubernetes.io/tls
+          
+    # UI configuration
+    ui:
+      enabled: true
+      serviceType: ClusterIP
+      
+    # Injector for Kubernetes secrets
+    injector:
+      enabled: true
+      replicas: 2
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 500m
+          memory: 512Mi
+          
+    # Consul for service discovery (disabled - using Kubernetes)
+    consul:
+      enabled: false
+      
+    # Prometheus exporter
+    prometheus:
+      enabled: true
+      port: 9102
+      
+    # Monitoring
+    monitoring:
+      enabled: true
+      serviceMonitor:
+        enabled: true
+        namespace: monitoring
+        interval: 30s
+        scrapeTimeout: 10s
+        
+---
+# Helm Repository for HashiCorp
+apiVersion: source.toolkit.fluxcd.io/v1beta1
+kind: HelmRepository
+metadata:
+  name: hashicorp
+  namespace: security
+spec:
+  interval: 1h
+  url: https://helm.releases.hashicorp.com

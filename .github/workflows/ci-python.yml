@@ -1,0 +1,318 @@
+# CI/CD Pipeline для Python сервисов
+# Opus Casino - Fraud ML, Analytics
+
+name: CI - Python
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'services/python/**'
+      - '**/requirements*.txt'
+      - '.github/workflows/ci-python.yml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'services/python/**'
+      - '**/requirements*.txt'
+      - '.github/workflows/ci-python.yml'
+
+env:
+  PYTHON_VERSION: '3.11'
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ==========================================================================
+  # Lint
+  # ==========================================================================
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        service: [fraud-ml, analytics]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: |
+            services/python/${{ matrix.service }}/requirements*.txt
+
+      - name: Install dependencies
+        working-directory: services/python/${{ matrix.service }}
+        run: |
+          pip install --upgrade pip
+          pip install ruff black mypy
+
+      - name: Run ruff
+        working-directory: services/python/${{ matrix.service }}
+        run: ruff check . --output-format=github
+
+      - name: Run black
+        working-directory: services/python/${{ matrix.service }}
+        run: black --check .
+
+      - name: Run mypy
+        working-directory: services/python/${{ matrix.service }}
+        run: mypy .
+
+  # ==========================================================================
+  # Test
+  # ==========================================================================
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        service: [fraud-ml, analytics]
+    
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      
+      clickhouse:
+        image: clickhouse/clickhouse-server:23.12
+        env:
+          CLICKHOUSE_USER: default
+          CLICKHOUSE_PASSWORD: clickhouse
+          CLICKHOUSE_DB: test_db
+        ports:
+          - 8123:8123
+        options: >-
+          --health-cmd "wget --spider -q http://localhost:8123/ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: |
+            services/python/${{ matrix.service }}/requirements*.txt
+
+      - name: Install dependencies
+        working-directory: services/python/${{ matrix.service }}
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov pytest-asyncio
+
+      - name: Run tests
+        working-directory: services/python/${{ matrix.service }}
+        run: |
+          pytest \
+            --cov=. \
+            --cov-report=xml \
+            --cov-report=html \
+            --junitxml=junit.xml \
+            -v
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/test_db
+          CLICKHOUSE_URL: clickhouse://default:clickhouse@localhost:8123/test_db
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.service }}
+          path: |
+            junit.xml
+            htmlcov/
+            coverage.xml
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: services/python/${{ matrix.service }}/coverage.xml
+          flags: ${{ matrix.service }}
+
+  # ==========================================================================
+  # Security Scan
+  # ==========================================================================
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        service: [fraud-ml, analytics]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install safety
+        run: pip install safety
+
+      - name: Run safety check
+        working-directory: services/python/${{ matrix.service }}
+        run: safety check --json > safety-results.json
+
+      - name: Upload safety results
+        uses: actions/upload-artifact@v4
+        with:
+          name: safety-results-${{ matrix.service }}
+          path: safety-results.json
+
+      - name: Run bandit
+        run: pip install bandit
+
+      - name: Scan with bandit
+        working-directory: services/python/${{ matrix.service }}
+        run: bandit -r . -f json -o bandit-results.json
+
+      - name: Upload bandit results
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-results-${{ matrix.service }}
+          path: bandit-results.json
+
+  # ==========================================================================
+  # Build
+  # ==========================================================================
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [lint, test, security]
+    strategy:
+      matrix:
+        service: [fraud-ml, analytics]
+    
+    permissions:
+      contents: read
+      packages: write
+    
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tags }}
+      image_digest: ${{ steps.build.outputs.digest }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/${{ matrix.service }}
+          tags: |
+            type=sha,prefix=
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: infra/docker/Dockerfile.python
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            SERVICE_NAME=${{ matrix.service }}
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/${{ matrix.service }}:sha-${{ github.sha }}
+          format: 'sarif'
+          output: 'trivy-results-${{ matrix.service }}.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results-${{ matrix.service }}.sarif'
+
+  # ==========================================================================
+  # Deploy to Dev
+  # ==========================================================================
+  deploy-dev:
+    name: Deploy to Dev
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: dev
+      url: https://dev.opus.casino
+    
+    strategy:
+      matrix:
+        service: [fraud-ml, analytics]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v3
+
+      - name: Configure kubectl
+        run: |
+          echo "${{ secrets.KUBE_CONFIG_DEV }}" | base64 -d > kubeconfig
+          export KUBECONFIG=kubeconfig
+
+      - name: Deploy to dev
+        run: |
+          kubectl set image deployment/${{ matrix.service }} \
+            ${{ matrix.service }}=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/${{ matrix.service }}:sha-${{ github.sha }} \
+            -n dev
+        
+      - name: Wait for rollout
+        run: |
+          kubectl rollout status deployment/${{ matrix.service }} -n dev --timeout=300s
+
+      - name: Run smoke tests
+        run: |
+          curl -f https://dev.opus.casino/${{ matrix.service }}/health || exit 1

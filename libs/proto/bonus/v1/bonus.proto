@@ -1,0 +1,260 @@
+// Bonus Service - gRPC service definition
+// Manages bonuses, promotions, and wagering
+
+syntax = "proto3";
+
+package bonus.v1;
+
+option go_package = "github.com/opus-casino/proto/gen/go/bonus/v1";
+option java_multiple_files = true;
+option java_package = "com.opuscasino.proto.bonus.v1";
+
+import "common/v1/types.proto";
+import "common/v1/money.proto";
+import "common/v1/pagination.proto";
+import "common/v1/error.proto";
+import "google/protobuf/timestamp.proto";
+
+// BonusService handles bonus and promotion operations
+service BonusService {
+  // GetAvailableBonuses returns bonuses available to user
+  rpc GetAvailableBonuses(GetAvailableBonusesRequest) returns (GetAvailableBonusesResponse);
+
+  // ActivateBonus activates a bonus for user
+  rpc ActivateBonus(ActivateBonusRequest) returns (ActivateBonusResponse);
+
+  // GetActiveBonuses returns user's active bonuses
+  rpc GetActiveBonuses(GetActiveBonusesRequest) returns (GetActiveBonusesResponse);
+
+  // GetBonus returns bonus details
+  rpc GetBonus(GetBonusRequest) returns (GetBonusResponse);
+
+  // GetWageringProgress returns wagering progress for a bonus
+  rpc GetWageringProgress(GetWageringProgressRequest) returns (GetWageringProgressResponse);
+
+  // ClaimFreeSpins claims free spins from a bonus
+  rpc ClaimFreeSpins(ClaimFreeSpinsRequest) returns (ClaimFreeSpinsResponse);
+
+  // GetPromotions returns active promotions
+  rpc GetPromotions(GetPromotionsRequest) returns (GetPromotionsResponse);
+
+  // GetPromotion returns promotion details
+  rpc GetPromotion(GetPromotionRequest) returns (GetPromotionResponse);
+}
+
+// ============ Available Bonuses ============
+
+message GetAvailableBonusesRequest {
+  common.v1.UserId user_id = 1;
+  optional BonusType bonus_type = 2;
+}
+
+message GetAvailableBonusesResponse {
+  repeated AvailableBonus bonuses = 1;
+}
+
+// ============ Activate Bonus ============
+
+message ActivateBonusRequest {
+  common.v1.UserId user_id = 1;
+  string bonus_id = 2;
+  optional string promo_code = 3;
+}
+
+message ActivateBonusResponse {
+  UserBonus bonus = 1;
+  common.v1.ErrorDetails error = 2;
+}
+
+// ============ Active Bonuses ============
+
+message GetActiveBonusesRequest {
+  common.v1.UserId user_id = 1;
+  optional BonusType bonus_type = 2;
+}
+
+message GetActiveBonusesResponse {
+  repeated UserBonus bonuses = 1;
+}
+
+// ============ Get Bonus ============
+
+message GetBonusRequest {
+  common.v1.UserId user_id = 1;
+  string bonus_id = 2;
+}
+
+message GetBonusResponse {
+  UserBonus bonus = 1;
+}
+
+// ============ Wagering Progress ============
+
+message GetWageringProgressRequest {
+  common.v1.UserId user_id = 1;
+  string bonus_id = 2;
+}
+
+message GetWageringProgressResponse {
+  WageringProgress progress = 1;
+}
+
+// ============ Free Spins ============
+
+message ClaimFreeSpinsRequest {
+  common.v1.UserId user_id = 1;
+  string bonus_id = 2;
+  int32 count = 3;  // Number of spins to claim
+  string game_id = 4;
+}
+
+message ClaimFreeSpinsResponse {
+  int32 claimed_count = 1;
+  int32 remaining_count = 2;
+  common.v1.ErrorDetails error = 3;
+}
+
+// ============ Promotions ============
+
+message GetPromotionsRequest {
+  common.v1.PageRequest pagination = 1;
+}
+
+message GetPromotionsResponse {
+  repeated Promotion promotions = 1;
+  common.v1.PageResponse pagination = 2;
+}
+
+message GetPromotionRequest {
+  string promotion_id = 1;
+}
+
+message GetPromotionResponse {
+  Promotion promotion = 1;
+}
+
+// ============ Domain Models ============
+
+message AvailableBonus {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  BonusType bonus_type = 4;
+  BonusSource source = 5;
+  common.v1.Money bonus_amount = 6;
+  int32 free_spins_count = 7;
+  string wagering_requirement = 8;     // e.g., "35x"
+  common.v1.Money min_deposit = 9;
+  common.v1.Money max_bet = 10;        // Max bet while wagering
+  google.protobuf.Timestamp expires_at = 11;
+  repeated string eligible_games = 12;
+  repeated string restricted_games = 13;
+  double game_contribution = 14;       // e.g., 1.0 = 100%, 0.5 = 50%
+  bool requires_deposit = 15;
+  optional string promo_code = 16;
+  map<string, string> terms = 17;
+}
+
+message UserBonus {
+  string id = 1;
+  common.v1.UserId user_id = 2;
+  string bonus_template_id = 3;
+  string name = 4;
+  BonusType bonus_type = 5;
+  BonusStatus status = 6;
+  common.v1.Money bonus_amount = 7;
+  common.v1.Money remaining_amount = 8;
+  int32 free_spins_total = 9;
+  int32 free_spins_remaining = 10;
+  WageringProgress wagering = 11;
+  google.protobuf.Timestamp activated_at = 12;
+  google.protobuf.Timestamp expires_at = 13;
+  google.protobuf.Timestamp completed_at = 14;
+  repeated string eligible_games = 15;
+  common.v1.Money max_bet = 16;
+  map<string, string> metadata = 17;
+}
+
+message WageringProgress {
+  string bonus_id = 1;
+  common.v1.Money required_amount = 2;
+  common.v1.Money wagered_amount = 3;
+  double progress_percentage = 4;
+  bool is_completed = 5;
+  google.protobuf.Timestamp updated_at = 6;
+}
+
+message Promotion {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  string short_description = 4;
+  string image_url = 5;
+  PromotionType promotion_type = 6;
+  google.protobuf.Timestamp starts_at = 7;
+  google.protobuf.Timestamp ends_at = 8;
+  bool is_active = 9;
+  repeated string eligible_user_segments = 10;
+  repeated string restricted_countries = 11;
+  PromotionRewards rewards = 12;
+  PromotionRequirements requirements = 13;
+  map<string, string> terms_and_conditions = 14;
+}
+
+message PromotionRewards {
+  common.v1.Money bonus_amount = 1;
+  int32 free_spins_count = 2;
+  double cashback_percentage = 3;
+  string reward_currency = 4;
+}
+
+message PromotionRequirements {
+  common.v1.Money min_deposit = 1;
+  common.v1.Money min_bet = 2;
+  int32 min_bets_count = 3;
+  repeated string eligible_games = 4;
+  string wagering_requirement = 5;
+}
+
+enum BonusType {
+  BONUS_TYPE_UNSPECIFIED = 0;
+  BONUS_TYPE_WELCOME = 1;
+  BONUS_TYPE_DEPOSIT = 2;
+  BONUS_TYPE_NO_DEPOSIT = 3;
+  BONUS_TYPE_FREE_SPINS = 4;
+  BONUS_TYPE_CASHBACK = 5;
+  BONUS_TYPE_RELOAD = 6;
+  BONUS_TYPE_VIP = 7;
+  BONUS_TYPE_LOYALTY = 8;
+  BONUS_TYPE_TOURNAMENT = 9;
+}
+
+enum BonusStatus {
+  BONUS_STATUS_UNSPECIFIED = 0;
+  BONUS_STATUS_ACTIVE = 1;
+  BONUS_STATUS_WAGERING = 2;
+  BONUS_STATUS_COMPLETED = 3;
+  BONUS_STATUS_EXPIRED = 4;
+  BONUS_STATUS_CANCELLED = 5;
+  BONUS_STATUS_FORFEITED = 6;
+}
+
+enum BonusSource {
+  BONUS_SOURCE_UNSPECIFIED = 0;
+  BONUS_SOURCE_WELCOME_PACKAGE = 1;
+  BONUS_SOURCE_PROMOTION = 2;
+  BONUS_SOURCE_VIP_REWARD = 3;
+  BONUS_SOURCE_COMPENSATION = 4;
+  BONUS_SOURCE_AFFILIATE = 5;
+}
+
+enum PromotionType {
+  PROMOTION_TYPE_UNSPECIFIED = 0;
+  PROMOTION_TYPE_WELCOME_PACKAGE = 1;
+  PROMOTION_TYPE_DEPOSIT_BONUS = 2;
+  PROMOTION_TYPE_FREE_SPINS = 3;
+  PROMOTION_TYPE_CASHBACK = 4;
+  PROMOTION_TYPE_TOURNAMENT = 5;
+  PROMOTION_TYPE_LOYALTY_PROGRAM = 6;
+  PROMOTION_TYPE_SEASONAL = 7;
+}

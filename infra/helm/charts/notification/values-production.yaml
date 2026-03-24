@@ -1,0 +1,194 @@
+# Notification Service - Production Environment Values
+# Production окружение - надёжная доставка уведомлений
+
+replicaCount: 6
+
+image:
+  tag: "v1.0.0"
+  pullPolicy: Always
+
+serviceAccount:
+  create: true
+  annotations:
+    eks.amazonaws.com/role-arn: "arn:aws:iam::ACCOUNT_ID:role/opus-casino-production-notification-role"
+
+resources:
+  limits:
+    cpu: 2000m
+    memory: 2Gi
+  requests:
+    cpu: 500m
+    memory: 512Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 4
+  maxReplicas: 20
+  targetCPUUtilizationPercentage: 50
+  targetMemoryUtilizationPercentage: 60
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 3
+
+networkPolicy:
+  enabled: true
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: istio-system
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+        - namespaceSelector:
+            matchLabels:
+              name: production
+      ports:
+        - protocol: TCP
+          port: 8081
+        - protocol: TCP
+          port: 9091
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: data
+      ports:
+        - protocol: TCP
+          port: 5432
+        - protocol: TCP
+          port: 6379
+        - protocol: TCP
+          port: 9092
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 443
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+      ports:
+        - protocol: TCP
+          port: 4317
+
+serviceMonitor:
+  enabled: true
+  interval: 15s
+  scrapeTimeout: 10s
+  path: /metrics
+  port: metrics
+
+ingress:
+  enabled: true
+  className: "alb"
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/healthcheck-path: /health
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+    alb.ingress.kubernetes.io/protocol: HTTPS
+    alb.ingress.kubernetes.io/certificate-arn: "arn:aws:acm:us-east-1:ACCOUNT_ID:certificate/CERT_ID"
+  hosts:
+    - host: api.opus.casino
+      paths:
+        - path: /api/v1/notifications
+          pathType: Prefix
+  tls:
+    - secretName: opus-casino-production-tls
+      hosts:
+        - api.opus.casino
+
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: node-type
+              operator: In
+              values:
+                - application
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - notification
+          topologyKey: kubernetes.io/hostname
+
+tolerations:
+  - key: "application"
+    operator: "Equal"
+    value: "true"
+    effect: "NoSchedule"
+
+env:
+  - name: APP_ENV
+    value: "production"
+  - name: DATABASE_URL
+    valueFrom:
+      secretKeyRef:
+        name: notification-secrets-production
+        key: database-url
+  - name: REDIS_ADDR
+    valueFrom:
+      secretKeyRef:
+        name: notification-secrets-production
+        key: redis-addr
+  - name: REDIS_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: notification-secrets-production
+        key: redis-password
+  - name: REDPANDA_BROKERS
+    value: "redpanda.data.svc.cluster.local:9092,redpanda.data.svc.cluster.local:9093,redpanda.data.svc.cluster.local:9094"
+  - name: EMAIL_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: notification-secrets-production
+        key: email-api-key
+  - name: SMS_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: notification-secrets-production
+        key: sms-api-key
+  - name: PUSH_FIREBASE_KEY
+    valueFrom:
+      secretKeyRef:
+        name: notification-secrets-production
+        key: push-firebase-key
+  - name: OTEL_EXPORTER_OTLP_ENDPOINT
+    value: "http://otel-collector.monitoring.svc.cluster.local:4317"
+  - name: OTEL_SERVICE_NAME
+    value: "notification-production"
+
+notification:
+  email:
+    enabled: true
+    provider: sendgrid
+    from: noreply@opuscasino.com
+  sms:
+    enabled: true
+    provider: twilio
+  push:
+    enabled: true
+    firebase:
+      project-id: opus-casino
+  in_app:
+    enabled: true
+  redpanda:
+    enabled: true
+    brokers: "redpanda.data.svc.cluster.local:9092"
+    consumer_group: notification-service-production
+    topics:
+      - bets.settled
+      - payments.deposit_confirmed
+      - payments.withdrawal_processed
+      - users.kyc_verified
+      - bonus.activated
+      - bonus.expiring

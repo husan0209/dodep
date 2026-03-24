@@ -1,0 +1,190 @@
+# ============================================================
+# Pod Disruption Budgets — Production
+# ============================================================
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: betting-engine
+  namespace: platform
+spec:
+  minAvailable: 4
+  selector:
+    matchLabels:
+      app: betting-engine
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: wallet-service
+  namespace: platform
+spec:
+  minAvailable: 3
+  selector:
+    matchLabels:
+      app: wallet-service
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: auth-service
+  namespace: platform
+spec:
+  minAvailable: 3
+  selector:
+    matchLabels:
+      app: auth-service
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: user-service
+  namespace: platform
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: user-service
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: payment-service
+  namespace: platform
+spec:
+  minAvailable: 3
+  selector:
+    matchLabels:
+      app: payment-service
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: casino-service
+  namespace: platform
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: casino-service
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: bonus-service
+  namespace: platform
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: bonus-service
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: notification-service
+  namespace: platform
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: notification-service
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: kyc-service
+  namespace: platform
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: kyc-service
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: websocket-gateway
+  namespace: platform
+spec:
+  minAvailable: 3
+  selector:
+    matchLabels:
+      app: websocket-gateway
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: fraud-ml
+  namespace: platform
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: fraud-ml
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: web-app
+  namespace: platform
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: web-app
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: admin-panel
+  namespace: platform
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: admin-panel
+---
+# Data services
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: postgresql
+  namespace: data
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: postgresql
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: dragonflydb
+  namespace: data
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: dragonflydb
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: clickhouse
+  namespace: data
+spec:
+  minAvailable: 4
+  selector:
+    matchLabels:
+      app: clickhouse
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: redpanda
+  namespace: data
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: redpanda

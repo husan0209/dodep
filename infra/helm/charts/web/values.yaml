@@ -1,0 +1,153 @@
+# Web Platform Helm Chart Values
+# Next.js 14 web application
+
+replicaCount: 3
+
+image:
+  repository: ghcr.io/opus-casino/web
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+serviceAccount:
+  create: true
+  annotations:
+    eks.amazonaws.com/role-arn: ""
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+
+podSecurityContext:
+  fsGroup: 1000
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+service:
+  type: ClusterIP
+  port: 3000
+  targetPort: 3000
+
+ingress:
+  enabled: true
+  className: "alb"
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/healthcheck-path: /health
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+  hosts:
+    - host: opus.casino
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: opus-casino-tls
+      hosts:
+        - opus.casino
+
+resources:
+  limits:
+    cpu: 2000m
+    memory: 4Gi
+  requests:
+    cpu: 500m
+    memory: 512Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 20
+  targetCPUUtilizationPercentage: 60
+  targetMemoryUtilizationPercentage: 70
+
+nodeSelector:
+  node-type: application
+
+healthCheck:
+  path: /health
+  port: 3000
+  liveness:
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readiness:
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+env:
+  - name: NEXT_PUBLIC_APP_ENV
+    valueFrom:
+      configMapKeyRef:
+        name: web-config
+        key: app-env
+  - name: NEXT_PUBLIC_API_URL
+    valueFrom:
+      configMapKeyRef:
+        name: web-config
+        key: api-url
+  - name: NEXT_PUBLIC_WS_URL
+    valueFrom:
+      configMapKeyRef:
+        name: web-config
+        key: ws-url
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+
+networkPolicy:
+  enabled: true
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: istio-system
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+      ports:
+        - protocol: TCP
+          port: 3000
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: platform
+      ports:
+        - protocol: TCP
+          port: 8080
+        - protocol: TCP
+          port: 8081
+
+serviceMonitor:
+  enabled: true
+  interval: 30s
+  scrapeTimeout: 10s
+  path: /metrics
+  port: metrics
+
+# Web-specific settings
+web:
+  apiUrl: "http://api-gateway:8080"
+  wsUrl: "ws://websocket-gateway:8080"
+  
+  # Feature flags
+  features:
+    betting: true
+    casino: true
+    liveCasino: true
+    
+  # Analytics
+  analytics:
+    gaId: ""
+    sentryDsn: ""

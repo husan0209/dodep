@@ -1,0 +1,62 @@
+# Buf generation configuration
+# Generates code for Rust (tonic/prost), Go, and TypeScript
+
+version: v2
+
+managed:
+  enabled: true
+  override:
+    - file_option: go_package_prefix
+      value: github.com/opus-casino/proto/gen/go
+    - file_option: java_package
+      value: com.opuscasino.proto
+    - file_option: java_multiple_files
+      value: true
+
+plugins:
+  # Go - protocol buffers
+  - remote: buf.build/protocolbuffers/go
+    out: ../../gen/go
+    opt:
+      - paths=source_relative
+    strategy: all
+  
+  # Go - gRPC
+  - remote: buf.build/grpc/go
+    out: ../../gen/go
+    opt:
+      - paths=source_relative
+    strategy: all
+  
+  # Rust - prost (requires local plugin: protoc-gen-prost)
+  - local: protoc-gen-prost
+    out: ../../gen/rust
+    opt:
+      - extern_path=.google.protobuf::prost_wkt_types
+    strategy: all
+  
+  # Rust - tonic (requires local plugin: protoc-gen-tonic)
+  - local: protoc-gen-tonic
+    out: ../../gen/rust
+    opt:
+      - no_client
+    strategy: all
+  
+  # TypeScript - protobuf-ts
+  - remote: buf.build/timostamm/protobuf-ts
+    out: ../../gen/typescript
+    opt:
+      - paths=source_relative
+      - long_type_string
+      - add_pb_suffix
+    strategy: all
+
+# Hooks for post-generation processing
+hooks:
+  - name: format-rust
+    run: cargo fmt --manifest-path ../../gen/rust/Cargo.toml
+    container:
+      image: rust:1.75
+      volumes:
+        - ../../gen/rust:/workspace
+    if: rust

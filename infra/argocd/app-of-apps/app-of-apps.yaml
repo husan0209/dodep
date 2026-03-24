@@ -1,0 +1,36 @@
+# App of Apps Pattern for Opus Casino
+# Деплоит все приложения одной командой
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: opus-casino-platform
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: opus-casino-platform
+    app.kubernetes.io/part-of: platform
+spec:
+  project: default
+  
+  source:
+    repoURL: https://github.com/opus-casino/infra.git
+    targetRevision: HEAD
+    path: infra/argocd/applications
+    
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+    
+  syncPolicy:
+    automated:
+      prune: false  # Don't auto-prune applications
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      
+  # Ignore differences in applications (they have their own sync policy)
+  ignoreDifferences:
+    - group: argoproj.io
+      kind: Application
+      jsonPointers:
+        - /status

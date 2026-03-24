@@ -1,0 +1,129 @@
+# Multi-stage Dockerfile for Next.js Frontend
+# Opus Casino - Web Platform
+
+# =============================================================================
+# Stage 1: Dependencies
+# =============================================================================
+FROM node:20-alpine3.19 AS deps
+
+# Install build dependencies
+RUN apk add --no-cache \
+    libc6-compat \
+    python3 \
+    make \
+    g++
+
+# Set working directory
+WORKDIR /app
+
+# Copy package files
+COPY package.json package-lock.json* ./
+COPY apps/web/package.json apps/web/package.json* ./
+
+# Install dependencies
+RUN npm ci
+
+# =============================================================================
+# Stage 2: Builder
+# =============================================================================
+FROM node:20-alpine3.19 AS builder
+
+# Install build dependencies
+RUN apk add --no-cache \
+    libc6-compat \
+    python3 \
+    make \
+    g++
+
+WORKDIR /app
+
+# Copy dependencies from deps stage
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+
+# Set environment variables for build
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV NODE_ENV=production
+
+# Build the application
+RUN npm run build
+
+# =============================================================================
+# Stage 3: Runner (production)
+# =============================================================================
+FROM node:20-alpine3.19 AS runner
+
+# Install runtime dependencies
+RUN apk add --no-cache \
+    curl \
+    dumb-init
+
+WORKDIR /app
+
+# Set production environment
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# Create non-root user
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
+
+# Copy necessary files from builder
+COPY --from=builder /app/apps/web/public ./apps/web/public
+COPY --from=builder /app/apps/web/.next/standalone ./
+COPY --from=builder /app/apps/web/.next/static ./apps/web/.next/static
+
+# Set ownership
+RUN chown -R nextjs:nodejs /app
+
+USER nextjs
+
+# Expose port
+EXPOSE 3000
+
+# Environment variables
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:3000/health || exit 1
+
+# Start the application
+CMD ["node", "apps/web/server.js"]
+
+# =============================================================================
+# Stage 4: Development
+# =============================================================================
+FROM node:20-alpine3.19 AS dev
+
+# Install development dependencies
+RUN apk add --no-cache \
+    libc6-compat \
+    python3 \
+    make \
+    g++ \
+    git \
+    curl
+
+WORKDIR /app
+
+# Copy package files
+COPY package.json package-lock.json* ./
+COPY apps/web/package.json apps/web/package.json* ./
+
+# Install all dependencies (including dev)
+RUN npm install
+
+# Copy source code
+COPY . .
+
+# Set environment variables
+ENV NODE_ENV=development
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# Expose port
+EXPOSE 3000
+
+# Start development server
+CMD ["npm", "run", "dev", "--", "-p", "3000"]

@@ -1,0 +1,173 @@
+# Istio Base Installation
+# Базовые CRD и конфигурация
+
+apiVersion: install.istio.io/v1alpha1
+kind: IstioOperator
+metadata:
+  name: istio-base
+  namespace: istio-system
+spec:
+  profile: default
+  
+  # Компоненты
+  components:
+    # Base component (CRDs)
+    base:
+      enabled: true
+      
+    # Pilot (control plane)
+    pilot:
+      enabled: true
+      k8s:
+        resources:
+          requests:
+            cpu: 500m
+            memory: 512Mi
+          limits:
+            cpu: 1000m
+            memory: 2Gi
+        hpaSpec:
+          minReplicas: 2
+          maxReplicas: 5
+          metrics:
+            - type: Resource
+              resource:
+                name: cpu
+                target:
+                  type: Utilization
+                  averageUtilization: 80
+        nodeSelector:
+          node-type: system
+        tolerations:
+          - key: node-type
+            operator: Equal
+            value: system
+            effect: NoSchedule
+            
+    # Ingress Gateway
+    ingressGateways:
+      - name: istio-ingressgateway
+        enabled: true
+        label:
+          istio: ingressgateway
+        k8s:
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+          hpaSpec:
+            minReplicas: 2
+            maxReplicas: 10
+          service:
+            type: LoadBalancer
+            annotations:
+              service.beta.kubernetes.io/aws-load-balancer-type: nlb
+              service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
+              service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: ip
+            ports:
+              - name: http2
+                port: 80
+                targetPort: 8080
+              - name: https
+                port: 443
+                targetPort: 8443
+              - name: status-port
+                port: 15021
+                targetPort: 15021
+                
+    # Egress Gateway
+    egressGateways:
+      - name: istio-egressgateway
+        enabled: true
+        k8s:
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+              
+  # Mesh configuration
+  meshConfig:
+    # mTLS
+    enableAutoMtls: true
+    enableTracing: true
+    
+    # Access logging
+    accessLogFile: /dev/stdout
+    accessLogEncoding: JSON
+    
+    # Tracing
+    defaultConfig:
+      tracing:
+        zipkin:
+          address: jaeger-collector.monitoring.svc.cluster.local:9411
+        sampling: 100.0  # 100% для dev/staging
+        
+    # Telemetry
+    defaultProviders:
+      metrics:
+        - prometheus
+      tracing:
+        - jaeger
+        
+    # Extension providers
+    extensionProviders:
+      - name: otel
+        opentelemetry:
+          port: 4317
+          service: otel-collector.monitoring.svc.cluster.local
+          
+    # Outbound traffic
+    outboundTrafficPolicy:
+      mode: REGISTRY_ONLY  # Запретить исходящий трафик кроме разрешённого
+      
+    # Locality load balancing
+    localityLoadBalancerSetting:
+      enabled: true
+      failover:
+        - from: us-east-1
+          to: us-west-2
+          
+  # Values
+  values:
+    global:
+      # Namespace для мониторинга
+      defaultConfig:
+        tracing:
+          sampling: 100.0
+        proxyMetadata:
+          ISTIO_META_DNS_CAPTURE: "true"
+          
+      # Image pull policy
+      imagePullPolicy: IfNotPresent
+      
+      # Logging level
+      logging:
+        level: "default:info"
+        
+      # Tracing
+      tracer:
+        zipkin:
+          address: jaeger-collector.monitoring.svc.cluster.local:9411
+          
+    pilot:
+      # Enable config validation
+      enableConfigValidation: true
+      
+      # Enable discovery selectors
+      enableDiscoverySelectors: true
+      
+    # Gateway configuration
+    gateways:
+      istio-ingressgateway:
+        # Enable HTTPS
+        serverPorts:
+          - name: http2
+            port: 8080
+          - name: https
+            port: 8443

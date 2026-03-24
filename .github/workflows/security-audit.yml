@@ -1,0 +1,459 @@
+# Security Audit & Penetration Testing Workflow
+# Opus Casino - Comprehensive Security Testing
+
+name: Security Audit & Penetration Testing
+
+on:
+  schedule:
+    # Run weekly on Sunday at 2AM UTC
+    - cron: '0 2 * * 0'
+  workflow_dispatch:
+    inputs:
+      scan-type:
+        description: 'Type of security scan'
+        required: true
+        type: choice
+        options:
+          - full-audit
+          - owasp-top-10
+          - api-security
+          - infrastructure
+          - dependency-audit
+      target-environment:
+        description: 'Target environment'
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+      severity-threshold:
+        description: 'Minimum severity to fail'
+        required: true
+        type: choice
+        options:
+          - LOW
+          - MEDIUM
+          - HIGH
+          - CRITICAL
+        default: 'HIGH'
+
+env:
+  SEVERITY_THRESHOLD: ${{ inputs.severity-threshold || 'HIGH' }}
+  TARGET_ENV: ${{ inputs.target-environment || 'staging' }}
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+jobs:
+  # ==========================================================================
+  # Pre-scan validation
+  # ==========================================================================
+  pre-scan-check:
+    name: Pre-scan Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      authorized: ${{ steps.auth.outputs.authorized }}
+      target-url: ${{ steps.target.outputs.url }}
+    
+    steps:
+      - name: Verify authorization
+        id: auth
+        run: |
+          # Only allow security team to trigger production scans
+          if [ "${{ inputs.target-environment }}" = "production" ]; then
+            TEAM=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              "https://api.github.com/orgs/${{ github.repository_owner }}/teams/security-team/memberships/${{ github.actor }}" \
+              | jq -r '.state // "none"')
+            
+            if [ "$TEAM" != "active" ]; then
+              echo "❌ Only security team members can trigger production scans"
+              echo "authorized=false" >> $GITHUB_OUTPUT
+              exit 1
+            fi
+          fi
+          echo "authorized=true" >> $GITHUB_OUTPUT
+
+      - name: Set target URL
+        id: target
+        run: |
+          if [ "${{ inputs.target-environment }}" = "production" ]; then
+            echo "url=https://api.opus-casino.com" >> $GITHUB_OUTPUT
+          else
+            echo "url=https://staging-api.opus-casino.com" >> $GITHUB_OUTPUT
+          fi
+
+  # ==========================================================================
+  # OWASP ZAP Baseline Scan
+  # ==========================================================================
+  zap-baseline:
+    name: OWASP ZAP Baseline Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs: [pre-scan-check]
+    if: needs.pre-scan-check.outputs.authorized == 'true'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: OWASP ZAP Baseline Scan
+        uses: zaproxy/action-baseline@v0.10.0
+        with:
+          target: ${{ needs.pre-scan-check.outputs.url }}
+          rules_file_name: .github/security/zap-rules.conf
+          cmd_options: '-a -j'
+          allow_issue_writing: false
+
+      - name: Upload ZAP report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-baseline-report
+          path: |
+            report_html.html
+            report_json.json
+          retention-days: 90
+
+      - name: Upload SARIF to GitHub Security
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: report_json.json
+          category: zap-baseline
+
+  # ==========================================================================
+  # OWASP ZAP Full Scan (API)
+  # ==========================================================================
+  zap-api-scan:
+    name: OWASP ZAP API Security Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    needs: [pre-scan-check]
+    if: needs.pre-scan-check.outputs.authorized == 'true'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download OpenAPI spec
+        run: |
+          curl -s "${{ needs.pre-scan-check.outputs.url }}/openapi.json" > openapi.json
+
+      - name: OWASP ZAP API Scan
+        uses: zaproxy/action-api-scan@v0.8.0
+        with:
+          target: openapi.json
+          format: openapi
+          rules_file_name: .github/security/zap-api-rules.conf
+          cmd_options: '-a -j -d ALL'
+          allow_issue_writing: false
+
+      - name: Upload ZAP API report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-api-scan-report
+          path: |
+            report_html.html
+            report_json.json
+          retention-days: 90
+
+  # ==========================================================================
+  # Nmap Infrastructure Scan
+  # ==========================================================================
+  nmap-scan:
+    name: Nmap Infrastructure Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [pre-scan-check]
+    if: needs.pre-scan-check.outputs.authorized == 'true'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Nmap
+        run: sudo apt-get update && sudo apt-get install -y nmap
+
+      - name: Run Nmap scan
+        run: |
+          # Extract domain from URL
+          DOMAIN=$(echo "${{ needs.pre-scan-check.outputs.url }}" | sed -e 's|^[^/]*//||' -e 's|/.*$||')
+          
+          # SYN scan (requires sudo)
+          sudo nmap -sS -sV -O -p- --script vuln \
+            -oA nmap-results/${DOMAIN} \
+            ${DOMAIN} || true
+          
+          # Service version detection
+          sudo nmap -sV --script banner \
+            -oA nmap-results/${DOMAIN}-services \
+            ${DOMAIN} || true
+        env:
+          DOMAIN: ${{ needs.pre-scan-check.outputs.url }}
+
+      - name: Upload Nmap results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nmap-scan-results
+          path: nmap-results/
+          retention-days: 90
+
+  # ==========================================================================
+  # SSL/TLS Configuration Scan
+  # ==========================================================================
+  ssl-scan:
+    name: SSL/TLS Configuration Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [pre-scan-check]
+    if: needs.pre-scan-check.outputs.authorized == 'true'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install testssl.sh
+        run: |
+          git clone --depth 1 https://github.com/drwetter/testssl.sh.git
+          cd testssl.sh
+          docker pull drwetter/testssl.sh || true
+
+      - name: Run SSL scan
+        run: |
+          DOMAIN=$(echo "${{ needs.pre-scan-check.outputs.url }}" | sed -e 's|^[^/]*//||' -e 's|/.*$||')
+          
+          ./testssl.sh/testssl.sh \
+            --severity ${SEVERITY_THRESHOLD} \
+            --jsonfile ssl-results/${DOMAIN}.json \
+            --htmlfile ssl-results/${DOMAIN}.html \
+            ${DOMAIN}:443 || true
+        env:
+          DOMAIN: ${{ needs.pre-scan-check.outputs.url }}
+
+      - name: Upload SSL results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ssl-scan-results
+          path: ssl-results/
+          retention-days: 90
+
+      - name: Check SSL Labs rating
+        run: |
+          DOMAIN=$(echo "${{ needs.pre-scan-check.outputs.url }}" | sed -e 's|^[^/]*//||' -e 's|/.*$||')
+          
+          # Get SSL Labs rating
+          RATING=$(curl -s "https://api.ssllabs.com/api/v3/analyze?host=${DOMAIN}&fromCache=on" \
+            | jq -r '.endpoints[0].grade // "F"')
+          
+          echo "SSL Labs Rating: ${RATING}"
+          
+          if [[ "${RATING}" != "A+" && "${RATING}" != "A" && "${RATING}" != "A-" ]]; then
+            echo "⚠️ SSL rating is below A-"
+          fi
+
+  # ==========================================================================
+  # Dependency Vulnerability Audit
+  # ==========================================================================
+  dependency-audit:
+    name: Dependency Vulnerability Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [pre-scan-check]
+    strategy:
+      matrix:
+        language: [rust, go, python, node]
+      fail-fast: false
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run security scan
+        uses: ./.github/actions/security-scan
+        with:
+          language: ${{ matrix.language }}
+          working-directory: .
+          fail-on-severity: ${{ inputs.severity-threshold || 'HIGH' }}
+          enable-trivy: 'true'
+          enable-semgrep: 'true'
+          enable-dependency-check: 'true'
+
+      - name: Upload audit results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-audit-${{ matrix.language }}
+          path: |
+            **/cargo-audit.txt
+            **/govulncheck.txt
+            **/pip-audit.txt
+            **/npm-audit.txt
+          retention-days: 30
+
+  # ==========================================================================
+  # Secret Detection Scan
+  # ==========================================================================
+  secret-detection:
+    name: Secret Detection Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [pre-scan-check]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run TruffleHog
+        run: |
+          docker run --rm -v $PWD:/tmp trufflesecurity/trufflehog:latest \
+            filesystem /tmp \
+            --json \
+            --fail \
+            --only-verified \
+            | tee trufflehog-results.json || true
+
+      - name: Run Gitleaks
+        run: |
+          docker run --rm -v $PWD:/tmp zricethezav/gitleaks:latest \
+            detect -v /tmp \
+            --report-path gitleaks-results.json \
+            --report-format json || true
+
+      - name: Upload secret detection results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: secret-detection-results
+          path: |
+            trufflehog-results.json
+            gitleaks-results.json
+          retention-days: 90
+
+  # ==========================================================================
+  # Container Security Scan
+  # ==========================================================================
+  container-security:
+    name: Container Security Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [pre-scan-check]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Pull latest images
+        run: |
+          # Pull images from registry
+          docker pull ghcr.io/${{ github.repository_owner }}/betting-engine:latest || true
+          docker pull ghcr.io/${{ github.repository_owner }}/auth:latest || true
+          docker pull ghcr.io/${{ github.repository_owner }}/payment:latest || true
+
+      - name: Run Trivy image scan
+        run: |
+          trivy image \
+            --severity ${SEVERITY_THRESHOLD},CRITICAL \
+            --timeout 15m \
+            --format sarif \
+            --output trivy-images.sarif \
+            --exit-code 1 \
+            ghcr.io/${{ github.repository_owner }}/betting-engine:latest \
+            ghcr.io/${{ github.repository_owner }}/auth:latest \
+            ghcr.io/${{ github.repository_owner }}/payment:latest || true
+
+      - name: Run Docker Bench for Security
+        run: |
+          docker run --rm \
+            --net host --pid host --userns host --cap-add audit_control \
+            -e DOCKER_CONTENT_TRUST=1 \
+            -v /etc:/etc:ro \
+            -v /var/lib/docker:/var/lib/docker:ro \
+            -v /usr/bin/containerd:/usr/bin/containerd:ro \
+            -v /usr/bin/runc:/usr/bin/runc:ro \
+            -v /usr/lib/systemd:/usr/lib/systemd:ro \
+            -v /var/run:/var/run:ro \
+            -v /run/systemd/system:/run/systemd/system:ro \
+            docker/docker-bench-security || true
+
+      - name: Upload container security results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: container-security-results
+          path: |
+            trivy-images.sarif
+          retention-days: 90
+
+  # ==========================================================================
+  # Generate Security Report
+  # ==========================================================================
+  security-report:
+    name: Generate Security Report
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [zap-baseline, zap-api-scan, nmap-scan, ssl-scan, dependency-audit, secret-detection, container-security]
+    if: always()
+    
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: Generate consolidated report
+        run: |
+          echo "# 🔒 Security Audit Report" > security-report.md
+          echo "" >> security-report.md
+          echo "**Date:** $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> security-report.md
+          echo "**Target:** ${{ needs.pre-scan-check.outputs.url }}" >> security-report.md
+          echo "**Environment:** ${{ inputs.target-environment || 'staging' }}" >> security-report.md
+          echo "" >> security-report.md
+          
+          echo "## Summary" >> security-report.md
+          echo "" >> security-report.md
+          echo "| Scan Type | Status | Findings |" >> security-report.md
+          echo "|-----------|--------|----------|" >> security-report.md
+          echo "| OWASP ZAP Baseline | ${{ needs.zap-baseline.result }} | See report |" >> security-report.md
+          echo "| OWASP ZAP API | ${{ needs.zap-api-scan.result }} | See report |" >> security-report.md
+          echo "| Nmap Infrastructure | ${{ needs.nmap-scan.result }} | See report |" >> security-report.md
+          echo "| SSL/TLS Configuration | ${{ needs.ssl-scan.result }} | See report |" >> security-report.md
+          echo "| Dependency Audit | ${{ needs.dependency-audit.result }} | See report |" >> security-report.md
+          echo "| Secret Detection | ${{ needs.secret-detection.result }} | See report |" >> security-report.md
+          echo "| Container Security | ${{ needs.container-security.result }} | See report |" >> security-report.md
+          echo "" >> security-report.md
+          
+          echo "## Critical Findings" >> security-report.md
+          echo "" >> security-report.md
+          echo "<!-- Add manual analysis here -->" >> security-report.md
+
+      - name: Upload security report
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-audit-report
+          path: security-report.md
+          retention-days: 365
+
+      - name: Notify security team
+        if: always()
+        run: |
+          # Send to Slack
+          curl -X POST ${{ secrets.SLACK_SECURITY_WEBHOOK }} \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"text\": \"🔒 Security Audit Complete\",
+              \"attachments\": [{
+                \"color\": \"${{ needs.security-report.result == 'success' && 'good' || 'danger' }}\",
+                \"fields\": [
+                  {\"title\": \"Environment\", \"value\": \"${{ inputs.target-environment || 'staging' }}\", \"short\": true},
+                  {\"title\": \"Status\", \"value\": \"${{ needs.security-report.result }}\", \"short\": true}
+                ]
+              }]
+            }"

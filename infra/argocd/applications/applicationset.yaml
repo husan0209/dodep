@@ -1,0 +1,97 @@
+# ArgoCD ApplicationSet for Microservices
+# Автоматически создаёт приложения для каждого сервиса
+
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: microservices
+  namespace: argocd
+spec:
+  generators:
+    # List generator for services
+    - list:
+        elements:
+          - name: betting-engine
+            path: infra/helm/charts/betting-engine
+            image: ghcr.io/opus-casino/betting-engine
+          - name: wallet-core
+            path: infra/helm/charts/wallet-core
+            image: ghcr.io/opus-casino/wallet-core
+          - name: auth
+            path: infra/helm/charts/auth
+            image: ghcr.io/opus-casino/auth
+          - name: user
+            path: infra/helm/charts/user
+            image: ghcr.io/opus-casino/user
+          - name: payment
+            path: infra/helm/charts/payment
+            image: ghcr.io/opus-casino/payment
+          - name: bonus
+            path: infra/helm/charts/bonus
+            image: ghcr.io/opus-casino/bonus
+          - name: casino
+            path: infra/helm/charts/casino
+            image: ghcr.io/opus-casino/casino
+          - name: notification
+            path: infra/helm/charts/notification
+            image: ghcr.io/opus-casino/notification
+          - name: kyc
+            path: infra/helm/charts/kyc
+            image: ghcr.io/opus-casino/kyc
+    
+    # Matrix generator for environments
+    - matrix:
+        generators:
+          - list:
+              elements:
+                - env: dev
+                  cluster: https://kubernetes.default.svc
+                  values: values-dev.yaml
+                  autoSync: "true"
+                - env: staging
+                  cluster: https://kubernetes.default.svc
+                  values: values-staging.yaml
+                  autoSync: "true"
+                - env: production
+                  cluster: https://kubernetes.default.svc
+                  values: values-production.yaml
+                  autoSync: "false"
+                  
+  template:
+    metadata:
+      name: '{{env}}-{{name}}'
+      labels:
+        app.kubernetes.io/name: '{{name}}'
+        app.kubernetes.io/environment: '{{env}}'
+    spec:
+      project: services
+      source:
+        repoURL: https://github.com/opus-casino/infra.git
+        targetRevision: HEAD
+        path: '{{path}}'
+        helm:
+          valueFiles:
+            - '{{values}}'
+          parameters:
+            - name: image.repository
+              value: '{{image}}'
+            - name: image.tag
+              value: latest
+      destination:
+        server: '{{cluster}}'
+        namespace: '{{env}}'
+      syncPolicy:
+        {{#if eq autoSync "true"}}
+        automated:
+          prune: true
+          selfHeal: true
+        {{/if}}
+        syncOptions:
+          - CreateNamespace=true
+          - PrunePropagationPolicy=foreground
+        retry:
+          limit: 5
+          backoff:
+            duration: 5s
+            factor: 2
+            maxDuration: 3m

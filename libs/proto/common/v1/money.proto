@@ -1,0 +1,65 @@
+// Money and financial types for Opus Casino platform
+// Separated for clarity and reusability
+
+syntax = "proto3";
+
+package common.v1;
+
+option go_package = "github.com/opus-casino/proto/gen/go/common/v1";
+option java_multiple_files = true;
+option java_package = "com.opuscasino.proto.common.v1";
+
+import "common/v1/types.proto";
+
+// Balance represents a wallet balance with all states
+message Balance {
+  // Available balance (can be used for bets/withdrawals)
+  Money available = 1;
+  // Locked balance (reserved for pending bets)
+  Money locked = 2;
+  // Bonus balance (separate from real money)
+  Money bonus = 3;
+  // Total balance (available + locked + bonus)
+  Money total = 4;
+}
+
+// Transaction represents a financial transaction
+message Transaction {
+  TransactionId id = 1;
+  UserId user_id = 2;
+  WalletType wallet_type = 3;
+  Money amount = 4;
+  TransactionType type = 5;
+  TransactionStatus status = 6;
+  string reference_id = 7;     // Related entity ID (bet_id, withdrawal_id, etc.)
+  string reference_type = 8;   // Related entity type ("bet", "withdrawal", "bonus")
+  string idempotency_key = 9;  // For idempotent operations
+  google.protobuf.Timestamp created_at = 10;
+  google.protobuf.Timestamp updated_at = 11;
+  string description = 12;
+  map<string, string> metadata = 13;
+}
+
+// LedgerEntry represents a double-entry bookkeeping record
+message LedgerEntry {
+  string id = 1;
+  TransactionId transaction_id = 2;
+  // Account being debited (empty for credits)
+  string debit_account = 3;
+  // Account being credited (empty for debits)
+  string credit_account = 4;
+  Money amount = 5;
+  google.protobuf.Timestamp created_at = 6;
+  string description = 7;
+}
+
+// Wallet represents a user wallet with all details
+message Wallet {
+  UserId user_id = 1;
+  WalletType type = 2;
+  Balance balance = 3;
+  string currency = 4;
+  google.protobuf.Timestamp created_at = 5;
+  google.protobuf.Timestamp updated_at = 6;
+  bool is_active = 7;
+}

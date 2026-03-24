@@ -1,0 +1,169 @@
+# Betting Engine - Production Environment Values
+# Production окружение - максимальная производительность и надёжность
+
+replicaCount: 5
+
+image:
+  tag: "latest"
+  pullPolicy: Always
+
+# Service account с IRSA для production
+serviceAccount:
+  create: true
+  annotations:
+    eks.amazonaws.com/role-arn: "arn:aws:iam::ACCOUNT_ID:role/opus-casino-production-betting-engine-role"
+
+# Production resources
+resources:
+  limits:
+    cpu: 4000m
+    memory: 4Gi
+  requests:
+    cpu: 1000m
+    memory: 1Gi
+
+# Production autoscaling
+autoscaling:
+  enabled: true
+  minReplicas: 5
+  maxReplicas: 50
+  targetCPUUtilizationPercentage: 60
+  targetMemoryUtilizationPercentage: 70
+
+# Production environment variables
+env:
+  - name: RUST_LOG
+    value: "warn"
+  - name: RUST_BACKTRACE
+    value: "1"
+  - name: APP_ENV
+    value: "production"
+  - name: DATABASE_URL
+    valueFrom:
+      secretKeyRef:
+        name: betting-engine-secrets-production
+        key: database-url
+  - name: REDIS_URL
+    valueFrom:
+      secretKeyRef:
+        name: betting-engine-secrets-production
+        key: redis-url
+  - name: KAFKA_BROKERS
+    value: "redpanda.data.svc.cluster.local:9092,redpanda.data.svc.cluster.local:9093,redpanda.data.svc.cluster.local:9094"
+  - name: OTEL_EXPORTER_OTLP_ENDPOINT
+    value: "http://otel-collector.monitoring.svc.cluster.local:4317"
+  - name: OTEL_SERVICE_NAME
+    value: "betting-engine-production"
+
+# Production PDB
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 3
+
+# Production network policy
+networkPolicy:
+  enabled: true
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: istio-system
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+        - namespaceSelector:
+            matchLabels:
+              name: production
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: data
+      ports:
+        - protocol: TCP
+          port: 5432
+        - protocol: TCP
+          port: 6379
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: data
+      ports:
+        - protocol: TCP
+          port: 9092
+        - protocol: TCP
+          port: 9093
+        - protocol: TCP
+          port: 9094
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+      ports:
+        - protocol: TCP
+          port: 4317
+
+# Production service monitor
+serviceMonitor:
+  enabled: true
+  interval: 15s
+  scrapeTimeout: 10s
+  path: /metrics
+  port: metrics
+
+# Production ingress
+ingress:
+  enabled: true
+  className: "alb"
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/healthcheck-path: /health
+    alb.ingress.kubernetes.io/success-codes: "200"
+    alb.ingress.kubernetes.io/protocol: HTTPS
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+    alb.ingress.kubernetes.io/certificate-arn: "arn:aws:acm:us-east-1:ACCOUNT_ID:certificate/CERT_ID"
+    alb.ingress.kubernetes.io/actions.ssl-redirect: '{"Type": "redirect", "RedirectConfig": { "Protocol": "HTTPS", "Port": "443", "StatusCode": "HTTP_301"}}'
+  hosts:
+    - host: api.opus.casino
+      paths:
+        - path: /api/v1/bets
+          pathType: Prefix
+        - path: /api/v1/odds
+          pathType: Prefix
+  tls:
+    - secretName: opus-casino-production-tls
+      hosts:
+        - api.opus.casino
+
+# Production node affinity
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: node-type
+              operator: In
+              values:
+                - application
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - betting-engine
+          topologyKey: kubernetes.io/hostname
+
+# Production tolerations
+tolerations:
+  - key: "application"
+    operator: "Equal"
+    value: "true"
+    effect: "NoSchedule"

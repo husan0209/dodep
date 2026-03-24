@@ -1,0 +1,302 @@
+# ArgoCD Applications
+# Определяют приложения для деплоя
+
+---
+# Betting Engine - Dev
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: dev-betting-engine
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: betting-engine
+    app.kubernetes.io/environment: dev
+    app.kubernetes.io/team: platform
+spec:
+  project: services
+  
+  source:
+    repoURL: https://github.com/opus-casino/infra.git
+    targetRevision: HEAD
+    path: infra/helm/charts/betting-engine
+    helm:
+      valueFiles:
+        - values-dev.yaml
+      values: |
+        image:
+          repository: ghcr.io/opus-casino/betting-engine
+          tag: latest
+          
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: dev
+    
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+        
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas
+        
+  healthChecks:
+    - group: apps
+      kind: Deployment
+      script: |
+        hs = {}
+        if obj.status.readyReplicas == obj.spec.replicas then
+          hs.status = "Healthy"
+          hs.message = "Deployment is healthy"
+        else
+          hs.status = "Progressing"
+          hs.message = "Waiting for deployment to be ready"
+        end
+        return hs
+
+---
+# Betting Engine - Staging
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: staging-betting-engine
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: betting-engine
+    app.kubernetes.io/environment: staging
+spec:
+  project: services
+  
+  source:
+    repoURL: https://github.com/opus-casino/infra.git
+    targetRevision: HEAD
+    path: infra/helm/charts/betting-engine
+    helm:
+      valueFiles:
+        - values-staging.yaml
+          
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: staging
+    
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 3
+      
+---
+# Betting Engine - Production (manual sync)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: production-betting-engine
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: betting-engine
+    app.kubernetes.io/environment: production
+spec:
+  project: services
+  
+  source:
+    repoURL: https://github.com/opus-casino/infra.git
+    targetRevision: HEAD
+    path: infra/helm/charts/betting-engine
+    helm:
+      valueFiles:
+        - values-production.yaml
+          
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: production
+    
+  syncPolicy:
+    # No automated sync for production - manual approval required
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+    retry:
+      limit: 3
+      
+---
+# Wallet Core - Dev
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: dev-wallet-core
+  namespace: argocd
+spec:
+  project: services
+  
+  source:
+    repoURL: https://github.com/opus-casino/infra.git
+    targetRevision: HEAD
+    path: infra/helm/charts/wallet-core
+    helm:
+      values: |
+        replicaCount: 1
+        env:
+          - name: APP_ENV
+            value: development
+            
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: dev
+    
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+
+---
+# Wallet Core - Production
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: production-wallet-core
+  namespace: argocd
+spec:
+  project: services
+  
+  source:
+    repoURL: https://github.com/opus-casino/infra.git
+    targetRevision: HEAD
+    path: infra/helm/charts/wallet-core
+          
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: production
+    
+  syncPolicy:
+    # Manual sync for production
+    syncOptions:
+      - CreateNamespace=true
+
+---
+# Auth Service - Dev
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: dev-auth
+  namespace: argocd
+spec:
+  project: services
+  
+  source:
+    repoURL: https://github.com/opus-casino/infra.git
+    targetRevision: HEAD
+    path: infra/helm/charts/auth
+    helm:
+      values: |
+        replicaCount: 1
+        
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: dev
+    
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+
+---
+# Auth Service - Production
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: production-auth
+  namespace: argocd
+spec:
+  project: services
+  
+  source:
+    repoURL: https://github.com/opus-casino/infra.git
+    targetRevision: HEAD
+    path: infra/helm/charts/auth
+          
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: production
+    
+  syncPolicy:
+    # Manual sync for production
+    syncOptions:
+      - CreateNamespace=true
+
+---
+# Monitoring Stack
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: monitoring
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: monitoring
+    app.kubernetes.io/part-of: platform
+spec:
+  project: platform
+  
+  source:
+    repoURL: https://github.com/opus-casino/infra.git
+    targetRevision: HEAD
+    path: infra/k8s/monitoring
+    
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+    
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+
+---
+# Istio Service Mesh
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: istio
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: istio
+    app.kubernetes.io/part-of: platform
+spec:
+  project: platform
+  
+  source:
+    repoURL: https://github.com/opus-casino/infra.git
+    targetRevision: HEAD
+    path: infra/k8s/istio
+    
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: istio-system
+    
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

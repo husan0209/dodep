@@ -1,0 +1,331 @@
+// Fraud Service - gRPC service definition
+// Handles fraud detection and prevention
+
+syntax = "proto3";
+
+package fraud.v1;
+
+option go_package = "github.com/opus-casino/proto/gen/go/fraud/v1";
+option java_multiple_files = true;
+option java_package = "com.opuscasino.proto.fraud.v1";
+
+import "common/v1/types.proto";
+import "common/v1/money.proto";
+import "common/v1/pagination.proto";
+import "common/v1/error.proto";
+import "google/protobuf/timestamp.proto";
+
+// FraudService handles fraud detection and prevention
+service FraudService {
+  // CheckRisk evaluates risk score for an action
+  rpc CheckRisk(CheckRiskRequest) returns (CheckRiskResponse);
+
+  // GetRiskScore returns user's current risk score
+  rpc GetRiskScore(GetRiskScoreRequest) returns (GetRiskScoreResponse);
+
+  // CreateAlert creates a fraud alert
+  rpc CreateAlert(CreateAlertRequest) returns (CreateAlertResponse);
+
+  // GetAlert returns alert details
+  rpc GetAlert(GetAlertRequest) returns (GetAlertResponse);
+
+  // ListAlerts returns alerts for user or system-wide
+  rpc ListAlerts(ListAlertsRequest) returns (ListAlertsResponse);
+
+  // UpdateAlertStatus updates alert status
+  rpc UpdateAlertStatus(UpdateAlertStatusRequest) returns (UpdateAlertStatusResponse);
+
+  // TakeAction takes action on user (freeze, limit, etc.)
+  rpc TakeAction(TakeActionRequest) returns (TakeActionResponse);
+
+  // GetUserActions returns actions taken on user
+  rpc GetUserActions(GetUserActionsRequest) returns (GetUserActionsResponse);
+
+  // GetRiskRules returns active risk rules
+  rpc GetRiskRules(GetRiskRulesRequest) returns (GetRiskRulesResponse);
+
+  // UpdateRiskRule (Admin) updates a risk rule
+  rpc UpdateRiskRule(UpdateRiskRuleRequest) returns (UpdateRiskRuleResponse);
+}
+
+// ============ Risk Check ============
+
+message CheckRiskRequest {
+  common.v1.UserId user_id = 1;
+  RiskActionType action_type = 2;
+  string action_id = 3;           // bet_id, withdrawal_id, etc.
+  common.v1.Money amount = 4;
+  map<string, string> context = 5;  // Additional context
+  string ip_address = 6;
+  string device_id = 7;
+}
+
+message CheckRiskResponse {
+  RiskAssessment assessment = 1;
+  RiskLevel risk_level = 2;
+  repeated string triggered_rules = 3;
+  RiskAction recommended_action = 4;
+  bool should_block = 5;
+  bool requires_review = 6;
+}
+
+// ============ Risk Score ============
+
+message GetRiskScoreRequest {
+  common.v1.UserId user_id = 1;
+}
+
+message GetRiskScoreResponse {
+  RiskScore score = 1;
+  repeated RiskFactor risk_factors = 2;
+  google.protobuf.Timestamp last_updated = 3;
+}
+
+// ============ Create Alert ============
+
+message CreateAlertRequest {
+  common.v1.UserId user_id = 1;
+  AlertType alert_type = 2;
+  string severity = 3;
+  string title = 4;
+  string description = 5;
+  map<string, string> context = 6;
+  repeated string triggered_rules = 7;
+  string source = 8;  // "system", "ml_model", "manual"
+}
+
+message CreateAlertResponse {
+  FraudAlert alert = 1;
+}
+
+// ============ Get Alert ============
+
+message GetAlertRequest {
+  string alert_id = 1;
+}
+
+message GetAlertResponse {
+  FraudAlert alert = 1;
+}
+
+// ============ List Alerts ============
+
+message ListAlertsRequest {
+  optional common.v1.UserId user_id = 1;
+  optional AlertType alert_type = 2;
+  optional AlertStatus status = 3;
+  optional string severity = 4;
+  optional common.v1.DateRange date_range = 5;
+  common.v1.PageRequest pagination = 6;
+}
+
+message ListAlertsResponse {
+  repeated FraudAlert alerts = 1;
+  common.v1.PageResponse pagination = 2;
+}
+
+// ============ Update Alert Status ============
+
+message UpdateAlertStatusRequest {
+  string alert_id = 1;
+  AlertStatus new_status = 2;
+  string reviewed_by = 3;
+  string review_notes = 4;
+}
+
+message UpdateAlertStatusResponse {
+  FraudAlert alert = 1;
+}
+
+// ============ Take Action ============
+
+message TakeActionRequest {
+  common.v1.UserId user_id = 1;
+  RiskActionType action_type = 2;
+  string reason = 3;
+  string triggered_by = 4;  // Alert ID or rule ID
+  optional common.v1.Money limit_amount = 5;
+  optional google.protobuf.Timestamp expires_at = 6;
+  map<string, string> metadata = 7;
+}
+
+message TakeActionResponse {
+  UserAction action = 1;
+  common.v1.ErrorDetails error = 2;
+}
+
+// ============ User Actions ============
+
+message GetUserActionsRequest {
+  common.v1.UserId user_id = 1;
+  optional RiskActionType action_type = 2;
+  optional common.v1.DateRange date_range = 3;
+  common.v1.PageRequest pagination = 4;
+}
+
+message GetUserActionsResponse {
+  repeated UserAction actions = 1;
+  common.v1.PageResponse pagination = 2;
+}
+
+// ============ Risk Rules ============
+
+message GetRiskRulesRequest {
+  optional bool is_active = 1;
+  optional RiskActionType action_type = 2;
+}
+
+message GetRiskRulesResponse {
+  repeated RiskRule rules = 1;
+}
+
+message UpdateRiskRuleRequest {
+  string rule_id = 1;
+  optional string name = 2;
+  optional string description = 3;
+  optional bool is_active = 4;
+  optional string condition = 5;
+  optional RiskAction action = 6;
+  optional string severity = 7;
+}
+
+message UpdateRiskRuleResponse {
+  RiskRule rule = 1;
+  common.v1.ErrorDetails error = 2;
+}
+
+// ============ Domain Models ============
+
+message RiskAssessment {
+  string assessment_id = 1;
+  common.v1.UserId user_id = 2;
+  RiskActionType action_type = 3;
+  RiskScore score = 4;
+  repeated RiskFactor risk_factors = 5;
+  google.protobuf.Timestamp assessed_at = 6;
+}
+
+message RiskScore {
+  common.v1.UserId user_id = 1;
+  int32 score = 2;              // 0-100, higher = more risky
+  RiskLevel level = 3;
+  int32 score_change_24h = 4;
+  google.protobuf.Timestamp calculated_at = 5;
+}
+
+message RiskFactor {
+  string factor_id = 1;
+  string factor_name = 2;
+  string description = 3;
+  int32 weight = 4;             // Contribution to score
+  string value = 5;             // Current value
+  google.protobuf.Timestamp detected_at = 6;
+}
+
+message FraudAlert {
+  string id = 1;
+  common.v1.UserId user_id = 2;
+  AlertType alert_type = 3;
+  AlertStatus status = 4;
+  string severity = 5;
+  string title = 6;
+  string description = 7;
+  map<string, string> context = 8;
+  repeated string triggered_rules = 9;
+  string source = 10;
+  google.protobuf.Timestamp created_at = 11;
+  google.protobuf.Timestamp updated_at = 12;
+  google.protobuf.Timestamp reviewed_at = 13;
+  string reviewed_by = 14;
+  string review_notes = 15;
+}
+
+message UserAction {
+  string id = 1;
+  common.v1.UserId user_id = 2;
+  RiskActionType action_type = 3;
+  RiskActionStatus status = 4;
+  string reason = 5;
+  string triggered_by = 6;
+  common.v1.Money limit_amount = 7;
+  google.protobuf.Timestamp created_at = 8;
+  google.protobuf.Timestamp expires_at = 9;
+  google.protobuf.Timestamp lifted_at = 10;
+  string created_by = 11;
+  map<string, string> metadata = 12;
+}
+
+message RiskRule {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  RiskActionType action_type = 4;
+  string condition = 5;         // Rule condition expression
+  RiskAction action = 6;
+  string severity = 7;
+  bool is_active = 8;
+  int32 priority = 9;
+  google.protobuf.Timestamp created_at = 10;
+  google.protobuf.Timestamp updated_at = 11;
+}
+
+enum RiskLevel {
+  RISK_LEVEL_UNSPECIFIED = 0;
+  RISK_LEVEL_LOW = 1;           // 0-25
+  RISK_LEVEL_MEDIUM = 2;        // 26-50
+  RISK_LEVEL_HIGH = 3;          // 51-75
+  RISK_LEVEL_CRITICAL = 4;      // 76-100
+}
+
+enum RiskActionType {
+  RISK_ACTION_TYPE_UNSPECIFIED = 0;
+  RISK_ACTION_TYPE_LOGIN = 1;
+  RISK_ACTION_TYPE_DEPOSIT = 2;
+  RISK_ACTION_TYPE_WITHDRAWAL = 3;
+  RISK_ACTION_TYPE_BET = 4;
+  RISK_ACTION_TYPE_BONUS_CLAIM = 5;
+  RISK_ACTION_TYPE_ACCOUNT_CHANGE = 6;
+  RISK_ACTION_TYPE_KYC_SUBMIT = 7;
+}
+
+enum RiskAction {
+  RISK_ACTION_UNSPECIFIED = 0;
+  RISK_ACTION_NONE = 1;
+  RISK_ACTION_ALLOW = 2;
+  RISK_ACTION_REVIEW = 3;
+  RISK_ACTION_LIMIT = 4;
+  RISK_ACTION_BLOCK = 5;
+  RISK_ACTION_FREEZE_ACCOUNT = 6;
+  RISK_ACTION_CLOSE_ACCOUNT = 7;
+}
+
+enum RiskActionStatus {
+  RISK_ACTION_STATUS_UNSPECIFIED = 0;
+  RISK_ACTION_STATUS_ACTIVE = 1;
+  RISK_ACTION_STATUS_EXPIRED = 2;
+  RISK_ACTION_STATUS_LIFTED = 3;
+  RISK_ACTION_STATUS_CANCELLED = 4;
+}
+
+enum AlertType {
+  ALERT_TYPE_UNSPECIFIED = 0;
+  ALERT_TYPE_VELOCITY_CHECK = 1;
+  ALERT_TYPE_MULTI_ACCOUNT = 2;
+  ALERT_TYPE_BONUS_ABUSE = 3;
+  ALERT_TYPE_ARBITRAGE_BETTING = 4;
+  ALERT_TYPE_PAYMENT_FRAUD = 5;
+  ALERT_TYPE_IDENTITY_FRAUD = 6;
+  ALERT_TYPE_GEO_VIOLATION = 7;
+  ALERT_TYPE_UNUSUAL_ACTIVITY = 8;
+  ALERT_TYPE_CHARGEBACK_RISK = 9;
+  ALERT_TYPE_MONEY_LAUNDERING = 10;
+}
+
+enum AlertStatus {
+  ALERT_STATUS_UNSPECIFIED = 0;
+  ALERT_STATUS_OPEN = 1;
+  ALERT_STATUS_IN_REVIEW = 2;
+  ALERT_STATUS_RESOLVED = 3;
+  ALERT_STATUS_FALSE_POSITIVE = 4;
+  ALERT_STATUS_ESCALATED = 5;
+}

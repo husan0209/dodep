@@ -1,0 +1,153 @@
+# ArgoCD ApplicationSet — все микросервисы
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: platform-services
+  namespace: argocd
+spec:
+  generators:
+    - list:
+        elements:
+          # Rust services
+          - name: betting-engine
+            namespace: platform
+            path: charts/betting-engine
+            valuesFile: values-production.yaml
+            repoURL: https://github.com/opus-casino/helm-charts.git
+          - name: wallet-service
+            namespace: platform
+            path: charts/wallet-core
+            valuesFile: values.yaml
+            repoURL: https://github.com/opus-casino/helm-charts.git
+          - name: websocket-gateway
+            namespace: platform
+            path: charts/websocket-gateway
+            valuesFile: values.yaml
+            repoURL: https://github.com/opus-casino/helm-charts.git
+          # Go services
+          - name: auth-service
+            namespace: platform
+            path: charts/auth
+            valuesFile: values-production.yaml
+            repoURL: https://github.com/opus-casino/helm-charts.git
+          - name: user-service
+            namespace: platform
+            path: charts/user
+            valuesFile: values.yaml
+            repoURL: https://github.com/opus-casino/helm-charts.git
+          - name: payment-service
+            namespace: platform
+            path: charts/payment
+            valuesFile: values.yaml
+            repoURL: https://github.com/opus-casino/helm-charts.git
+          - name: casino-service
+            namespace: platform
+            path: charts/casino
+            valuesFile: values.yaml
+            repoURL: https://github.com/opus-casino/helm-charts.git
+          - name: bonus-service
+            namespace: platform
+            path: charts/bonus
+            valuesFile: values.yaml
+            repoURL: https://github.com/opus-casino/helm-charts.git
+          - name: notification-service
+            namespace: platform
+            path: charts/notification
+            valuesFile: values.yaml
+            repoURL: https://github.com/opus-casino/helm-charts.git
+          - name: kyc-service
+            namespace: platform
+            path: charts/kyc
+            valuesFile: values.yaml
+            repoURL: https://github.com/opus-casino/helm-charts.git
+          # Python services
+          - name: fraud-ml
+            namespace: platform
+            path: charts/fraud-ml
+            valuesFile: values.yaml
+            repoURL: https://github.com/opus-casino/helm-charts.git
+          # Frontend
+          - name: web-app
+            namespace: platform
+            path: charts/web
+            valuesFile: values.yaml
+            repoURL: https://github.com/opus-casino/helm-charts.git
+          - name: admin-panel
+            namespace: platform
+            path: charts/admin
+            valuesFile: values.yaml
+            repoURL: https://github.com/opus-casino/helm-charts.git
+  template:
+    metadata:
+      name: "{{name}}"
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: platform
+      source:
+        repoURL: "{{repoURL}}"
+        targetRevision: main
+        path: "{{path}}"
+        helm:
+          valueFiles:
+            - "{{valuesFile}}"
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: "{{namespace}}"
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+          allowEmpty: false
+        syncOptions:
+          - CreateNamespace=true
+          - PruneLast=true
+        retry:
+          limit: 5
+          backoff:
+            duration: 5s
+            factor: 2
+            maxDuration: 3m
+---
+# ArgoCD ApplicationSet — data services
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: data-services
+  namespace: argocd
+spec:
+  generators:
+    - list:
+        elements:
+          - name: postgresql
+            namespace: data
+            path: k8s/data/postgresql
+          - name: dragonflydb
+            namespace: data
+            path: k8s/data/dragonfly
+          - name: clickhouse
+            namespace: data
+            path: k8s/data/clickhouse
+          - name: redpanda
+            namespace: data
+            path: k8s/data/redpanda
+  template:
+    metadata:
+      name: "{{name}}"
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: data
+      source:
+        repoURL: https://github.com/opus-casino/platform.git
+        targetRevision: main
+        path: "{{path}}"
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: "{{namespace}}"
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true

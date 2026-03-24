@@ -1,0 +1,248 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_VERSION: "1.75"
+  GO_VERSION: "1.21"
+  PYTHON_VERSION: "3.11"
+  NODE_VERSION: "20"
+
+jobs:
+  # Rust services build and test
+  rust-build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [betting-engine, wallet-core, websocket-gateway]
+    defaults:
+      run:
+        working-directory: services/rust/${{ matrix.service }}
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: dtolnay/rust-action@stable
+      with:
+        toolchain: ${{ env.RUST_VERSION }}
+        components: rustfmt, clippy
+    
+    - name: Cache cargo registry
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y pkg-config libssl-dev protobuf-compiler
+    
+    - name: Check format
+      run: cargo fmt --all -- --check
+    
+    - name: Clippy linting
+      run: cargo clippy -- -D warnings
+    
+    - name: Build
+      run: cargo build --release
+    
+    - name: Run tests
+      run: cargo test --release
+
+  # Go services build and test
+  go-build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [auth, user, payment, bonus, casino, notification, kyc]
+    defaults:
+      run:
+        working-directory: services/go/${{ matrix.service }}
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ env.GO_VERSION }}
+    
+    - name: Cache Go modules
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+    
+    - name: Download dependencies
+      run: go mod download
+    
+    - name: Vet
+      run: go vet ./...
+    
+    - name: Build
+      run: go build -v ./...
+    
+    - name: Test
+      run: go test -v -race -coverprofile=coverage.out ./...
+    
+    - name: Upload coverage
+      uses: codecov/codecov-action@v4
+      with:
+        file: ./coverage.out
+        flags: ${{ matrix.service }}
+
+  # Python services build and test
+  python-build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [fraud-ml, analytics]
+    defaults:
+      run:
+        working-directory: services/python/${{ matrix.service }}
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+    
+    - name: Cache pip
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml') }}
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e ".[dev]"
+    
+    - name: Lint with ruff
+      run: |
+        pip install ruff
+        ruff check .
+    
+    - name: Type check with mypy
+      run: |
+        pip install mypy
+        mypy src/
+    
+    - name: Test
+      run: pytest -v --cov=src
+
+  # Frontend build and test
+  frontend-build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        app: [web, admin]
+    defaults:
+      run:
+        working-directory: apps/${{ matrix.app }}
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+    
+    - name: Cache node modules
+      uses: actions/cache@v4
+      with:
+        path: ~/.npm
+        key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Lint
+      run: npm run lint
+    
+    - name: Build
+      run: npm run build
+    
+    - name: Test
+      run: npm run test -- --run
+
+  # Security scanning
+  security-scan:
+    runs-on: ubuntu-latest
+    needs: [rust-build, go-build, python-build]
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+    
+    - name: Upload Trivy results to GitHub Security
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: 'trivy-results.sarif'
+    
+    - name: Run Semgrep
+      uses: returntocorp/semgrep-action@v1
+      with:
+        config: >-
+          p/security-audit
+          p/secrets
+
+  # Docker build and push
+  docker-build:
+    runs-on: ubuntu-latest
+    needs: [rust-build, go-build, python-build, security-scan]
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+    strategy:
+      matrix:
+        include:
+          - service: betting-engine
+            context: services/rust
+            dockerfile: infra/docker/Dockerfile.betting-engine
+          - service: wallet-core
+            context: services/rust
+            dockerfile: infra/docker/Dockerfile.wallet-core
+          - service: auth
+            context: services/go/auth
+            dockerfile: infra/docker/Dockerfile.auth
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Login to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Build and push
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ${{ matrix.dockerfile }}
+        push: true
+        tags: |
+          ghcr.io/opus-casino/${{ matrix.service }}:${{ github.sha }}
+          ghcr.io/opus-casino/${{ matrix.service }}:latest
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        platforms: linux/amd64,linux/arm64

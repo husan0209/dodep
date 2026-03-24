@@ -1,0 +1,8 @@
+[format]
+edition = "2021"
+newline_style = "unix"
+use_small_heuristics = "Default"
+
+[clippy]
+allowed-warnings = 0
+deny = ["clippy::pedantic"]

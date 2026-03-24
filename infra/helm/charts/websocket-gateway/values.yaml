@@ -1,0 +1,145 @@
+# WebSocket Gateway Helm values
+# Optimized for high-concurrency WebSocket connections
+
+replicaCount: 3
+
+image:
+  repository: ghcr.io/opus-casino/websocket-gateway
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+imagePullSecrets: []
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8080"
+  prometheus.io/path: "/healthz"
+
+podSecurityContext:
+  fsGroup: 65534
+  runAsNonRoot: true
+
+securityContext:
+  runAsUser: 65534
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+service:
+  type: ClusterIP
+  port: 8080
+  targetPort: 8080
+
+# WebSocket needs higher resource limits for concurrent connections
+resources:
+  limits:
+    cpu: "4"
+    memory: 8Gi
+  requests:
+    cpu: "1"
+    memory: 2Gi
+
+# HPA: scale by CPU and memory
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 20
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 70
+
+# PDB: at least 2 pods available
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+
+# Health checks
+healthCheck:
+  path: /healthz
+  port: 8080
+  liveness:
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readiness:
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+# Network policy
+networkPolicy:
+  enabled: true
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: istio-system
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    # Redpanda
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: data
+      ports:
+        - protocol: TCP
+          port: 9092
+    # DNS
+    - to: []
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+
+# Environment variables
+env:
+  - name: APP__SERVICE_NAME
+    value: "websocket-gateway"
+  - name: APP__HTTP_PORT
+    value: "8080"
+  - name: APP__REDPANDA_BROKERS
+    value: "redpanda-0.redpanda.data.svc.cluster.local:9092,redpanda-1.redpanda.data.svc.cluster.local:9092,redpanda-2.redpanda.data.svc.cluster.local:9092"
+  - name: APP__CACHE_URL
+    value: "redis://dragonfly-cluster.data.svc.cluster.local:6379"
+  - name: APP__MAX_CONNECTIONS
+    value: "100000"
+  - name: APP__CHANNEL_BUFFER_SIZE
+    value: "256"
+  - name: APP__MAX_SUBSCRIPTIONS_PER_CONNECTION
+    value: "50"
+  - name: RUST_LOG
+    value: "info"
+
+# ServiceMonitor for Prometheus
+serviceMonitor:
+  enabled: true
+  interval: 30s
+  scrapeTimeout: 10s
+  path: /healthz
+  port: http
+
+# Node selector — prefer high-memory nodes for WS connections
+nodeSelector:
+  workload-type: memory-optimized
+
+# Affinity — spread across AZs
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app: websocket-gateway
+          topologyKey: topology.kubernetes.io/zone

@@ -1,0 +1,279 @@
+# Security Scanning Pipeline
+# Opus Casino - Trivy, Semgrep, CodeQL
+
+name: Security Scan
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    # Запуск каждый день в 00:00 UTC
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ==========================================================================
+  # Trivy - Container Scanning
+  # ==========================================================================
+  trivy-containers:
+    name: Trivy Container Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build images for scanning
+        run: |
+          docker build -f infra/docker/Dockerfile.rust --build-arg SERVICE_NAME=betting-engine -t temp/betting-engine:latest .
+          docker build -f infra/docker/Dockerfile.go --build-arg SERVICE_PATH=services/go/auth -t temp/auth:latest .
+          docker build -f infra/docker/Dockerfile.python --build-arg SERVICE_NAME=fraud-ml -t temp/fraud-ml:latest .
+          docker build -f infra/docker/Dockerfile.frontend -t temp/web:latest .
+
+      - name: Run Trivy on Rust image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: temp/betting-engine:latest
+          format: 'sarif'
+          output: 'trivy-rust.sarif'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+
+      - name: Run Trivy on Go image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: temp/auth:latest
+          format: 'sarif'
+          output: 'trivy-go.sarif'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+
+      - name: Run Trivy on Python image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: temp/fraud-ml:latest
+          format: 'sarif'
+          output: 'trivy-python.sarif'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+
+      - name: Run Trivy on Frontend image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: temp/web:latest
+          format: 'sarif'
+          output: 'trivy-frontend.sarif'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+
+      - name: Upload Trivy results
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-rust.sarif'
+
+      - name: Upload Trivy results
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-go.sarif'
+
+      - name: Upload Trivy results
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-python.sarif'
+
+      - name: Upload Trivy results
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-frontend.sarif'
+
+  # ==========================================================================
+  # Semgrep - Static Analysis
+  # ==========================================================================
+  semgrep:
+    name: Semgrep SAST
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Semgrep
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: >-
+            p/security-audit
+            p/secrets
+            p/owasp-top-ten
+            p/jwt
+            p/sql-injection
+            p/xss
+          generate_sarif: true
+
+      - name: Upload Semgrep results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: semgrep.sarif
+
+  # ==========================================================================
+  # CodeQL - Advanced Security
+  # ==========================================================================
+  codeql:
+    name: CodeQL Analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ['javascript-typescript', 'python', 'go', 'rust']
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-extended,security-and-quality
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{matrix.language}}"
+
+  # ==========================================================================
+  # Dependency Review
+  # ==========================================================================
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: moderate
+          deny-licenses: GPL-3.0, AGPL-3.0
+
+  # ==========================================================================
+  # Secret Scanning
+  # ==========================================================================
+  secret-scan:
+    name: Secret Scanning
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install gitleaks
+        run: |
+          wget https://github.com/gitleaks/gitleaks/releases/download/v8.18.1/gitleaks_8.18.1_linux_x64.tar.gz
+          tar -xzf gitleaks_8.18.1_linux_x64.tar.gz
+          sudo mv gitleaks /usr/local/bin/
+
+      - name: Run gitleaks
+        run: |
+          gitleaks detect --source . --report-format sarif --report-path gitleaks.sarif
+
+      - name: Upload gitleaks results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: gitleaks.sarif
+
+  # ==========================================================================
+  # Infrastructure Scanning
+  # ==========================================================================
+  infra-scan:
+    name: Infrastructure Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install checkov
+        run: pip install checkov
+
+      - name: Run checkov on Terraform
+        run: |
+          checkov -d infra/terraform --framework terraform --output sarif --output-file-path checkov-tf.sarif
+
+      - name: Install conftest
+        run: |
+          wget https://github.com/open-policy-agent/conftest/releases/download/v0.48.0/conftest_0.48.0_Linux_x86_64.tar.gz
+          tar -xzf conftest_0.48.0_Linux_x86_64.tar.gz
+          sudo mv conftest /usr/local/bin/
+
+      - name: Run conftest on Kubernetes
+        run: |
+          conftest test infra/k8s --output sarif > conftest-k8s.sarif || true
+
+      - name: Upload checkov results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: checkov-tf.sarif
+
+      - name: Upload conftest results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: conftest-k8s.sarif
+
+  # ==========================================================================
+  # Summary Report
+  # ==========================================================================
+  summary:
+    name: Security Summary
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [trivy-containers, semgrep, codeql, secret-scan, infra-scan]
+    if: always()
+    
+    steps:
+      - name: Generate Security Summary
+        run: |
+          echo "## 🔒 Security Scan Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Scan | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Trivy Containers | ${{ needs.trivy-containers.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Semgrep SAST | ${{ needs.semgrep.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| CodeQL | ${{ needs.codeql.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Secret Scan | ${{ needs.secret-scan.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Infrastructure Scan | ${{ needs.infra-scan.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [[ "${{ needs.trivy-containers.result }}" == "failure" ]] || \
+             [[ "${{ needs.semgrep.result }}" == "failure" ]] || \
+             [[ "${{ needs.codeql.result }}" == "failure" ]] || \
+             [[ "${{ needs.secret-scan.result }}" == "failure" ]] || \
+             [[ "${{ needs.infra-scan.result }}" == "failure" ]]; then
+            echo "❌ Some security scans failed. Please review the results." >> $GITHUB_STEP_SUMMARY
+            exit 1
+          else
+            echo "✅ All security scans passed!" >> $GITHUB_STEP_SUMMARY
+          fi

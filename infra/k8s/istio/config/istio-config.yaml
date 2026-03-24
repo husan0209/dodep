@@ -1,0 +1,268 @@
+# Istio Configuration
+# DestinationRules, VirtualServices, Gateway
+
+---
+# Default DestinationRule для всего mesh
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: default
+  namespace: istio-system
+spec:
+  host: "*.svc.cluster.local"
+  trafficPolicy:
+    # Connection pool
+    connectionPool:
+      tcp:
+        maxConnections: 1000
+        connectTimeout: 10s
+      http:
+        h2UpgradePolicy: UPGRADE
+        http1MaxPendingRequests: 1000
+        http2MaxRequests: 1000
+        maxRequestsPerConnection: 100
+        maxRetries: 3
+        
+    # Load balancing
+    loadBalancer:
+      simple: LEAST_CONN
+      localityLoadBalancerSetting:
+        distribute:
+          - from: us-east-1a
+            to:
+              "us-east-1a: 50"
+              "us-east-1b: 50"
+              
+    # Outlier detection (circuit breaker)
+    outlierDetection:
+      consecutive5xxErrors: 5
+      consecutiveGatewayErrors: 5
+      interval: 30s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 50
+      minHealthPercent: 30
+      
+---
+# Gateway для входящего трафика
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: opus-gateway
+  namespace: istio-system
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+    # HTTP - redirect to HTTPS
+    - port:
+        number: 80
+        name: http
+        protocol: HTTP
+      hosts:
+        - "api.opus.casino"
+        - "staging-api.opus.casino"
+      tls:
+        httpsRedirect: true
+        
+    # HTTPS
+    - port:
+        number: 443
+        name: https
+        protocol: HTTPS
+      hosts:
+        - "api.opus.casino"
+        - "staging-api.opus.casino"
+      tls:
+        mode: SIMPLE
+        credentialName: opus-casino-tls
+        minProtocolVersion: TLSV1_3
+        
+    # WebSocket port
+    - port:
+        number: 15021
+        name: status-port
+        protocol: HTTP
+      hosts:
+        - "*"
+        
+---
+# VirtualService для production API
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: api-production
+  namespace: production
+spec:
+  hosts:
+    - "api.opus.casino"
+  gateways:
+    - istio-system/opus-gateway
+  http:
+    # Betting Engine routes
+    - name: betting-routes
+      match:
+        - uri:
+            prefix: /api/v1/bets
+        - uri:
+            prefix: /api/v1/odds
+      route:
+        - destination:
+            host: betting-engine.production.svc.cluster.local
+            port:
+              number: 8080
+      timeout: 30s
+      retries:
+        attempts: 3
+        perTryTimeout: 10s
+        retryOn: 5xx,reset,connect-failure,retriable-4xx
+        
+    # Wallet routes
+    - name: wallet-routes
+      match:
+        - uri:
+            prefix: /api/v1/wallets
+      route:
+        - destination:
+            host: wallet-core.production.svc.cluster.local
+            port:
+              number: 8080
+      timeout: 30s
+      retries:
+        attempts: 3
+        perTryTimeout: 10s
+        
+    # Auth routes
+    - name: auth-routes
+      match:
+        - uri:
+            prefix: /api/v1/auth
+      route:
+        - destination:
+            host: auth.production.svc.cluster.local
+            port:
+              number: 8080
+      timeout: 10s  # Shorter timeout for auth
+      retries:
+        attempts: 2
+        
+    # Default route
+    - name: default
+      route:
+        - destination:
+            host: istio-ingressgateway.istio-system.svc.cluster.local
+            port:
+              number: 8080
+      fault:
+        abort:
+          httpStatus: 404
+          percentage:
+            value: 100
+
+---
+# VirtualService для staging
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: api-staging
+  namespace: staging
+spec:
+  hosts:
+    - "staging-api.opus.casino"
+  gateways:
+    - istio-system/opus-gateway
+  http:
+    - name: all-routes
+      match:
+        - uri:
+            prefix: /
+      route:
+        - destination:
+            host: istio-ingressgateway.istio-system.svc.cluster.local
+            port:
+              number: 8080
+      headers:
+        request:
+          add:
+            X-Environment: staging
+
+---
+# DestinationRule для Betting Engine
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: betting-engine
+  namespace: production
+spec:
+  host: betting-engine.production.svc.cluster.local
+  trafficPolicy:
+    # Connection pool для Betting Engine
+    connectionPool:
+      tcp:
+        maxConnections: 500
+      http:
+        http2MaxRequests: 500
+        maxRequestsPerConnection: 50
+        
+    # Load balancing
+    loadBalancer:
+      simple: LEAST_CONN
+      
+    # Circuit breaker
+    outlierDetection:
+      consecutive5xxErrors: 3  # More aggressive for critical service
+      interval: 10s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 30
+      
+  # Subsets для canary deployments
+  subsets:
+    - name: stable
+      labels:
+        version: stable
+    - name: canary
+      labels:
+        version: canary
+
+---
+# DestinationRule для Wallet Core
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: wallet-core
+  namespace: production
+spec:
+  host: wallet-core.production.svc.cluster.local
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: 500
+      http:
+        http2MaxRequests: 500
+        
+    # Более консервативный circuit breaker для финансового сервиса
+    outlierDetection:
+      consecutive5xxErrors: 2
+      interval: 10s
+      baseEjectionTime: 60s  # Longer ejection for financial service
+      maxEjectionPercent: 20  # More conservative
+
+---
+# DestinationRule для Auth Service
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: auth
+  namespace: production
+spec:
+  host: auth.production.svc.cluster.local
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: 1000
+      http:
+        http2MaxRequests: 1000
+        
+    outlierDetection:
+      consecutive5xxErrors: 3
+      interval: 10s
+      baseEjectionTime: 30s

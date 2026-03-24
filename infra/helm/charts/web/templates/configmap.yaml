@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "web.fullname" . }}-config
+  labels:
+    {{- include "web.labels" . | nindent 4 }}
+data:
+  app-env: {{ .Values.web.apiUrl | default "development" | quote }}
+  api-url: {{ .Values.web.apiUrl | quote }}
+  ws-url: {{ .Values.web.wsUrl | quote }}
+  
+  # Feature flags
+  feature-betting: {{ .Values.web.features.betting | quote }}
+  feature-casino: {{ .Values.web.features.casino | quote }}
+  feature-live-casino: {{ .Values.web.features.liveCasino | quote }}
+  
+  # Analytics
+  ga-id: {{ .Values.web.analytics.gaId | default "" | quote }}
+  sentry-dsn: {{ .Values.web.analytics.sentryDsn | default "" | quote }}

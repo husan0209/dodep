@@ -1,0 +1,156 @@
+# ArgoCD Projects
+# Организуют приложения по доменам
+
+---
+# Platform Project - инфраструктурные компоненты
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: platform
+  namespace: argocd
+spec:
+  description: Platform infrastructure components
+  
+  # Source repositories
+  sourceRepos:
+    - '*'
+    
+  # Destination namespaces and clusters
+  destinations:
+    - namespace: argocd
+      server: https://kubernetes.default.svc
+    - namespace: istio-system
+      server: https://kubernetes.default.svc
+    - namespace: monitoring
+      server: https://kubernetes.default.svc
+    - namespace: data
+      server: https://kubernetes.default.svc
+      
+  # Allowed resources
+  clusterResourceWhitelist:
+    - group: ''
+      kind: Namespace
+    - group: rbac.authorization.k8s.io
+      kind: ClusterRole
+    - group: rbac.authorization.k8s.io
+      kind: ClusterRoleBinding
+      
+  # Namespace resources
+  namespaceResourceWhitelist:
+    - group: '*'
+      kind: '*'
+      
+  # Orphaned resources monitoring
+  orphanedResources:
+    warn: true
+    ignore: []
+    
+  # Roles
+  roles:
+    - name: admin
+      description: Admin access to platform project
+      policies:
+        - p, proj:platform:admin, applications, *, platform/*, allow
+        - p, proj:platform:admin, repositories, *, *, allow
+      groups:
+        - platform-team
+        
+    - name: readonly
+      description: Read-only access
+      policies:
+        - p, proj:platform:readonly, applications, get, platform/*, allow
+      groups:
+        - ops-team
+
+---
+# Services Project - микросервисы
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: services
+  namespace: argocd
+spec:
+  description: Microservices applications
+  
+  sourceRepos:
+    - '*'
+    
+  destinations:
+    - namespace: dev
+      server: https://kubernetes.default.svc
+    - namespace: staging
+      server: https://kubernetes.default.svc
+    - namespace: production
+      server: https://kubernetes.default.svc
+      
+  clusterResourceWhitelist: []
+    
+  namespaceResourceWhitelist:
+    - group: '*'
+      kind: '*'
+      
+  orphanedResources:
+    warn: true
+    
+  roles:
+    - name: admin
+      description: Admin access
+      policies:
+        - p, proj:services:admin, applications, *, services/*, allow
+      groups:
+        - platform-team
+        
+    - name: developer
+      description: Developer access (dev/staging only)
+      policies:
+        - p, proj:services:developer, applications, get, services/*, allow
+        - p, proj:services:developer, applications, sync, services/dev-*, allow
+        - p, proj:services:developer, applications, sync, services/staging-*, allow
+      groups:
+        - dev-team
+        
+    - name: readonly
+      description: Read-only access
+      policies:
+        - p, proj:services:readonly, applications, get, services/*, allow
+      groups:
+        - ops-team
+
+---
+# Data Project - базы данных
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: data
+  namespace: argocd
+spec:
+  description: Data services (databases, cache, messaging)
+  
+  sourceRepos:
+    - '*'
+    
+  destinations:
+    - namespace: data
+      server: https://kubernetes.default.svc
+      
+  clusterResourceWhitelist:
+    - group: ''
+      kind: Namespace
+    - group: storage.k8s.io
+      kind: StorageClass
+      
+  namespaceResourceWhitelist:
+    - group: '*'
+      kind: '*'
+      
+  orphanedResources:
+    warn: true
+    
+  roles:
+    - name: admin
+      description: Admin access
+      policies:
+        - p, proj:data:admin, applications, *, data/*, allow
+      groups:
+        - platform-team
+        - data-team

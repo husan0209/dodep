@@ -1,0 +1,100 @@
+syntax = "proto3";
+
+package opuscasino.betting;
+
+option go_package = "github.com/opus-casino/proto/betting";
+
+import "types.proto";
+
+service BettingEngine {
+  // Place a new bet
+  rpc PlaceBet(PlaceBetRequest) returns (PlaceBetResponse);
+  
+  // Cancel a pending bet
+  rpc CancelBet(CancelBetRequest) returns (CancelBetResponse);
+  
+  // Get bet by ID
+  rpc GetBet(GetBetRequest) returns (GetBetResponse);
+  
+  // Get user bets
+  rpc GetUserBets(GetUserBetsRequest) returns (GetUserBetsResponse);
+  
+  // Settle a bet (called by risk engine)
+  rpc SettleBet(SettleBetRequest) returns (SettleBetResponse);
+  
+  // Stream live odds
+  rpc StreamOdds(OddsStreamRequest) returns (stream OddsUpdate);
+}
+
+message PlaceBetRequest {
+  opuscasino.UserId user_id = 1;
+  opuscasino.BetType type = 2;
+  string event_id = 3;
+  string market_id = 4;
+  string selection_id = 5;
+  opuscasino.Amount stake = 6;
+  string odds = 7;
+  map<string, string> metadata = 8;
+}
+
+message PlaceBetResponse {
+  opuscasino.Bet bet = 1;
+  string error_code = 2;
+  string error_message = 3;
+}
+
+message CancelBetRequest {
+  opuscasino.BetId bet_id = 1;
+  opuscasino.UserId user_id = 2;
+}
+
+message CancelBetResponse {
+  bool success = 1;
+  string error_code = 2;
+  string error_message = 3;
+}
+
+message GetBetRequest {
+  opuscasino.BetId bet_id = 1;
+}
+
+message GetBetResponse {
+  opuscasino.Bet bet = 1;
+}
+
+message GetUserBetsRequest {
+  opuscasino.UserId user_id = 1;
+  opuscasino.BetStatus status = 2;
+  int32 limit = 3;
+  int32 offset = 4;
+}
+
+message GetUserBetsResponse {
+  repeated opuscasino.Bet bets = 1;
+  int32 total = 2;
+}
+
+message SettleBetRequest {
+  opuscasino.BetId bet_id = 1;
+  opuscasino.Amount actual_win = 2;
+  string result = 3;
+}
+
+message SettleBetResponse {
+  bool success = 1;
+  string error_code = 2;
+  string error_message = 3;
+}
+
+message OddsStreamRequest {
+  repeated string event_ids = 1;
+  repeated string market_ids = 2;
+}
+
+message OddsUpdate {
+  string event_id = 1;
+  string market_id = 2;
+  string selection_id = 3;
+  string odds = 4;
+  int64 timestamp_ms = 5;
+}

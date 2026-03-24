@@ -1,0 +1,186 @@
+// Wallet Core Service - gRPC service definition
+// Manages user wallets, balances, and financial transactions
+
+syntax = "proto3";
+
+package wallet.v1;
+
+option go_package = "github.com/opus-casino/proto/gen/go/wallet/v1";
+option java_multiple_files = true;
+option java_package = "com.opuscasino.proto.wallet.v1";
+
+import "common/v1/types.proto";
+import "common/v1/money.proto";
+import "common/v1/pagination.proto";
+import "common/v1/error.proto";
+import "google/protobuf/timestamp.proto";
+
+// WalletCoreService manages all wallet-related operations
+// All financial operations are idempotent via idempotency_key
+service WalletCoreService {
+  // GetBalance returns the current balance for a user's wallet
+  rpc GetBalance(GetBalanceRequest) returns (GetBalanceResponse);
+
+  // GetWallets returns all wallets for a user
+  rpc GetWallets(GetWalletsRequest) returns (GetWalletsResponse);
+
+  // Credit adds funds to user's wallet (deposit, win, bonus)
+  // Idempotent via idempotency_key
+  rpc Credit(CreditRequest) returns (CreditResponse);
+
+  // Debit removes funds from user's wallet (withdrawal, bet, fee)
+  // Idempotent via idempotency_key
+  // Returns FAILED_PRECONDITION if insufficient funds
+  rpc Debit(DebitRequest) returns (DebitResponse);
+
+  // Lock moves funds from available to locked (for pending bets)
+  // Idempotent via idempotency_key
+  rpc Lock(LockRequest) returns (LockResponse);
+
+  // Unlock moves funds from locked back to available
+  rpc Unlock(UnlockRequest) returns (UnlockResponse);
+
+  // Transfer moves funds between user's wallets
+  // Idempotent via idempotency_key
+  rpc Transfer(TransferRequest) returns (TransferResponse);
+
+  // GetTransactions returns paginated transaction history
+  rpc GetTransactions(GetTransactionsRequest) returns (GetTransactionsResponse);
+
+  // GetTransaction returns a specific transaction by ID
+  rpc GetTransaction(GetTransactionRequest) returns (GetTransactionResponse);
+}
+
+// ============ Balance Requests ============
+
+message GetBalanceRequest {
+  common.v1.UserId user_id = 1;
+  common.v1.WalletType wallet_type = 2;
+}
+
+message GetBalanceResponse {
+  common.v1.Balance balance = 1;
+  int32 version = 2;  // Optimistic locking version
+  google.protobuf.Timestamp updated_at = 3;
+}
+
+// ============ Wallet Requests ============
+
+message GetWalletsRequest {
+  common.v1.UserId user_id = 1;
+}
+
+message GetWalletsResponse {
+  repeated common.v1.Wallet wallets = 1;
+}
+
+// ============ Credit Request ============
+
+message CreditRequest {
+  common.v1.UserId user_id = 1;
+  common.v1.WalletType wallet_type = 2;
+  common.v1.Money amount = 3;
+  string reference_id = 4;       // Related entity ID (bet_id, deposit_id, etc.)
+  string reference_type = 5;     // "bet", "deposit", "bonus", "adjustment"
+  string idempotency_key = 6;    // UUID v4 for idempotency
+  string description = 7;
+  map<string, string> metadata = 8;
+}
+
+message CreditResponse {
+  common.v1.Transaction transaction = 1;
+  common.v1.Money new_balance = 2;
+  common.v1.ErrorDetails error = 3;
+}
+
+// ============ Debit Request ============
+
+message DebitRequest {
+  common.v1.UserId user_id = 1;
+  common.v1.WalletType wallet_type = 2;
+  common.v1.Money amount = 3;
+  string reference_id = 4;       // Related entity ID
+  string reference_type = 5;     // "bet", "withdrawal", "fee"
+  string idempotency_key = 6;    // UUID v4 for idempotency
+  string description = 7;
+  map<string, string> metadata = 8;
+}
+
+message DebitResponse {
+  common.v1.Transaction transaction = 1;
+  common.v1.Money new_balance = 2;
+  common.v1.ErrorDetails error = 3;
+}
+
+// ============ Lock Request ============
+
+message LockRequest {
+  common.v1.UserId user_id = 1;
+  common.v1.WalletType wallet_type = 2;
+  common.v1.Money amount = 3;
+  string reference_id = 4;     // Typically bet_id
+  string idempotency_key = 5;
+}
+
+message LockResponse {
+  bool success = 1;
+  common.v1.Money new_available = 2;
+  common.v1.Money new_locked = 3;
+  common.v1.ErrorDetails error = 4;
+}
+
+// ============ Unlock Request ============
+
+message UnlockRequest {
+  common.v1.UserId user_id = 1;
+  string reference_id = 2;  // reference_id from LockRequest
+}
+
+message UnlockResponse {
+  bool success = 1;
+  common.v1.Money new_available = 2;
+  common.v1.Money new_locked = 3;
+  common.v1.ErrorDetails error = 4;
+}
+
+// ============ Transfer Request ============
+
+message TransferRequest {
+  common.v1.UserId user_id = 1;
+  common.v1.WalletType from_wallet = 2;
+  common.v1.WalletType to_wallet = 3;
+  common.v1.Money amount = 4;
+  string reference_id = 5;
+  string idempotency_key = 6;
+  string description = 7;
+}
+
+message TransferResponse {
+  common.v1.Transaction debit_transaction = 1;
+  common.v1.Transaction credit_transaction = 2;
+  common.v1.ErrorDetails error = 3;
+}
+
+// ============ Transaction History ============
+
+message GetTransactionsRequest {
+  common.v1.UserId user_id = 1;
+  optional common.v1.WalletType wallet_type = 2;
+  optional common.v1.TransactionType type = 3;
+  optional common.v1.TransactionStatus status = 4;
+  optional common.v1.DateRange date_range = 5;
+  common.v1.PageRequest pagination = 6;
+}
+
+message GetTransactionsResponse {
+  repeated common.v1.Transaction transactions = 1;
+  common.v1.PageResponse pagination = 2;
+}
+
+message GetTransactionRequest {
+  common.v1.TransactionId transaction_id = 1;
+}
+
+message GetTransactionResponse {
+  common.v1.Transaction transaction = 1;
+}

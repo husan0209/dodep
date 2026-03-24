@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "notification.fullname" . }}-config
+  labels:
+    {{- include "notification.labels" . | nindent 4 }}
+data:
+  app-env: {{ .Values.env | dig 0 "value" "development" | quote }}
+  grpc-port: "{{ .Values.service.grpcTargetPort }}"
+  
+  # Redpanda configuration
+  redpanda-brokers: {{ .Values.notification.redpanda.brokers | quote }}
+  redpanda-enabled: {{ .Values.notification.redpanda.enabled | quote }}
+  
+  # Notification channel settings
+  notification.email.enabled: {{ .Values.notification.email.enabled | quote }}
+  notification.email.provider: {{ .Values.notification.email.provider | quote }}
+  notification.email.from: {{ .Values.notification.email.from | quote }}
+  
+  notification.sms.enabled: {{ .Values.notification.sms.enabled | quote }}
+  notification.sms.provider: {{ .Values.notification.sms.provider | quote }}
+  
+  notification.push.enabled: {{ .Values.notification.push.enabled | quote }}
+  notification.in-app.enabled: {{ .Values.notification.in_app.enabled | quote }}

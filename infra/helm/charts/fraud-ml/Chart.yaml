@@ -1,0 +1,17 @@
+apiVersion: v2
+name: fraud-ml
+description: Fraud ML Service - Machine Learning for fraud detection
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - fraud
+  - ml
+  - machine-learning
+  - xgboost
+home: https://opus.casino
+sources:
+  - https://github.com/opus-casino/opus-casino
+maintainers:
+  - name: Opus Casino Team
+    email: team@opus.casino
