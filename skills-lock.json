@@ -1,0 +1,465 @@
+{
+  "version": 1,
+  "skills": {
+    "async-python-patterns": {
+      "source": "sickn33/antigravity-awesome-skills",
+      "sourceType": "github",
+      "computedHash": "036ca93c7a46c3e503aef3c53c2e89708b3fa0ad0cfabbf5a8ef3723b4ec1532"
+    },
+    "clickhouse-best-practices": {
+      "source": "clickhouse/agent-skills",
+      "sourceType": "github",
+      "computedHash": "7b237a5f45dacb73148a5e0efe5f129c5b7267ff5a8d8b85bc107380841dc2e7"
+    },
+    "coding-guidelines": {
+      "source": "actionbook/rust-skills",
+      "sourceType": "github",
+      "computedHash": "5aec8481de78884af32ee3ac1efda3c0d355b2ca7c46717dc6ce5f5f1d476b88"
+    },
+    "cost-optimization": {
+      "source": "wshobson/agents",
+      "sourceType": "github",
+      "computedHash": "f64404d2bf3c183f48077e636f1f74a34250a8451e1c85919c5c6f8d91a6fce4"
+    },
+    "database-optimizer": {
+      "source": "jeffallan/claude-skills",
+      "sourceType": "github",
+      "computedHash": "c7be77ec61941a7a86bde9e5277f629c4b64b36116f5f3a73da0db226aed9ef1"
+    },
+    "deploy-to-vercel": {
+      "source": "vercel-labs/agent-skills",
+      "sourceType": "github",
+      "computedHash": "3a0481591523c55ecfe2569b6b28b2dcbfa3742367667697219d29170981ad53"
+    },
+    "devops-engineer": {
+      "source": "jeffallan/claude-skills",
+      "sourceType": "github",
+      "computedHash": "6d40f1befd55d5b300acbc86685b97983f145bc246b28609872a08ffd39237e9"
+    },
+    "domain-cli": {
+      "source": "actionbook/rust-skills",
+      "sourceType": "github",
+      "computedHash": "557d21b48b4db0065febb7d3db526da8d5f4fe4495da9575c26cb9279f3769cd"
+    },
+    "domain-cloud-native": {
+      "source": "actionbook/rust-skills",
+      "sourceType": "github",
+      "computedHash": "6711431158be6eda4f764f8bae7fabd9b83e2598efe87a398846893623f248c0"
+    },
+    "domain-embedded": {
+      "source": "actionbook/rust-skills",
+      "sourceType": "github",
+      "computedHash": "326fa17b7101c4b6fc8980a164eaf90f8b556286c01931320f9c0a3f443a5024"
+    },
+    "domain-fintech": {
+      "source": "actionbook/rust-skills",
+      "sourceType": "github",
+      "computedHash": "d28a626de80da6e22a027c36c65ba6bf7ab7ab6b3715ad505398055a93042f14"
+    },
+    "domain-iot": {
+      "source": "actionbook/rust-skills",
+      "sourceType": "github",
+      "computedHash": "5742cf568b68d8e6c23845dd92a81b3914a491e30055546635c1aefb449faeb7"
+    },
+    "domain-ml": {
+      "source": "actionbook/rust-skills",
+      "sourceType": "github",
+      "computedHash": "e55738cf7dbac332ecc481876a32e7e98f03e00d7ab31ad74773007b1f0e3e5f"
+    },
+    "domain-web": {
+      "source": "actionbook/rust-skills",
+      "sourceType": "github",
+      "computedHash": "d149408567c4daeb43fcf71fd516060f6fb7dfb831c49142a17ffe6c1d1d3531"
+    },
+    "flutter-expert": {
+      "source": "jeffallan/claude-skills",
+      "sourceType": "github",
+      "computedHash": "d260811d0d6d769174e0615ae06e189a67ee04c70e6cf57b19e9096be2d205f1"
+    },
+    "github-actions-templates": {
+      "source": "wshobson/agents",
+      "sourceType": "github",
+      "computedHash": "3dcb8b0c64ef38bb0fb03e4c9a39084927a55fd229e91fa48af0673389389fe8"
+    },
+    "gitops-workflow": {
+      "source": "wshobson/agents",
+      "sourceType": "github",
+      "computedHash": "ebf44f4691ca21ba7ed5886a05f2e58295a95afb3216a4c926e05565afb0f0a7"
+    },
+    "go-code-review": {
+      "source": "cxuu/golang-skills",
+      "sourceType": "github",
+      "computedHash": "08575efc2def516e03f3a9c8071ed4c523b973760446c6c5d7b282d7d4c00297"
+    },
+    "go-concurrency": {
+      "source": "cxuu/golang-skills",
+      "sourceType": "github",
+      "computedHash": "b022f851a7e18d1919c9a9fb65bdd335308b47af956e13b124c27f48faf948c2"
+    },
+    "go-context": {
+      "source": "cxuu/golang-skills",
+      "sourceType": "github",
+      "computedHash": "8cfb48740871ebc05035f1961d9eb52a8fefd285fbae53b977df12b8c4d7ca8b"
+    },
+    "go-control-flow": {
+      "source": "cxuu/golang-skills",
+      "sourceType": "github",
+      "computedHash": "abaf4a3c5e8f3887f38f255588363d17cfde2a95efa6cf89ec16265ef17d2c0d"
+    },
+    "go-data-structures": {
+      "source": "cxuu/golang-skills",
+      "sourceType": "github",
+      "computedHash": "7a05de932ebe709299c8d4d5b2e374c140f5c8f8c038f66d4605dc4487b7e288"
+    },
+    "go-declarations": {
+      "source": "cxuu/golang-skills",
+      "sourceType": "github",
+      "computedHash": "328d12e5cdae9ed7b02303a945073834c04de399efd8374fb0e9ebbfb28c505a"
+    },
+    "go-defensive": {
+      "source": "cxuu/golang-skills",
+      "sourceType": "github",
+      "computedHash": "52674d006e7713bf13732e3a94ad3fd47162451d3d3c6039fe07ca28865038f9"
+    },
+    "go-documentation": {
+      "source": "cxuu/golang-skills",
+      "sourceType": "github",
+      "computedHash": "8d33d0ddccce204e53bd393b80a7c99e861edaa26b05a89a4d8bbb7ca63a54a5"
+    },
+    "go-error-handling": {
+      "source": "cxuu/golang-skills",
+      "sourceType": "github",
+      "computedHash": "668b012f1f9c473ae518c5c3aa0e0cc6b81b21c33562e285994dd57477239563"
+    },
+    "go-functional-options": {
+      "source": "cxuu/golang-skills",
+      "sourceType": "github",
+      "computedHash": "5c0903b95e4127b2a6dd8e664da1be4116555a54ca8951edb6ee2df2994e36db"
+    },
+    "go-functions": {
+      "source": "cxuu/golang-skills",
+      "sourceType": "github",
+      "computedHash": "dfdad0cca0feae84b7d5f1040266f0210b24c9450b90726a3b68edd73fca04a4"
+    },
+    "go-generics": {
+      "source": "cxuu/golang-skills",
+      "sourceType": "github",
+      "computedHash": "a40f6190416bfb9506f1921dc375b0a8c52c6d7bb1063083d075732faba6bc70"
+    },
+    "go-interfaces": {
+      "source": "cxuu/golang-skills",
+      "sourceType": "github",
+      "computedHash": "e3e0bdec7847709c82e728a1e4a3f304b92119a9dd7cfec806d5d83a6ca86d29"
+    },
+    "go-linting": {
+      "source": "cxuu/golang-skills",
+      "sourceType": "github",
+      "computedHash": "c43013baa6862f632a640868da1c1372ec74e5e7d5a9d4a7ad651070922c30c2"
+    },
+    "go-logging": {
+      "source": "cxuu/golang-skills",
+      "sourceType": "github",
+      "computedHash": "f9940beeaa4be8dd72a69c3117e58c9715d5fbab20d0fdf2ba9c64fbfed1c79f"
+    },
+    "go-naming": {
+      "source": "cxuu/golang-skills",
+      "sourceType": "github",
+      "computedHash": "98032b8ca916142cfa78af1be48fd7a949d63a67f2d35a4de484b244ab0569e4"
+    },
+    "go-packages": {
+      "source": "cxuu/golang-skills",
+      "sourceType": "github",
+      "computedHash": "8a169c0093ac47620c7bc40342ff541a304e725b67fb643ac3103c553d8f4c73"
+    },
+    "go-performance": {
+      "source": "cxuu/golang-skills",
+      "sourceType": "github",
+      "computedHash": "5c49716c97e7cee222ca6c4f8752077cdee345f1c828b78d90c0ca07841a3be9"
+    },
+    "go-style-core": {
+      "source": "cxuu/golang-skills",
+      "sourceType": "github",
+      "computedHash": "3f5bf522d0ae805455de871df0e0f18cfc71066508048e3597667e0bfde52de8"
+    },
+    "go-testing": {
+      "source": "cxuu/golang-skills",
+      "sourceType": "github",
+      "computedHash": "02b742242bd9c644ddada20d2ec0984cc170d5ea781977c7ff36b7bb2549317a"
+    },
+    "golang-pro": {
+      "source": "jeffallan/claude-skills",
+      "sourceType": "github",
+      "computedHash": "517209072b5cbeb7dfdb41f634ecff658e34e7c9e081e425d618378e9818a941"
+    },
+    "incident-runbook-templates": {
+      "source": "wshobson/agents",
+      "sourceType": "github",
+      "computedHash": "7ce3cdc15377b8dec6cdb4fd7b75f1ab16c024d9276611cdd3ab3082946f218a"
+    },
+    "k8s-security-policies": {
+      "source": "wshobson/agents",
+      "sourceType": "github",
+      "computedHash": "0252ebdc6897b87cb45987177fec4afac07aa808b7be777774a1d38092adc7a5"
+    },
+    "kubernetes-specialist": {
+      "source": "jeffallan/claude-skills",
+      "sourceType": "github",
+      "computedHash": "c364a91834c6e11ba5282166d276707d828fba911fb498416cf2da34753c62db"
+    },
+    "m01-ownership": {
+      "source": "actionbook/rust-skills",
+      "sourceType": "github",
+      "computedHash": "40ee119397748829904475e81bafcb4e16d0ed474d1d92fc9d1a9bf45e461c2a"
+    },
+    "m02-resource": {
+      "source": "actionbook/rust-skills",
+      "sourceType": "github",
+      "computedHash": "06c2cb0985dd7bc33f89e9ba58f25d2ad6814268e13a0cac3afd8e0e20f53ebb"
+    },
+    "m03-mutability": {
+      "source": "actionbook/rust-skills",
+      "sourceType": "github",
+      "computedHash": "4702dc283d5921427bdf620097fa66b5102f44961c8278390cc065c3475b6604"
+    },
+    "m04-zero-cost": {
+      "source": "actionbook/rust-skills",
+      "sourceType": "github",
+      "computedHash": "95fd1808fe1240025f9bb448e17cf96a58102c94fe547a2087f2c0ab71117878"
+    },
+    "m05-type-driven": {
+      "source": "actionbook/rust-skills",
+      "sourceType": "github",
+      "computedHash": "fcdf631b21da764c89c57c40c9bb3907e468c1a8b77ddaab9db0aad6989268c9"
+    },
+    "m06-error-handling": {
+      "source": "actionbook/rust-skills",
+      "sourceType": "github",
+      "computedHash": "83ea4e20be18f063983b98fe764f4110f35b5101033ddbc933fc298e9d4b8f36"
+    },
+    "m07-concurrency": {
+      "source": "actionbook/rust-skills",
+      "sourceType": "github",
+      "computedHash": "b8d9a2048345a6d91def369fbc36340b7c47c3cefae974d5aab80aa3c1a0e46c"
+    },
+    "m09-domain": {
+      "source": "actionbook/rust-skills",
+      "sourceType": "github",
+      "computedHash": "9d59c8d205e895a2a120d5f800048e2917f50b17a7be7fd52ec38306285910cc"
+    },
+    "m10-performance": {
+      "source": "actionbook/rust-skills",
+      "sourceType": "github",
+      "computedHash": "6945acaf86bd024e6cade6b71d23026e4969909592eb12ea03e75ed6d3b3a25e"
+    },
+    "m11-ecosystem": {
+      "source": "actionbook/rust-skills",
+      "sourceType": "github",
+      "computedHash": "bf80e501b0acba4fc732fe7282758807372f2a91850fbfd052b7e873915bded2"
+    },
+    "m12-lifecycle": {
+      "source": "actionbook/rust-skills",
+      "sourceType": "github",
+      "computedHash": "66895917c0d6ce31b365ecfd930db3682698a0b90794b22c3b7ef4c6c13b1ba6"
+    },
+    "m13-domain-error": {
+      "source": "actionbook/rust-skills",
+      "sourceType": "github",
+      "computedHash": "20c8eca5a93c0f1ceed93200a96c7c1cb8c0a7cac8118b77e5a3697cfeb5c81d"
+    },
+    "m14-mental-model": {
+      "source": "actionbook/rust-skills",
+      "sourceType": "github",
+      "computedHash": "604d74ca5f78f8fbca78eb190b6c5ca77ac36d999c3304c965cff89df625e3d1"
+    },
+    "m15-anti-pattern": {
+      "source": "actionbook/rust-skills",
+      "sourceType": "github",
+      "computedHash": "f1734c43801554dd73419f6586af343c04bdf33361318b658641c0c22d094842"
+    },
+    "memory-safety-patterns": {
+      "source": "sickn33/antigravity-awesome-skills",
+      "sourceType": "github",
+      "computedHash": "920bc168f5eb7d370226dcf0590b05931cb70ff9e853b641f36236a01a14fd63"
+    },
+    "meta-cognition-parallel": {
+      "source": "actionbook/rust-skills",
+      "sourceType": "github",
+      "computedHash": "58d63daf7476bd4fab4299ddbb299efb4611ee11938ebae246333d19176bb2fe"
+    },
+    "monitoring-expert": {
+      "source": "jeffallan/claude-skills",
+      "sourceType": "github",
+      "computedHash": "43a84b741f2c968b95a500a7c6d15155bbaec8305fad577509c55da10ad5add3"
+    },
+    "nextjs-app-router-patterns": {
+      "source": "sickn33/antigravity-awesome-skills",
+      "sourceType": "github",
+      "computedHash": "c1a7e283b64ebf0a06c55e6426b99e2f42e1641d9bd8c0d49733b4470e9b7986"
+    },
+    "nextjs-developer": {
+      "source": "jeffallan/claude-skills",
+      "sourceType": "github",
+      "computedHash": "e3c64eda5c1119ef707aeeca4efa40417ad8a3a2473895f1f37e1392405b881d"
+    },
+    "postgres-pro": {
+      "source": "jeffallan/claude-skills",
+      "sourceType": "github",
+      "computedHash": "f932cd62b30ec4f18514fae84f3c826341d2f02e52e8536070599c75ff4c157f"
+    },
+    "python-performance-optimization": {
+      "source": "sickn33/antigravity-awesome-skills",
+      "sourceType": "github",
+      "computedHash": "bdddd8f46cfb6f858eba37f0c7c8409ba65d14826a090ed4145c445ad0c26018"
+    },
+    "react-expert": {
+      "source": "jeffallan/claude-skills",
+      "sourceType": "github",
+      "computedHash": "455a19a29228e1a098cb4735c6f35e881fa7d69fa20822b5d8a588c0182f6361"
+    },
+    "react-state-management": {
+      "source": "sickn33/antigravity-awesome-skills",
+      "sourceType": "github",
+      "computedHash": "0c8c3404abf694330cb79b6333cb8967077cc0a463ee1e16581412702d0b0328"
+    },
+    "rust-async-patterns": {
+      "source": "sickn33/antigravity-awesome-skills",
+      "sourceType": "github",
+      "computedHash": "5e447e635d57ee11b45f3f18b2c3380c4311a6201461ff9aef7bf201b155c64e"
+    },
+    "rust-call-graph": {
+      "source": "actionbook/rust-skills",
+      "sourceType": "github",
+      "computedHash": "41efd34b87e2397b83af61c8a771261986e59627aaca4895e9c65e44406a5225"
+    },
+    "rust-code-navigator": {
+      "source": "actionbook/rust-skills",
+      "sourceType": "github",
+      "computedHash": "a3fc99213b41daed24a90e39bd34498571f072500dc12f978ae5e97b7eb12df0"
+    },
+    "rust-daily": {
+      "source": "actionbook/rust-skills",
+      "sourceType": "github",
+      "computedHash": "f05480130f89924a17ea87c9434dc8252515c7e7b0a51e661d2b576576c24fcf"
+    },
+    "rust-deps-visualizer": {
+      "source": "actionbook/rust-skills",
+      "sourceType": "github",
+      "computedHash": "19b397cb28319a912d62cbad6c33fdb024ef3f8916f4bc693cc6125406edabe5"
+    },
+    "rust-engineer": {
+      "source": "jeffallan/claude-skills",
+      "sourceType": "github",
+      "computedHash": "3bc7367d913e710bc7c37f8cc33c60507210d334e2de821db09b39647acc0f8a"
+    },
+    "rust-learner": {
+      "source": "actionbook/rust-skills",
+      "sourceType": "github",
+      "computedHash": "61453342609f7fc3575f7ab72f2898ed993ad59223eeac46ea493794f9880878"
+    },
+    "rust-pro": {
+      "source": "sickn33/antigravity-awesome-skills",
+      "sourceType": "github",
+      "computedHash": "f1e23a4c5358a35fdf138e96c2e1f4c6c479e3b96083d1e2757be58dc6a6721b"
+    },
+    "rust-refactor-helper": {
+      "source": "actionbook/rust-skills",
+      "sourceType": "github",
+      "computedHash": "0dcbec9380651de430ce900f95e5ebcd93bb85cd371911df9f098a5baf29c50e"
+    },
+    "rust-router": {
+      "source": "actionbook/rust-skills",
+      "sourceType": "github",
+      "computedHash": "5f7b657d5b7cb55edc16227e40e5ad192e17f2b9457d2a87a5715a8c36f57f5d"
+    },
+    "rust-skill-creator": {
+      "source": "actionbook/rust-skills",
+      "sourceType": "github",
+      "computedHash": "c9ea80eb2e0f84b6af172f4260960ded66485a7aaf2725a23b12c3671fa0eac5"
+    },
+    "rust-skills": {
+      "source": "leonardomso/rust-skills",
+      "sourceType": "github",
+      "computedHash": "d099b313fcb795ef568b0856d34a8bcfc16864b8ae5bb3729f038c97893e0132"
+    },
+    "rust-symbol-analyzer": {
+      "source": "actionbook/rust-skills",
+      "sourceType": "github",
+      "computedHash": "6014f13bcb77d9ca5a676be25121451ef462e5c7343cb2a3fff30f0d4d121ed6"
+    },
+    "rust-trait-explorer": {
+      "source": "actionbook/rust-skills",
+      "sourceType": "github",
+      "computedHash": "e3a9f3c4cfdc8534ea0f963e55c5f871e710a9b2fe0ddb09a77701d15dd7ac8a"
+    },
+    "security-audit": {
+      "source": "sickn33/antigravity-awesome-skills",
+      "sourceType": "github",
+      "computedHash": "0408b5ce16d41677635ee92b6fa495887fbbea0f5fbae65e97122f498e034c9b"
+    },
+    "shadcn": {
+      "source": "sickn33/antigravity-awesome-skills",
+      "sourceType": "github",
+      "computedHash": "f7049fe62d7b94deacc3e0bb4878dca92301d0a85f4c9a6bf72a71d45cbabde0"
+    },
+    "sre-engineer": {
+      "source": "jeffallan/claude-skills",
+      "sourceType": "github",
+      "computedHash": "beca919194294e48278372de6ab7e48abfa1ccf7d27886c7a8dbcacb40640f51"
+    },
+    "systematic-debugging": {
+      "source": "obra/superpowers",
+      "sourceType": "github",
+      "computedHash": "72e9ab72627e4fd8ed26a582e82309a98ecdc4f6e1c99418430ac05682c9e91d"
+    },
+    "tailwind-design-system": {
+      "source": "sickn33/antigravity-awesome-skills",
+      "sourceType": "github",
+      "computedHash": "15f480137d9fd56a102246c6099de10792925285747dcfdc135949a2458fd369"
+    },
+    "terraform-engineer": {
+      "source": "jeffallan/claude-skills",
+      "sourceType": "github",
+      "computedHash": "1a0e1fb77a3a6c278d6ef456e1124ce48fe209eb2e8d90d5a3a4c3446af1d57c"
+    },
+    "test-driven-development": {
+      "source": "sickn33/antigravity-awesome-skills",
+      "sourceType": "github",
+      "computedHash": "c73c2a0bcb4ae0d9692a3cd388ec5bbae81eef042ba552040ee3cc5851834d3c"
+    },
+    "typescript-pro": {
+      "source": "jeffallan/claude-skills",
+      "sourceType": "github",
+      "computedHash": "85f019724b8766a6814b5893af9299847d91ac40699c124b271e43465250e4fd"
+    },
+    "unsafe-checker": {
+      "source": "actionbook/rust-skills",
+      "sourceType": "github",
+      "computedHash": "b63b238f2d47dc32ca026d8a1401eee24e0083f6057202aaa921075cc29a05eb"
+    },
+    "vercel-cli-with-tokens": {
+      "source": "vercel-labs/agent-skills",
+      "sourceType": "github",
+      "computedHash": "e1e480328b12b79669604c8849845be7582f6c0a6da1e8d1d6d1ec1a2806dbf0"
+    },
+    "vercel-composition-patterns": {
+      "source": "vercel-labs/agent-skills",
+      "sourceType": "github",
+      "computedHash": "10eb4ec94577b79ae98c63ce3e7f35f8a6a06436a4011bff083b397de6960eeb"
+    },
+    "vercel-react-best-practices": {
+      "source": "vercel-labs/agent-skills",
+      "sourceType": "github",
+      "computedHash": "e218e50fe7057a4db91390e579c7db5aafac2394c31a3d8e5fa9444c8fa00726"
+    },
+    "vercel-react-native-skills": {
+      "source": "vercel-labs/agent-skills",
+      "sourceType": "github",
+      "computedHash": "a804b4e848059822638c390359976f7021380bcefb1469d473aa4e9202c15ecb"
+    },
+    "web-design-guidelines": {
+      "source": "vercel-labs/agent-skills",
+      "sourceType": "github",
+      "computedHash": "d8e7d3afe37dcc8a97b99ffb5afdb4d0919ae0092ea8b68f44eb201f035e33ac"
+    }
+  }
+}

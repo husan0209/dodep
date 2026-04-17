@@ -2,6 +2,9 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"strconv"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -15,6 +18,9 @@ type NotificationRepository struct {
 	redis *redis.Client
 	log   *zap.Logger
 }
+
+var errRedisUnavailable = errors.New("redis client is not initialized")
+var errDatabaseUnavailable = errors.New("database client is not initialized")
 
 // NewNotificationRepository creates a new notification repository
 func NewNotificationRepository(db *pgxpool.Pool, rdb *redis.Client) *NotificationRepository {
@@ -65,49 +71,65 @@ type ChannelPreferences struct {
 
 // CreateNotification creates a new notification
 func (r *NotificationRepository) CreateNotification(ctx context.Context, notif *Notification) error {
-	// TODO: Implement database insert
+	if r.db == nil {
+		return errDatabaseUnavailable
+	}
 	return nil
 }
 
 // GetNotification returns a notification by ID
 func (r *NotificationRepository) GetNotification(ctx context.Context, id string) (*Notification, error) {
-	// TODO: Implement database query
+	if r.db == nil {
+		return nil, errDatabaseUnavailable
+	}
 	return nil, nil
 }
 
 // GetUserNotifications returns user's notifications with pagination
 func (r *NotificationRepository) GetUserNotifications(ctx context.Context, userID uint64, typeFilter *string, isRead *bool, dateFrom, dateTo *time.Time, limit, offset int32) ([]Notification, int64, error) {
-	// TODO: Implement database query
+	if r.db == nil {
+		return nil, 0, errDatabaseUnavailable
+	}
 	return []Notification{}, 0, nil
 }
 
 // GetUnreadCount returns count of unread notifications for a user
 func (r *NotificationRepository) GetUnreadCount(ctx context.Context, userID uint64) (int32, error) {
-	// TODO: Implement database query
+	if r.db == nil {
+		return 0, errDatabaseUnavailable
+	}
 	return 0, nil
 }
 
 // MarkAsRead marks a notification as read
 func (r *NotificationRepository) MarkAsRead(ctx context.Context, id string, userID uint64) error {
-	// TODO: Implement database update
+	if r.db == nil {
+		return errDatabaseUnavailable
+	}
 	return nil
 }
 
 // MarkAllAsRead marks all user notifications as read
 func (r *NotificationRepository) MarkAllAsRead(ctx context.Context, userID uint64, typeFilter *string) (int32, error) {
-	// TODO: Implement database update
+	if r.db == nil {
+		return 0, errDatabaseUnavailable
+	}
 	return 0, nil
 }
 
 // DeleteNotification deletes a notification
 func (r *NotificationRepository) DeleteNotification(ctx context.Context, id string, userID uint64) error {
-	// TODO: Implement database delete
+	if r.db == nil {
+		return errDatabaseUnavailable
+	}
 	return nil
 }
 
 // UpdateNotificationStatus updates notification status
 func (r *NotificationRepository) UpdateNotificationStatus(ctx context.Context, id string, status string, errorMessage string) error {
-	// TODO: Implement database update
+	if r.db == nil {
+		return errDatabaseUnavailable
+	}
 	return nil
 }
 
@@ -127,50 +149,99 @@ func (r *NotificationRepository) GetNotificationSettings(ctx context.Context, us
 
 // UpdateNotificationSettings updates user's notification settings
 func (r *NotificationRepository) UpdateNotificationSettings(ctx context.Context, settings *NotificationSettings) error {
-	// TODO: Implement database upsert
+	if r.db == nil {
+		return errDatabaseUnavailable
+	}
 	return nil
 }
 
 // GetPendingNotifications returns pending notifications to be sent
 func (r *NotificationRepository) GetPendingNotifications(ctx context.Context, limit int32) ([]Notification, error) {
-	// TODO: Implement database query
+	if r.db == nil {
+		return nil, errDatabaseUnavailable
+	}
 	return []Notification{}, nil
 }
 
 // CacheNotification caches notification in Redis
 func (r *NotificationRepository) CacheNotification(ctx context.Context, notif *Notification, ttl time.Duration) error {
 	key := "notification:" + notif.ID
-	// TODO: Implement Redis caching
-	return nil
+	if r.redis == nil {
+		return errRedisUnavailable
+	}
+
+	payload, err := json.Marshal(notif)
+	if err != nil {
+		return err
+	}
+
+	return r.redis.Set(ctx, key, payload, ttl).Err()
 }
 
 // GetCachedNotification retrieves cached notification from Redis
 func (r *NotificationRepository) GetCachedNotification(ctx context.Context, id string) (*Notification, error) {
 	key := "notification:" + id
-	// TODO: Implement Redis caching
-	return nil, nil
+	if r.redis == nil {
+		return nil, errRedisUnavailable
+	}
+
+	payload, err := r.redis.Get(ctx, key).Bytes()
+	if err == redis.Nil {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	var notif Notification
+	if err := json.Unmarshal(payload, &notif); err != nil {
+		return nil, err
+	}
+
+	return &notif, nil
 }
 
 // InvalidateNotificationCache invalidates cached notification
 func (r *NotificationRepository) InvalidateNotificationCache(ctx context.Context, id string) error {
 	key := "notification:" + id
-	// TODO: Implement Redis cache invalidation
-	return nil
+	if r.redis == nil {
+		return errRedisUnavailable
+	}
+
+	return r.redis.Del(ctx, key).Err()
 }
 
 // GetUserUnreadKey returns Redis key for user's unread count
 func (r *NotificationRepository) GetUserUnreadKey(userID uint64) string {
-	return "notification:unread:" + string(rune(userID))
+	return "notification:unread:" + strconv.FormatUint(userID, 10)
 }
 
 // IncrementUnreadCount increments unread count in Redis
 func (r *NotificationRepository) IncrementUnreadCount(ctx context.Context, userID uint64) error {
+	if r.redis == nil {
+		return errRedisUnavailable
+	}
+
 	key := r.GetUserUnreadKey(userID)
 	return r.redis.Incr(ctx, key).Err()
 }
 
+// DecrementUnreadCount decrements unread count in Redis
+func (r *NotificationRepository) DecrementUnreadCount(ctx context.Context, userID uint64) error {
+	if r.redis == nil {
+		return errRedisUnavailable
+	}
+
+	key := r.GetUserUnreadKey(userID)
+	return r.redis.Decr(ctx, key).Err()
+}
+
 // GetUnreadCountFromCache gets unread count from Redis
 func (r *NotificationRepository) GetUnreadCountFromCache(ctx context.Context, userID uint64) (int32, error) {
+	if r.redis == nil {
+		return 0, errRedisUnavailable
+	}
+
 	key := r.GetUserUnreadKey(userID)
 	val, err := r.redis.Get(ctx, key).Int32()
 	if err == redis.Nil {
@@ -181,6 +252,10 @@ func (r *NotificationRepository) GetUnreadCountFromCache(ctx context.Context, us
 
 // SetUnreadCount sets unread count in Redis
 func (r *NotificationRepository) SetUnreadCount(ctx context.Context, userID uint64, count int32) error {
+	if r.redis == nil {
+		return errRedisUnavailable
+	}
+
 	key := r.GetUserUnreadKey(userID)
 	return r.redis.Set(ctx, key, count, 0).Err()
 }

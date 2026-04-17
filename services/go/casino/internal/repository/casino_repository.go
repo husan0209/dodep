@@ -2,6 +2,8 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -15,6 +17,9 @@ type CasinoRepository struct {
 	redis *redis.Client
 	log   *zap.Logger
 }
+
+var errCasinoDatabaseUnavailable = errors.New("database client is not initialized")
+var errCasinoRedisUnavailable = errors.New("redis client is not initialized")
 
 // NewCasinoRepository creates a new casino repository
 func NewCasinoRepository(db *pgxpool.Pool, rdb *redis.Client) *CasinoRepository {
@@ -117,88 +122,136 @@ type GetGamesOptions struct {
 
 // GetGames returns games with optional filtering
 func (r *CasinoRepository) GetGames(ctx context.Context, opts GetGamesOptions) ([]Game, int64, error) {
-	// TODO: Implement database query
-	// This is a placeholder for the actual implementation
+	if r.db == nil {
+		return nil, 0, errCasinoDatabaseUnavailable
+	}
 	return []Game{}, 0, nil
 }
 
 // GetGame returns a game by ID
 func (r *CasinoRepository) GetGame(ctx context.Context, gameID string) (*Game, error) {
-	// TODO: Implement database query
+	if r.db == nil {
+		return nil, errCasinoDatabaseUnavailable
+	}
 	return nil, nil
 }
 
 // GetProviders returns all providers
 func (r *CasinoRepository) GetProviders(ctx context.Context, isActive *bool) ([]Provider, error) {
-	// TODO: Implement database query
+	if r.db == nil {
+		return nil, errCasinoDatabaseUnavailable
+	}
 	return []Provider{}, nil
 }
 
 // GetProvider returns a provider by ID
 func (r *CasinoRepository) GetProvider(ctx context.Context, providerID string) (*Provider, error) {
-	// TODO: Implement database query
+	if r.db == nil {
+		return nil, errCasinoDatabaseUnavailable
+	}
 	return nil, nil
 }
 
 // CreateGameSession creates a new game session
 func (r *CasinoRepository) CreateGameSession(ctx context.Context, session *GameSession) error {
-	// TODO: Implement database insert
+	if r.db == nil {
+		return errCasinoDatabaseUnavailable
+	}
 	return nil
 }
 
 // GetGameSession returns a game session by ID
 func (r *CasinoRepository) GetGameSession(ctx context.Context, sessionID string) (*GameSession, error) {
-	// TODO: Implement database query
+	if r.db == nil {
+		return nil, errCasinoDatabaseUnavailable
+	}
 	return nil, nil
 }
 
 // UpdateGameSession updates a game session
 func (r *CasinoRepository) UpdateGameSession(ctx context.Context, session *GameSession) error {
-	// TODO: Implement database update
+	if r.db == nil {
+		return errCasinoDatabaseUnavailable
+	}
 	return nil
 }
 
 // EndGameSession ends a game session
 func (r *CasinoRepository) EndGameSession(ctx context.Context, sessionID string, endedAt time.Time) error {
-	// TODO: Implement database update
+	if r.db == nil {
+		return errCasinoDatabaseUnavailable
+	}
 	return nil
 }
 
 // GetGameHistory returns user's game history
 func (r *CasinoRepository) GetGameHistory(ctx context.Context, userID string, gameID *string, dateRange *struct{ From, To time.Time }, limit, offset int32) ([]GameSession, int64, error) {
-	// TODO: Implement database query
+	if r.db == nil {
+		return nil, 0, errCasinoDatabaseUnavailable
+	}
 	return []GameSession{}, 0, nil
 }
 
 // GetRoundHistory returns round history for a session
 func (r *CasinoRepository) GetRoundHistory(ctx context.Context, sessionID string, limit, offset int32) ([]GameRound, int64, error) {
-	// TODO: Implement database query
+	if r.db == nil {
+		return nil, 0, errCasinoDatabaseUnavailable
+	}
 	return []GameRound{}, 0, nil
 }
 
 // CreateGameRound creates a new game round
 func (r *CasinoRepository) CreateGameRound(ctx context.Context, round *GameRound) error {
-	// TODO: Implement database insert
+	if r.db == nil {
+		return errCasinoDatabaseUnavailable
+	}
 	return nil
 }
 
 // CacheGame caches game data in Redis
 func (r *CasinoRepository) CacheGame(ctx context.Context, game *Game, ttl time.Duration) error {
 	key := "casino:game:" + game.ID
-	// TODO: Implement Redis caching
-	return nil
+	if r.redis == nil {
+		return errCasinoRedisUnavailable
+	}
+
+	payload, err := json.Marshal(game)
+	if err != nil {
+		return err
+	}
+
+	return r.redis.Set(ctx, key, payload, ttl).Err()
 }
 
 // GetCachedGame retrieves cached game data from Redis
 func (r *CasinoRepository) GetCachedGame(ctx context.Context, gameID string) (*Game, error) {
 	key := "casino:game:" + gameID
-	// TODO: Implement Redis caching
-	return nil, nil
+	if r.redis == nil {
+		return nil, errCasinoRedisUnavailable
+	}
+
+	payload, err := r.redis.Get(ctx, key).Bytes()
+	if err == redis.Nil {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	var game Game
+	if err := json.Unmarshal(payload, &game); err != nil {
+		return nil, err
+	}
+
+	return &game, nil
 }
 
 // InvalidateGameCache invalidates cached game data
 func (r *CasinoRepository) InvalidateGameCache(ctx context.Context, gameID string) error {
 	key := "casino:game:" + gameID
-	// TODO: Implement Redis cache invalidation
-	return nil
+	if r.redis == nil {
+		return errCasinoRedisUnavailable
+	}
+
+	return r.redis.Del(ctx, key).Err()
 }

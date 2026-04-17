@@ -65,6 +65,7 @@
 
 | # | Файл | Описание | Когда нужен |
 |---|------|----------|-------------|
+| 24 | `frontend/frontend-design.skill.md` | Frontend design excellence (Anthropic) | UI/UX дизайн |
 | 25 | `frontend/nextjs-general.skill.md` | Общие правила Next.js 14 | Веб-разработка |
 | 26 | `frontend/nextjs-components.skill.md` | Компоненты Next.js | UI компоненты |
 | 27 | `frontend/nextjs-state-management.skill.md` | State management (Zustand, TanStack) | Управление состоянием |

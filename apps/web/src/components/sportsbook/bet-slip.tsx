@@ -1,111 +1,93 @@
 'use client'
 
 import { useBetSlipStore } from '@stores/bet-slip-store'
-import { XMarkIcon } from '@heroicons/react/24/outline'
+import { XMarkIcon, TrashIcon } from '@heroicons/react/24/outline'
 
 export function BetSlip() {
-  const { bets, totalOdds, stake, removeBet, clearBets, setStake } = useBetSlipStore()
+  const { selections, combinedOdds, stake, removeSelection, clear, setStake } = useBetSlipStore()
 
+  const totalOdds = combinedOdds()
   const potentialWin = stake * totalOdds
 
   return (
-    <div className="card">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-          Купон
-        </h2>
-        {bets.length > 0 && (
+    <div className="bg-[rgb(var(--bg-secondary))] border border-[rgb(var(--border))]">
+      {/* Header */}
+      <div className="flex items-center justify-between px-3 py-2 border-b border-[rgb(var(--border))] bg-[rgb(var(--bg-tertiary))]">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-white">Купон</span>
+          {selections.length > 0 && (
+            <span className="badge badge-blue">{selections.length}</span>
+          )}
+        </div>
+        {selections.length > 0 && (
           <button
-            onClick={clearBets}
-            className="text-sm text-red-600 hover:text-red-700 dark:text-red-400"
+            onClick={clear}
+            className="p-1 rounded hover:bg-white/5 text-gray-500 hover:text-red-400 transition-colors"
           >
-            Очистить
+            <TrashIcon className="h-3.5 w-3.5" />
           </button>
         )}
       </div>
 
-      {bets.length === 0 ? (
-        <div className="text-center py-8">
-          <p className="text-gray-500 dark:text-gray-400 text-sm">
-            Купон пуст
-          </p>
-          <p className="text-gray-400 dark:text-gray-500 text-xs mt-2">
-            Добавьте ставки из событий
-          </p>
+      {selections.length === 0 ? (
+        <div className="text-center py-6">
+          <p className="text-xs text-gray-500">Выберите исход</p>
         </div>
       ) : (
-        <div className="space-y-4">
-          {/* Bets list */}
-          <div className="space-y-2">
-            {bets.map((bet) => (
-              <div
-                key={bet.id}
-                className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-900 dark:text-white">
-                      {bet.selectionName}
-                    </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                      {bet.eventName}
-                    </p>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <span className="text-sm font-semibold text-primary-600 dark:text-primary-400">
-                      {bet.odds.toFixed(2)}
-                    </span>
-                    <button
-                      onClick={() => removeBet(bet.id)}
-                      className="text-gray-400 hover:text-red-500"
-                    >
-                      <XMarkIcon className="h-4 w-4" />
-                    </button>
-                  </div>
+        <div className="p-2 space-y-2">
+          {/* Selections */}
+          {selections.map((sel) => (
+            <div
+              key={sel.outcomeId}
+              className="p-2 bg-[rgb(var(--bg-primary))] rounded border border-[rgb(var(--border))]"
+            >
+              <div className="flex items-start justify-between gap-1">
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-white truncate">{sel.outcomeName}</p>
+                  <p className="text-[10px] text-gray-500 truncate">{sel.eventName}</p>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <span className="text-xs font-bold text-blue-400">{sel.odds.toFixed(2)}</span>
+                  <button
+                    onClick={() => removeSelection(sel.outcomeId)}
+                    className="p-0.5 rounded hover:bg-white/5 text-gray-600 hover:text-red-400"
+                  >
+                    <XMarkIcon className="h-3 w-3" />
+                  </button>
                 </div>
               </div>
-            ))}
+            </div>
+          ))}
+
+          {/* Total */}
+          <div className="flex items-center justify-between px-1 py-1">
+            <span className="text-[10px] text-gray-500">Коэффициент</span>
+            <span className="text-xs font-bold text-blue-400">{totalOdds.toFixed(2)}</span>
           </div>
 
-          {/* Total odds */}
-          <div className="flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-700">
-            <span className="text-sm text-gray-600 dark:text-gray-400">
-              Общий коэффициент
-            </span>
-            <span className="text-lg font-bold text-primary-600 dark:text-primary-400">
-              {totalOdds.toFixed(2)}
-            </span>
-          </div>
-
-          {/* Stake input */}
-          <div>
-            <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
-              Сумма ставки
-            </label>
+          {/* Stake */}
+          <div className="flex items-center gap-1">
             <input
               type="number"
-              value={stake}
+              value={stake || ''}
               onChange={(e) => setStake(Number(e.target.value))}
-              className="input-field"
-              placeholder="0"
+              className="input-field flex-1"
+              placeholder="Сумма"
               min="0"
             />
+            <span className="text-xs text-gray-500 shrink-0">₽</span>
           </div>
 
-          {/* Potential win */}
-          <div className="flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-700">
-            <span className="text-sm text-gray-600 dark:text-gray-400">
-              Возможный выигрыш
-            </span>
-            <span className="text-lg font-bold text-green-600 dark:text-green-400">
-              {potentialWin.toFixed(2)} ₽
-            </span>
+          {/* Win */}
+          <div className="flex items-center justify-between px-1">
+            <span className="text-[10px] text-gray-500">Выигрыш</span>
+            <span className="text-xs font-bold text-green-400">{potentialWin.toFixed(2)} ₽</span>
           </div>
 
-          {/* Place bet button */}
+          {/* Submit */}
           <button
             disabled={stake <= 0}
-            className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"
+            className="btn-yellow w-full disabled:opacity-50 disabled:cursor-not-allowed py-1.5 text-xs font-semibold"
           >
             Сделать ставку
           </button>

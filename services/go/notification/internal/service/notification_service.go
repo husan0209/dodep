@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -293,7 +294,7 @@ func (s *NotificationService) MarkAsRead(ctx context.Context, id string, userID 
 	}
 
 	// Decrement unread count
-	if err := s.repo.IncrementUnreadCount(ctx, userID); err != nil {
+	if err := s.repo.DecrementUnreadCount(ctx, userID); err != nil {
 		s.log.Error("Failed to decrement unread count", zap.Error(err))
 	}
 
@@ -386,15 +387,15 @@ func (s *NotificationService) ProcessEvent(ctx context.Context, eventType string
 	s.log.Info("Processing event", zap.String("event_type", eventType))
 
 	switch eventType {
-	case "bet.settled":
+	case "bet.settled", "bets.settled":
 		return s.processBetSettled(ctx, data)
-	case "payment.deposit_confirmed":
+	case "payment.deposit_confirmed", "payments.deposit_confirmed":
 		return s.processDepositConfirmed(ctx, data)
-	case "payment.withdrawal_processed":
+	case "payment.withdrawal_processed", "payments.withdrawal_processed":
 		return s.processWithdrawalProcessed(ctx, data)
 	case "bonus.activated":
 		return s.processBonusActivated(ctx, data)
-	case "kyc.status_changed":
+	case "kyc.status_changed", "users.kyc_verified":
 		return s.processKYCStatusChanged(ctx, data)
 	default:
 		s.log.Debug("Unknown event type", zap.String("event_type", eventType))
@@ -620,10 +621,10 @@ func getBoolOrDefault(ptr *bool, defaultValue bool) bool {
 
 func getUint64FromData(data map[string]string, key string) uint64 {
 	if val, ok := data[key]; ok {
-		var result uint64
-		// Simple string to uint64 conversion
-		// TODO: Use proper parsing
-		_ = result
+		parsed, err := strconv.ParseUint(val, 10, 64)
+		if err == nil {
+			return parsed
+		}
 	}
 	return 0
 }

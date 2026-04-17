@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { Inter, Montserrat } from 'next/font/google'
 import './globals.css'
-import { Providers } from '@components/providers'
+import { QueryProviders } from '@components/providers'
 import { Header } from '@components/layout/header'
 import { Footer } from '@components/layout/footer'
 import { MobileNav } from '@components/layout/mobile-nav'
@@ -34,7 +34,7 @@ export const metadata: Metadata = {
     description: 'Премиум платформа для ставок и игр',
   },
   robots: {
-    index: false, // Закрыто от индексации в разработке
+    index: false,
     follow: false,
   },
 }
@@ -47,16 +47,16 @@ export default function RootLayout({
   return (
     <html lang="ru" suppressHydrationWarning>
       <body className={`${inter.variable} ${montserrat.variable} font-sans antialiased`}>
-        <Providers>
-          <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-900">
+        <QueryProviders>
+          <div className="min-h-screen flex flex-col">
             <Header />
-            <main className="flex-1">
+            <main className="flex-1 pb-16 lg:pb-0">
               {children}
             </main>
             <Footer />
             <MobileNav />
           </div>
-        </Providers>
+        </QueryProviders>
       </body>
     </html>
   )

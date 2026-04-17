@@ -73,7 +73,17 @@ class ApiClient {
         },
         body: options.body ? JSON.stringify(options.body) : undefined,
       });
-      return response;
+      
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({
+          code: "UNKNOWN_ERROR",
+          message: response.statusText,
+          request_id: "unknown",
+        }));
+        throw new ApiClientError(response.status, error);
+      }
+      
+      return response.json();
     };
 
     let response = await makeRequest(token);

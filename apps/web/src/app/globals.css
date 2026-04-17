@@ -2,50 +2,206 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --foreground-rgb: 0, 0, 0;
-  --background-start-rgb: 214, 219, 220;
-  --background-end-rgb: 255, 255, 255;
-}
-
-@media (prefers-color-scheme: dark) {
+@layer base {
   :root {
-    --foreground-rgb: 255, 255, 255;
-    --background-start-rgb: 0, 0, 0;
-    --background-end-rgb: 0, 0, 0;
+    --bg-primary: 15, 23, 42;
+    --bg-secondary: 22, 33, 50;
+    --bg-tertiary: 28, 41, 61;
+    --bg-elevated: 34, 50, 74;
+    --text-primary: 226, 232, 240;
+    --text-secondary: 148, 163, 184;
+    --text-muted: 100, 116, 139;
+    --accent-blue: 59, 130, 246;
+    --accent-yellow: 251, 191, 36;
+    --accent-green: 34, 197, 94;
+    --accent-red: 239, 68, 68;
+    --border: 43, 62, 87;
+    --border-light: 56, 78, 108;
+  }
+
+  .dark {
+    --bg-primary: 15, 23, 42;
+    --bg-secondary: 22, 33, 50;
+    --bg-tertiary: 28, 41, 61;
+    --bg-elevated: 34, 50, 74;
+    --text-primary: 226, 232, 240;
+    --text-secondary: 148, 163, 184;
+    --text-muted: 100, 116, 139;
+    --accent-blue: 59, 130, 246;
+    --accent-yellow: 251, 191, 36;
+    --accent-green: 34, 197, 94;
+    --accent-red: 239, 68, 68;
+    --border: 43, 62, 87;
+    --border-light: 56, 78, 108;
   }
 }
 
-body {
-  color: rgb(var(--foreground-rgb));
-  background: linear-gradient(
-      to bottom,
-      transparent,
-      rgb(var(--background-end-rgb))
-    )
-    rgb(var(--background-start-rgb));
+@layer base {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--border)) transparent;
+  }
+
+  *::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background-color: rgb(var(--border));
+    border-radius: 3px;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: rgb(var(--border-light));
+  }
+
+  body {
+    color: rgb(var(--text-primary));
+    background-color: rgb(var(--bg-primary));
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-size: 13px;
+  }
+  
+  ::selection {
+    background-color: rgb(var(--accent-blue) / 0.3);
+    color: white;
+  }
 }
 
 @layer utilities {
   .text-balance {
     text-wrap: balance;
   }
+  
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-cyan-400;
+  }
+
+  .live-pulse {
+    animation: livePulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  @keyframes livePulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  .fade-in {
+    animation: fadeIn 0.15s ease-out;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
 }
 
 @layer components {
+  /* Buttons */
   .btn-primary {
-    @apply bg-primary-600 hover:bg-primary-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors duration-200;
+    @apply bg-blue-600 hover:bg-blue-500 text-white font-medium py-1.5 px-3 rounded text-xs transition-colors duration-100;
   }
-  
+
   .btn-secondary {
-    @apply bg-casino-accent hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors duration-200;
+    @apply bg-[rgb(var(--bg-elevated))] hover:bg-[rgb(var(--border))] text-gray-200 font-medium py-1.5 px-3 rounded text-xs transition-colors duration-100;
   }
   
+  .btn-outline {
+    @apply border border-[rgb(var(--border))] hover:border-[rgb(var(--border-light))] text-gray-400 hover:text-white font-medium py-1.5 px-3 rounded text-xs transition-colors duration-100;
+  }
+
+  .btn-yellow {
+    @apply bg-yellow-500 hover:bg-yellow-400 text-slate-900 font-semibold py-1.5 px-3 rounded text-xs transition-colors duration-100;
+  }
+
+  /* Cards */
   .card {
-    @apply bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6;
+    @apply bg-[rgb(var(--bg-secondary))] border border-[rgb(var(--border))] rounded;
   }
-  
+
+  /* Odds Button - 1xbet style */
+  .odds-btn {
+    @apply flex items-center justify-between px-2 py-1.5 bg-[rgb(var(--bg-primary))] border border-[rgb(var(--border))] rounded hover:border-blue-500 hover:bg-blue-500/10 transition-all duration-100 min-w-[56px] cursor-pointer;
+  }
+
+  .odds-btn .odds-label {
+    @apply text-[10px] text-gray-500;
+  }
+
+  .odds-btn .odds-value {
+    @apply text-xs font-bold text-gray-200;
+  }
+
+  .odds-btn-selected {
+    @apply border-blue-500 bg-blue-500/15;
+  }
+
+  .odds-btn-selected .odds-value {
+    @apply text-blue-400;
+  }
+
+  /* Badge */
+  .badge {
+    @apply inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium;
+  }
+
+  .badge-live {
+    @apply bg-red-500/20 text-red-400;
+  }
+
+  .badge-yellow {
+    @apply bg-yellow-500/20 text-yellow-400;
+  }
+
+  .badge-green {
+    @apply bg-green-500/20 text-green-400;
+  }
+
+  .badge-blue {
+    @apply bg-blue-500/20 text-blue-400;
+  }
+
+  /* Form Elements */
   .input-field {
-    @apply w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent;
+    @apply w-full px-2.5 py-1.5 bg-[rgb(var(--bg-primary))] border border-[rgb(var(--border))] rounded text-gray-200 placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-100 text-xs;
+  }
+
+  /* Tabs */
+  .tab {
+    @apply px-3 py-1.5 text-xs font-medium text-gray-400 hover:text-white hover:bg-white/5 rounded transition-colors duration-100;
+  }
+
+  .tab-active {
+    @apply bg-blue-600 text-white;
+  }
+
+  /* Section */
+  .section {
+    @apply max-w-[1440px] mx-auto px-3 py-4;
+  }
+
+  /* Sidebar */
+  .sidebar {
+    @apply bg-[rgb(var(--bg-secondary))] border-r border-[rgb(var(--border))];
+  }
+
+  /* Table row */
+  .table-row {
+    @apply flex items-center justify-between px-3 py-2 border-b border-[rgb(var(--border))] hover:bg-[rgb(var(--bg-tertiary))] transition-colors;
+  }
+
+  /* Star button for favorites */
+  .star-btn {
+    @apply p-1 rounded hover:bg-white/10 text-gray-600 hover:text-yellow-400 transition-colors;
+  }
+
+  .star-btn-active {
+    @apply text-yellow-400;
   }
 }

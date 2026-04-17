@@ -9,6 +9,8 @@ export interface RegisterRequest {
   email: string;
   password: string;
   username: string;
+  country_code: string;
+  currency_code: string;
 }
 
 export interface AuthTokens {

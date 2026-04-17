@@ -73,3 +73,6 @@ docker-compose.override.yml
 *.tmp
 *.temp
 .cache/
+
+nul
+apps/web/nul

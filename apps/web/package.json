@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3000",
+    "dev:all": "concurrently \"npm run mock-api\" \"npm run dev\"",
+    "mock-api": "node mock-api-server.js",
     "build": "next build",
     "start": "next start -p 3000",
     "lint": "next lint",
@@ -16,71 +18,62 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
-    "next": "14.1.0",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    
-    "@tanstack/react-query": "^5.17.0",
-    "@tanstack/react-query-devtools": "^5.17.0",
-    "zustand": "^4.5.0",
-    
-    "axios": "^1.6.5",
-    "ws": "^8.16.0",
-    
-    "@radix-ui/react-slot": "^1.0.2",
+    "@heroicons/react": "^2.2.0",
+    "@hookform/resolvers": "^3.3.4",
     "@radix-ui/react-dialog": "^1.0.5",
     "@radix-ui/react-dropdown-menu": "^2.0.6",
     "@radix-ui/react-label": "^2.0.2",
     "@radix-ui/react-select": "^2.0.0",
+    "@radix-ui/react-slot": "^1.0.2",
     "@radix-ui/react-tabs": "^1.0.4",
     "@radix-ui/react-toast": "^1.1.5",
     "@radix-ui/react-tooltip": "^1.0.7",
-    
+    "@tanstack/react-query": "^5.17.0",
+    "@tanstack/react-query-devtools": "^5.17.0",
+    "@types/uuid": "^10.0.0",
+    "axios": "^1.6.5",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
-    "tailwind-merge": "^2.2.0",
-    
-    "recharts": "^2.10.4",
+    "cors": "^2.8.6",
     "date-fns": "^3.2.0",
-    
-    "react-hook-form": "^7.49.3",
-    "zod": "^3.22.4",
-    "@hookform/resolvers": "^3.3.4",
-    
+    "next": "14.1.0",
     "next-themes": "^0.2.1",
+    "nuqs": "^1.15.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-hook-form": "^7.49.3",
+    "recharts": "^2.10.4",
     "sonner": "^1.4.0",
-    
+    "tailwind-merge": "^2.2.0",
     "ua-parser-js": "^1.0.37",
-    "nuqs": "^1.15.0"
+    "uuid": "^13.0.0",
+    "ws": "^8.16.0",
+    "zod": "^3.22.4",
+    "zustand": "^4.5.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.41.1",
+    "@testing-library/jest-dom": "^6.4.0",
+    "@testing-library/react": "^14.1.2",
     "@types/node": "^20.11.5",
     "@types/react": "^18.2.48",
     "@types/react-dom": "^18.2.18",
-    "@types/ws": "^8.5.10",
     "@types/ua-parser-js": "^0.7.39",
-    
-    "typescript": "^5.3.3",
-    
-    "tailwindcss": "^3.4.1",
-    "postcss": "^8.4.33",
+    "@types/ws": "^8.5.10",
     "autoprefixer": "^10.4.17",
-    
+    "concurrently": "^8.2.2",
+    "cross-env": "^7.0.3",
     "eslint": "^8.56.0",
     "eslint-config-next": "14.1.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-prettier": "^5.1.3",
-    
-    "prettier": "^3.2.4",
-    "prettier-plugin-tailwindcss": "^0.5.11",
-    
-    "@testing-library/react": "^14.1.2",
-    "@testing-library/jest-dom": "^6.4.0",
+    "express": "^4.22.1",
     "jest": "^29.7.0",
     "jest-environment-jsdom": "^29.7.0",
-    
-    "@playwright/test": "^1.41.1",
-    
-    "cross-env": "^7.0.3"
+    "postcss": "^8.4.33",
+    "prettier": "^3.2.4",
+    "prettier-plugin-tailwindcss": "^0.5.11",
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5.3.3"
   }
 }

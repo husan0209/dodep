@@ -1,8 +1,8 @@
 # Stages Coordination Matrix — Opus Casino
 
-**Версия:** 2.8
-**Обновлено:** 2026-03-24
-**Статус:** ✅ Этап 1 завершён, ✅ Этап 2 завершён, ✅ Этап 3 завершён, ✅ Этап 4 завершён, ✅ Этап 5 завершён, ✅ Этап 6 завершён, ✅ Этап 7 завершён, ✅ Этап 8 завершён, ✅ Этап 9 завершён, ✅ Этап 10 завершён, ✅ Этап 11 завершён, ✅ Этап 12 завершён, ✅ Этап 13 завершён, ✅ Этап 14 завершён, ✅ Этап 15 завершён (K8s Production), ✅ Этап 16 завершён (Terraform Production), ✅ Этап 17 завершён (CI/CD Production), ✅ Этап 18 завершён (Security & Testing)
+**Версия:** 2.9
+**Обновлено:** 2026-03-28
+**Статус:** 🟢 Завершены: 6, 11, 12, 14, 15, 16. 🟡 Частично завершены: 1, 2, 3, 4, 5, 7, 8, 9, 17, 18. 🔴 Требуют существенной доработки: 10, 13.
 
 ---
 
@@ -68,24 +68,24 @@
 
 | №   | Этап                      | Агент                   | Спринты | Статус  | Зависимости |
 | --- | ------------------------- | ----------------------- | ------- | ------- | ----------- |
-| 1   | Инфраструктура            | DEVOPS_SRE_ENGINEER     | 3-4     | ✅ 100% | —           |
-| 2   | Observability             | OBSERVABILITY_ENGINEER  | 2-3     | ✅ 100% | 1           |
-| 3   | Базы данных               | DATA_ENGINEER           | 3-4     | ✅ 100% | 1           |
-| 4   | Proto-контракты           | PROTOBUF_CONTRACTS      | 2       | ✅ 100% | 3           |
-| 5   | Rust Betting Engine       | RUST_CORE_ENGINEER      | 4-5     | ⏳      | 4           |
-| 6   | Rust Wallet Core          | RUST_CORE_ENGINEER      | 4       | ✅ 100% | 4           |
-| 7   | Rust WebSocket Gateway    | RUST_WEBSOCKET_ENGINEER | 3       | ✅ 100% | 4           |
-| 8   | Go Auth Service           | GO_BUSINESS_ENGINEER    | 3       | ✅ 100% | 4           |
-| 9   | Go User & Payment         | GO_BUSINESS_ENGINEER    | 4       | ✅ 100% | 8           |
-| 10  | Go Casino & Notifications | GO_BUSINESS_ENGINEER    | 3-4     | ✅ 100% | 9           |
-| 11  | Python Fraud ML           | ML_FRAUD_ENGINEER       | 4       | ✅ 100% | 3           |
-| 12  | Next.js Web               | FRONTEND_WEB_ENGINEER   | 6-7     | ✅ 100% | 8           |
-| 13  | Flutter Mobile            | FLUTTER_MOBILE_ENGINEER | 6-7     | ✅ 100% | 8           |
-| 14  | React Admin Panel         | ADMIN_PANEL_ENGINEER    | 4       | ✅ 100% | 10          |
-| 15  | K8s Production            | DEVOPS_SRE_ENGINEER     | 4       | ✅ 100% | 14          |
-| 16  | Terraform Production      | DEVOPS_SRE_ENGINEER     | 3       | ✅ 100% | 15          |
-| 17  | CI/CD Production          | DEVOPS_SRE_ENGINEER     | 3       | ✅ 100% | 16          |
-| 18  | Security & Testing        | SECURITY_ENGINEER       | 4       | ✅ 100% | 17          |
+| 1   | Инфраструктура            | DEVOPS_SRE_ENGINEER     | 3-4     | 🟡 85%  | —           |
+| 2   | Observability             | OBSERVABILITY_ENGINEER  | 2-3     | 🟡 90%  | 1           |
+| 3   | Базы данных               | DATA_ENGINEER           | 3-4     | 🟡 70%  | 1           |
+| 4   | Proto-контракты           | PROTOBUF_CONTRACTS      | 2       | 🟡 85%  | 3           |
+| 5   | Rust Betting Engine       | RUST_CORE_ENGINEER      | 4-5     | 🟡 90%  | 4           |
+| 6   | Rust Wallet Core          | RUST_CORE_ENGINEER      | 4       | 🟢 95%  | 4           |
+| 7   | Rust WebSocket Gateway    | RUST_WEBSOCKET_ENGINEER | 3       | 🟡 90%  | 4           |
+| 8   | Go Auth Service           | GO_BUSINESS_ENGINEER    | 3       | 🟡 85%  | 4           |
+| 9   | Go User & Payment         | GO_BUSINESS_ENGINEER    | 4       | 🟡 85%  | 8           |
+| 10  | Go Casino & Notifications | GO_BUSINESS_ENGINEER    | 3-4     | 🔴 60%  | 9           |
+| 11  | Python Fraud ML           | ML_FRAUD_ENGINEER       | 4       | 🟢 90%  | 3           |
+| 12  | Next.js Web               | FRONTEND_WEB_ENGINEER   | 6-7     | 🟢 95%  | 8           |
+| 13  | Flutter Mobile            | FLUTTER_MOBILE_ENGINEER | 6-7     | 🔴 60%  | 8           |
+| 14  | React Admin Panel         | ADMIN_PANEL_ENGINEER    | 4       | 🟢 95%  | 10          |
+| 15  | K8s Production            | DEVOPS_SRE_ENGINEER     | 4       | 🟢 95%  | 14          |
+| 16  | Terraform Production      | DEVOPS_SRE_ENGINEER     | 3       | 🟢 95%  | 15          |
+| 17  | CI/CD Production          | DEVOPS_SRE_ENGINEER     | 3       | 🟡 90%  | 16          |
+| 18  | Security & Testing        | SECURITY_ENGINEER       | 4       | 🟡 85%  | 17          |
 
 ---
 
@@ -94,7 +94,7 @@
 **Агент:** `DEVOPS_SRE_ENGINEER`  
 **Длительность:** 3-4 недели  
 **Приоритет:** 🔴 КРИТИЧЕСКИЙ (блокирует всё)  
-**Статус:** 🔄 В разработке (25%)
+**Статус:** 🟡 Близок к завершению (85%)
 
 ## Skills для загрузки (9 файлов)
 
@@ -494,7 +494,7 @@ CD:
 **Агент:** `OBSERVABILITY_ENGINEER`  
 **Длительность:** 2-3 недели  
 **Приоритет:** 🔴 КРИТИЧЕСКИЙ  
-**Статус:** ✅ ЗАВЕРШЁН (100%)  
+**Статус:** 🟡 Близок к завершению (90%)  
 **Зависимости:** Этап 1
 
 ## Skills для загрузки (6 файлов)
@@ -712,7 +712,7 @@ CD:
 **Агент:** `DATA_ENGINEER`  
 **Длительность:** 3-4 недели  
 **Приоритет:** 🔴 КРИТИЧЕСКИЙ  
-**Статус:** ✅ ЗАВЕРШЁН (100%)
+**Статус:** 🟡 В разработке (70%)
 **Зависимости:** Этап 1
 
 ## Skills для загрузки (7 файлов)
@@ -850,7 +850,7 @@ CD:
 **Агент:** `PROTOBUF_CONTRACTS`
 **Длительность:** 2 недели
 **Приоритет:** 🔴 КРИТИЧЕСКИЙ
-**Статус:** ✅ ЗАВЕРШЁН (100%)
+**Статус:** 🟡 Близок к завершению (85%)
 **Зависимости:** Этап 3
 
 ## Skills для загрузки (4 файла)
@@ -995,7 +995,7 @@ CD:
 **Агент:** `RUST_CORE_ENGINEER`  
 **Длительность:** 4-5 недель  
 **Приоритет:** 🔴 КРИТИЧЕСКИЙ  
-**Статус:** ✅ В разработке (100%)  
+**Статус:** 🟡 В разработке (90%)  
 **Зависимости:** Этап 4
 
 ## Skills для загрузки (8 файлов)
@@ -1089,7 +1089,7 @@ CD:
 **Агент:** `RUST_CORE_ENGINEER`
 **Длительность:** 4 недели
 **Приоритет:** 🔴 КРИТИЧЕСКИЙ
-**Статус:** ✅ ЗАВЕРШЁН (100%)
+**Статус:** 🟢 Близок к завершению (95%)
 **Зависимости:** Этап 4
 
 ## Skills для загрузки (8 файлов)
@@ -1207,7 +1207,7 @@ CD:
 **Агент:** `RUST_WEBSOCKET_ENGINEER`
 **Длительность:** 3 недели
 **Приоритет:** 🟡 ВЫСОКИЙ
-**Статус:** ✅ ЗАВЕРШЁН (100%)
+**Статус:** 🟡 В разработке (90%)
 **Зависимости:** Этап 4
 
 ## Skills для загрузки (7 файлов)
@@ -1286,7 +1286,7 @@ CD:
 **Агент:** `GO_BUSINESS_ENGINEER`
 **Длительность:** 3 недели
 **Приоритет:** 🔴 КРИТИЧЕСКИЙ
-**Статус:** ✅ ЗАВЕРШЁН (100%)
+**Статус:** 🟡 В разработке (85%)
 **Зависимости:** Этап 4
 
 ## Skills для загрузки (8 файлов)
@@ -1385,7 +1385,7 @@ CD:
 **Агент:** `GO_BUSINESS_ENGINEER`
 **Длительность:** 4 недели
 **Приоритет:** 🟡 ВЫСОКИЙ
-**Статус:** ✅ ЗАВЕРШЁН (100%)
+**Статус:** 🟡 В разработке (85%)
 **Зависимости:** Этап 8
 
 ## Выполненные задачи
@@ -1497,7 +1497,7 @@ CD:
 **Агент:** `GO_BUSINESS_ENGINEER`
 **Длительность:** 3-4 недели
 **Приоритет:** 🟡 ВЫСОКИЙ
-**Статус:** ✅ ЗАВЕРШЁН (100%)
+**Статус:** 🔴 В разработке (73%)
 **Зависимости:** Этап 9
 
 ## Skills для загрузки (8 файлов)
@@ -1597,6 +1597,36 @@ CD:
 
 ---
 
+### ✅ Прогресс 2026-03-28 (первый блок закрытий)
+
+**Casino Service:**
+
+- [x] Добавлены fail-fast проверки для DB-методов repository при `nil` database client
+- [x] Реализованы Redis cache операции: `CacheGame`, `GetCachedGame`, `InvalidateGameCache`
+- [x] Добавлены unit tests для DB/Redis методов repository при `nil` clients
+
+**Notification Service:**
+
+- [x] Исправлен парсинг `user_id` из event payload (`strconv.ParseUint`)
+- [x] Добавлены алиасы event routing: `bets.settled`, `payments.deposit_confirmed`, `payments.withdrawal_processed`, `users.kyc_verified`
+- [x] Исправлено формирование Redis unread key (`strconv.FormatUint`)
+- [x] Добавлены unit tests для event processing и key generation
+- [x] Реализованы Redis cache операции: `CacheNotification`, `GetCachedNotification`, `InvalidateNotificationCache`
+- [x] Добавлены тесты на корректную обработку cache-методов при `nil` Redis client
+- [x] Исправлена логика unread counter: в `MarkAsRead` теперь используется decrement
+- [x] Добавлены nil-check для unread counter методов Redis (`Increment/Decrement/Get/Set`)
+- [x] Добавлены fail-fast проверки для DB-методов repository при `nil` database client
+- [x] Добавлены unit tests для DB-методов repository при `nil` database client
+
+**Остаётся закрыть для этапа 10:**
+
+- [ ] Реализовать реальные SQL-операции в `casino_repository.go`
+- [ ] Реализовать реальные SQL-операции в `notification_repository.go`
+- [ ] Реальные интеграции каналов Email/SMS/Push вместо заглушек
+- [ ] Подтвердить coverage и интеграционные тесты для прод-критериев
+
+---
+
 ## ✅ Definition of Done для Этапа 10
 
 - [x] Casino Service полностью реализован
@@ -1615,7 +1645,7 @@ CD:
 **Агент:** `ML_FRAUD_ENGINEER`
 **Длительность:** 4 недели
 **Приоритет:** 🟡 ВЫСОКИЙ
-**Статус:** ✅ ЗАВЕРШЁН (100%)
+**Статус:** 🟢 Близок к завершению (90%)
 **Зависимости:** Этап 3
 
 ## Skills для загрузки (6 файлов)
@@ -1712,7 +1742,7 @@ CD:
 **Агент:** `FRONTEND_WEB_ENGINEER`
 **Длительность:** 6-7 недель
 **Приоритет:** 🟡 ВЫСОКИЙ
-**Статус:** ✅ ЗАВЕРШЁН (100%)
+**Статус:** 🟢 Близок к завершению (95%)
 **Зависимости:** Этап 8
 
 ## Skills для загрузки (7 файлов)
@@ -1806,7 +1836,7 @@ CD:
 **Агент:** `FLUTTER_MOBILE_ENGINEER`
 **Длительность:** 6-7 недель
 **Приоритет:** 🟡 ВЫСОКИЙ
-**Статус:** ✅ ЗАВЕРШЁН (100%)
+**Статус:** 🔴 В разработке (60%)
 **Зависимости:** Этап 8
 
 ## Skills для загрузки (5 файлов)
@@ -1916,7 +1946,7 @@ CD:
 **Агент:** `ADMIN_PANEL_ENGINEER`
 **Длительность:** 4 недели
 **Приоритет:** 🟡 ВЫСОКИЙ
-**Статус:** ✅ ЗАВЕРШЁН (100%)
+**Статус:** 🟢 Близок к завершению (95%)
 **Зависимости:** Этап 10
 
 ## Skills для загрузки (5 файлов)
@@ -2057,7 +2087,7 @@ CD:
 **Агент:** `DEVOPS_SRE_ENGINEER`
 **Длительность:** 4 недели
 **Приоритет:** 🔴 КРИТИЧЕСКИЙ
-**Статус:** ✅ ЗАВЕРШЁН (100%)
+**Статус:** 🟢 Близок к завершению (95%)
 **Зависимости:** Этап 14
 
 ## Выполненные задачи
@@ -2159,7 +2189,7 @@ CD:
 **Агент:** `DEVOPS_SRE_ENGINEER`
 **Длительность:** 3 недели
 **Приоритет:** 🔴 КРИТИЧЕСКИЙ
-**Статус:** ✅ ЗАВЕРШЁН (100%)
+**Статус:** 🟢 Близок к завершению (95%)
 **Зависимости:** Этап 15
 
 ## Выполненные задачи
@@ -2218,7 +2248,7 @@ CD:
 **Агент:** `DEVOPS_SRE_ENGINEER`
 **Длительность:** 3 недели
 **Приоритет:** 🔴 КРИТИЧЕСКИЙ
-**Статус:** ✅ ЗАВЕРШЁН (100%)
+**Статус:** 🟡 Близок к завершению (90%)
 **Зависимости:** Этап 16
 
 ## Выполненные задачи
@@ -2290,7 +2320,7 @@ CD:
 **Агент:** `SECURITY_ENGINEER`
 **Длительность:** 4 недели
 **Приоритет:** 🔴 КРИТИЧЕСКИЙ
-**Статус:** ✅ ЗАВЕРШЁН (100%)
+**Статус:** 🟡 В разработке (85%)
 **Зависимости:** Этап 17
 
 ## Выполненные задачи
@@ -2401,24 +2431,36 @@ CD:
 
 | Этап | Прогресс | Последний обновлённый блок                                     | Ответственный агент     |
 | ---- | -------- | -------------------------------------------------------------- | ----------------------- |
-| 1    | ✅ 100%  | **ЗАВЕРШЁН**                                                   | DEVOPS_SRE_ENGINEER     |
-| 2    | ✅ 100%  | **ЗАВЕРШЁН**                                                   | OBSERVABILITY_ENGINEER  |
-| 3    | 70%      | PostgreSQL миграции + ClickHouse + K8s манифесты               | DATA_ENGINEER           |
-| 4    | 0%       | —                                                              | PROTOBUF_CONTRACTS      |
-| 5    | ✅ 100%  | REST + gRPC + Events + Cashout + Tests + k6 + Docs             | RUST_CORE_ENGINEER      |
-| 6    | 0%       | —                                                              | RUST_CORE_ENGINEER      |
-| 7    | 0%       | —                                                              | RUST_WEBSOCKET_ENGINEER |
-| 8    | 0%       | —                                                              | GO_BUSINESS_ENGINEER    |
-| 9    | 0%       | —                                                              | GO_BUSINESS_ENGINEER    |
-| 10   | 0%       | —                                                              | GO_BUSINESS_ENGINEER    |
-| 11   | 0%       | —                                                              | ML_FRAUD_ENGINEER       |
-| 12   | 0%       | —                                                              | FRONTEND_WEB_ENGINEER   |
-| 13   | 0%       | —                                                              | FLUTTER_MOBILE_ENGINEER |
-| 14   | ✅ 100%  | React Admin Panel + RBAC + 17 routes + 10 API services         | ADMIN_PANEL_ENGINEER    |
-| 15   | ✅ 100%  | Helm values, Istio prod, ArgoCD AppSets, PDBs, NetworkPolicies | DEVOPS_SRE_ENGINEER     |
-| 16   | ✅ 100%  | Terraform modules, production config, DR plan                  | DEVOPS_SRE_ENGINEER     |
-| 17   | 0%       | —                                                              | DEVOPS_SRE_ENGINEER     |
-| 18   | 0%       | —                                                              | SECURITY_ENGINEER       |
+| 1    | 85%      | Terraform/K8s/Istio/Vault есть, но часть критериев не закрыта  | DEVOPS_SRE_ENGINEER     |
+| 2    | 90%      | Стек observability развёрнут, нужен факт прохождения критериев | OBSERVABILITY_ENGINEER  |
+| 3    | 70%      | Миграции и манифесты готовы, replication/backup/PITR открыты   | DATA_ENGINEER           |
+| 4    | 85%      | Proto и shared готовы, DoD в файле не синхронизирован          | PROTOBUF_CONTRACTS      |
+| 5    | 90%      | REST/gRPC/events готовы, perf-критерии ещё не подтверждены     | RUST_CORE_ENGINEER      |
+| 6    | 95%      | Wallet Core реализован, остались точечные доработки            | RUST_CORE_ENGINEER      |
+| 7    | 90%      | Gateway реализован, нагрузочные критерии не подтверждены       | RUST_WEBSOCKET_ENGINEER |
+| 8    | 85%      | Базовый auth готов, есть незакрытые integration/test задачи    | GO_BUSINESS_ENGINEER    |
+| 9    | 85%      | User/Payment в продвинутом состоянии, часть интеграций открыта | GO_BUSINESS_ENGINEER    |
+| 10   | 73%      | Закрыты fail-fast/cache блоки в casino/notification, но SQL/integration TODO ещё критичны | GO_BUSINESS_ENGINEER    |
+| 11   | 90%      | Fraud ML реализован, требуется операционная валидация          | ML_FRAUD_ENGINEER       |
+| 12   | 95%      | Next.js web готов, minor интеграционные хвосты                 | FRONTEND_WEB_ENGINEER   |
+| 13   | 60%      | Есть placeholder-экраны, этап не production-ready              | FLUTTER_MOBILE_ENGINEER |
+| 14   | 95%      | Admin panel функциональна, нужны финальные проверки            | ADMIN_PANEL_ENGINEER    |
+| 15   | 95%      | K8s production артефакты готовы                                | DEVOPS_SRE_ENGINEER     |
+| 16   | 95%      | Terraform production и DR описаны                              | DEVOPS_SRE_ENGINEER     |
+| 17   | 90%      | CI/CD и canary готовы, требуется подтверждение прогонами       | DEVOPS_SRE_ENGINEER     |
+| 18   | 85%      | Security workflows готовы, нужен evidence выполнения           | SECURITY_ENGINEER       |
+
+---
+
+## ⚠️ Аудит несоответствий (2026-03-28)
+
+- Этап 3: заявлен как 100%, но checklist содержит незакрытые пункты по replication, backup, PITR.
+- Этап 5: функциональность реализована, но perf-критерии p99/throughput не подтверждены отдельными прогонами.
+- Этап 8: есть незакрытые задачи (OAuth2 и тесты), поэтому 100% завышено.
+- Этап 9: PSP-интеграции не закрыты, заявка 100% завышена.
+- Этап 10: в Casino/Notification есть критичные TODO в repository/service, этап не может считаться завершённым.
+- Этап 13: mobile содержит placeholder-экраны, этап не production-ready.
+- Этапы 17-18: артефакты и workflow есть, но отсутствует единый блок доказательств прохождения (evidence отчётов).
 
 ---
 
