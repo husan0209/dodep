@@ -4,6 +4,7 @@ import { useState } from 'react'
 
 export function SupportPage() {
   const [message, setMessage] = useState('')
+  const [isSent, setIsSent] = useState(false)
 
   const faqs = [
     { question: 'Как сделать депозит?', answer: 'Перейдите в раздел "Кошелёк" → "Пополнить".' },
@@ -18,7 +19,14 @@ export function SupportPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
         <div className="card p-3">
           <h2 className="text-xs font-semibold text-white mb-3">Написать нам</h2>
-          <form className="space-y-2">
+          <form
+            className="space-y-2"
+            onSubmit={(event) => {
+              event.preventDefault()
+              setIsSent(true)
+              setMessage('')
+            }}
+          >
             <select className="input-field">
               <option>Общий вопрос</option>
               <option>Депозит</option>
@@ -33,6 +41,9 @@ export function SupportPage() {
               placeholder="Сообщение..."
             />
             <button type="submit" className="btn-primary w-full">Отправить</button>
+            {isSent && (
+              <p className="text-[10px] text-green-400">Запрос отправлен. Ответим в чате или на email.</p>
+            )}
           </form>
         </div>
 

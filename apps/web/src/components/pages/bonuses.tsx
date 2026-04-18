@@ -8,18 +8,21 @@ export function BonusesPage() {
   ]
 
   return (
-    <div className="section max-w-2xl">
+    <div className="section max-w-3xl">
       <h1 className="text-sm font-bold text-white mb-4">Бонусы</h1>
+      <p className="text-xs text-gray-400 mb-4">
+        Выбирайте бонус под ваш стиль игры. Прогресс по вейджеру отображается после активации в профиле.
+      </p>
 
       <div className="space-y-2">
         {mockBonuses.map((bonus) => (
-          <div key={bonus.id} className="card p-3 flex items-center justify-between">
+          <div key={bonus.id} className="card p-3 flex items-center justify-between gap-3">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
                 <h3 className="text-xs font-semibold text-white">{bonus.name}</h3>
                 {bonus.isActive && <span className="badge badge-green">Активен</span>}
               </div>
-              <p className="text-[10px] text-gray-500 mt-0.5">{bonus.description}</p>
+              <p className="text-[11px] text-gray-400 mt-0.5">{bonus.description}</p>
               <div className="flex items-center gap-3 mt-1.5 text-[10px] text-gray-600">
                 <span>Мин: {bonus.minDeposit}₽</span>
                 <span>Вейджер: x{bonus.wagering}</span>

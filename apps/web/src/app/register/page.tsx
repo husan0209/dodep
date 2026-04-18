@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@stores/auth-store'
+import { trackEvent } from '@lib/telemetry'
 
 export default function RegisterPage() {
   const router = useRouter()
@@ -59,6 +60,10 @@ export default function RegisterPage() {
 
     try {
       const cleanEmail = formData.email.replace(/\s/g, '')
+      trackEvent('auth_register_submitted', {
+        countryCode: formData.countryCode,
+        currencyCode: formData.currencyCode,
+      })
       await register(cleanEmail, formData.password, formData.username.trim(), formData.countryCode, formData.currencyCode)
       router.push('/sportsbook')
     } catch (err: any) {
@@ -76,20 +81,19 @@ export default function RegisterPage() {
 
   return (
     <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
-      {/* Dynamic Background Effects */}
-      <div className="absolute top-1/3 right-1/4 w-[500px] h-[500px] bg-primary-500/10 rounded-full blur-3xl pointer-events-none animate-blob" />
-      <div className="absolute bottom-1/4 left-1/4 w-[400px] h-[400px] bg-casino-accent/10 rounded-full blur-3xl pointer-events-none animate-blob" style={{ animationDelay: '3s' }} />
+      <div className="absolute top-1/3 right-1/4 w-[500px] h-[500px] bg-blue-600/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute bottom-1/4 left-1/4 w-[400px] h-[400px] bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
       
-      <div className="w-full max-w-xl relative z-10 animate-fade-in card !p-8 md:!p-10">
+      <div className="w-full max-w-xl relative z-10 card !p-8 md:!p-10">
         <div>
-          <h2 className="mt-2 text-center text-4xl font-bold font-display text-gradient-gold drop-shadow-lg">
+          <h2 className="mt-2 text-center text-4xl font-bold font-display text-white">
             Регистрация
           </h2>
           <p className="mt-4 text-center text-sm font-medium text-gray-400">
             Или{' '}
             <Link
               href="/login"
-              className="font-bold text-primary-400 hover:text-primary-300 transition-colors drop-shadow-md"
+              className="font-bold text-blue-400 hover:text-blue-300 transition-colors"
             >
               войдите в существующий аккаунт
             </Link>
@@ -229,11 +233,11 @@ export default function RegisterPage() {
             />
             <label htmlFor="terms" className="ml-3 block text-sm font-medium text-gray-400">
               Я согласен с{' '}
-              <Link href="/terms" className="text-primary-400 hover:text-white transition-colors underline underline-offset-2">
+              <Link href="/terms" className="text-blue-400 hover:text-white transition-colors underline underline-offset-2">
                 условиями использования
               </Link>{' '}
               и{' '}
-              <Link href="/privacy" className="text-primary-400 hover:text-white transition-colors underline underline-offset-2">
+              <Link href="/privacy" className="text-blue-400 hover:text-white transition-colors underline underline-offset-2">
                 политикой конфиденциальности
               </Link>
             </label>

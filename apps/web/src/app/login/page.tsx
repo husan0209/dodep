@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@stores/auth-store'
+import { trackEvent } from '@lib/telemetry'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -21,6 +22,7 @@ export default function LoginPage() {
     try {
       // Ensure email has no whitespace
       const cleanEmail = email.replace(/\s/g, '')
+      trackEvent('auth_login_submitted', { emailDomain: cleanEmail.split('@')[1] || 'unknown' })
       await login(cleanEmail, password)
       router.push('/sportsbook')
     } catch (err: any) {
@@ -39,20 +41,19 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
-      {/* Dynamic Background Effects */}
-      <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary-500/20 rounded-full blur-3xl pointer-events-none animate-blob" />
-      <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-pink-500/20 rounded-full blur-3xl pointer-events-none animate-blob" style={{ animationDelay: '2s' }} />
+      <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-600/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
       
-      <div className="w-full max-w-md relative z-10 animate-fade-in card !p-8">
+      <div className="w-full max-w-md relative z-10 card !p-8">
         <div>
-          <h2 className="mt-2 text-center text-4xl font-bold font-display text-gradient-gold drop-shadow-lg">
+          <h2 className="mt-2 text-center text-3xl font-bold font-display text-white">
             Вход в аккаунт
           </h2>
           <p className="mt-4 text-center text-sm font-medium text-gray-400">
             Или{' '}
             <Link
               href="/register"
-              className="font-bold text-primary-400 hover:text-primary-300 transition-colors drop-shadow-md"
+              className="font-bold text-blue-400 hover:text-blue-300 transition-colors"
             >
               создайте новый аккаунт
             </Link>
@@ -111,7 +112,7 @@ export default function LoginPage() {
                 name="remember-me"
                 type="checkbox"
                 suppressHydrationWarning
-                className="h-4 w-4 rounded border-white/10 bg-black/40 text-primary-600 focus:ring-primary-500/50"
+                className="h-4 w-4 rounded border-[rgb(var(--border))] bg-[rgb(var(--bg-primary))] text-blue-600 focus:ring-blue-500/50"
               />
               <label htmlFor="remember-me" className="ml-2 block text-sm font-medium text-gray-400 cursor-pointer hover:text-white transition-colors">
                 Запомнить меня
@@ -121,7 +122,7 @@ export default function LoginPage() {
             <div className="text-sm font-medium">
               <Link
                 href="/forgot-password"
-                className="text-gray-400 hover:text-primary-400 transition-colors"
+                className="text-gray-400 hover:text-blue-400 transition-colors"
               >
                 Забыли пароль?
               </Link>

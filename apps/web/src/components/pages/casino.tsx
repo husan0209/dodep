@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { GameCard } from '@components/casino/game-card'
 import { useFavoritesStore } from '@stores/favorites-store'
+import { trackEvent } from '@lib/telemetry'
 
 const mockGames = [
   {
@@ -124,6 +125,7 @@ export function CasinoPage() {
   const [selectedCategory, setSelectedCategory] = useState('all')
   const [selectedProvider, setSelectedProvider] = useState('all')
   const [searchQuery, setSearchQuery] = useState('')
+  const [showDemoOnly, setShowDemoOnly] = useState(false)
   const [activeTab, setActiveTab] = useState<'all' | 'favorites'>('all')
   const { gameIds: favorites } = useFavoritesStore()
 
@@ -134,9 +136,26 @@ export function CasinoPage() {
       const providerId = game.provider.toLowerCase().replace(' ', '')
       if (!providerId.includes(selectedProvider.toLowerCase())) return false
     }
+    if (showDemoOnly && !game.isDemoAvailable) return false
     if (searchQuery && !game.name.toLowerCase().includes(searchQuery.toLowerCase())) return false
     return true
   })
+
+  const recentlyPlayedGames = useMemo(() => mockGames.slice(0, 4), [])
+
+  useEffect(() => {
+    trackEvent('page_view', { page: 'casino' })
+  }, [])
+
+  useEffect(() => {
+    trackEvent('casino_filter_changed', {
+      category: selectedCategory,
+      provider: selectedProvider,
+      tab: activeTab,
+      demoOnly: showDemoOnly,
+      results: filteredGames.length,
+    })
+  }, [selectedCategory, selectedProvider, activeTab, showDemoOnly, filteredGames.length])
 
   return (
     <div className="section">
@@ -154,7 +173,13 @@ export function CasinoPage() {
             type="text"
             placeholder="Поиск игры..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => {
+              const value = e.target.value
+              setSearchQuery(value)
+              if (value.length > 1) {
+                trackEvent('casino_search_used', { valueLength: value.length })
+              }
+            }}
             className="input-field w-full sm:w-56 pl-7"
           />
           <svg className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -222,6 +247,38 @@ export function CasinoPage() {
             >
               {prov.name}
             </button>
+          ))}
+        </div>
+
+        <label className="flex items-center gap-2 text-[11px] text-gray-400 px-2">
+          <input
+            type="checkbox"
+            checked={showDemoOnly}
+            onChange={(e) => setShowDemoOnly(e.target.checked)}
+            className="rounded border-[rgb(var(--border))] bg-[rgb(var(--bg-primary))]"
+          />
+          Только демо
+        </label>
+      </div>
+
+      <div className="card p-3 mb-4">
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-xs font-semibold text-white">Недавно играли</h2>
+          <button
+            onClick={() => {
+              setSelectedCategory('all')
+              setSelectedProvider('all')
+              setSearchQuery('')
+              setShowDemoOnly(false)
+            }}
+            className="text-[10px] text-gray-400 hover:text-white transition-colors"
+          >
+            Сбросить фильтры
+          </button>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          {recentlyPlayedGames.map((game) => (
+            <GameCard key={`recent-${game.id}`} game={game} compact />
           ))}
         </div>
       </div>

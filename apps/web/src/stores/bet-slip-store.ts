@@ -53,9 +53,9 @@ export const useBetSlipStore = create<BetSlipState>((set, get) => ({
       // Max 20 selections
       if (state.selections.length >= 20) return state;
 
-      // Remove other outcomes from same market
+      // Remove other outcomes from same market in the same event.
       const filtered = state.selections.filter(
-        (s) => s.marketId !== selection.marketId
+        (s) => !(s.eventId === selection.eventId && s.marketId === selection.marketId)
       );
 
       return { selections: [...filtered, selection] };

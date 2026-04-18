@@ -1,6 +1,7 @@
 'use client'
 
 import { useBetSlipStore } from '@stores/bet-slip-store'
+import { trackEvent } from '@lib/telemetry'
 
 interface SportsEventProps {
   event: {
@@ -35,6 +36,15 @@ export function SportsEvent({ event }: SportsEventProps) {
       removeSelection(outcomeId)
       return
     }
+
+    trackEvent('odds_selected', {
+      eventId: event.id,
+      sport: event.sport,
+      market: selection,
+      odds,
+      isLive: event.isLive,
+    })
+
     addSelection({
       eventId: Number(event.id),
       marketId,

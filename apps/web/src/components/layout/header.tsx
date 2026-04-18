@@ -75,7 +75,7 @@ export function Header() {
                 <Link
                   key={item.name}
                   href={item.href}
-                  className="hidden sm:flex items-center gap-1 px-2 py-1 text-xs text-gray-400 hover:text-white hover:bg-white/5 rounded transition-colors"
+                  className="hidden sm:flex items-center gap-1 px-2 py-1 text-xs text-gray-300 hover:text-white hover:bg-white/5 rounded transition-colors"
                 >
                   <item.icon className="h-3.5 w-3.5" />
                   {item.name}
@@ -92,13 +92,18 @@ export function Header() {
 
               {/* Auth */}
               {isAuthenticated ? (
-                <Link
-                  href="/profile"
-                  className="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-white/5 text-gray-300 transition-colors text-xs"
-                >
-                  <UserCircleIcon className="h-4 w-4" />
-                  <span className="hidden sm:inline">{user?.username || 'Профиль'}</span>
-                </Link>
+                <div className="flex items-center gap-1">
+                  <Link href="/wallet" className="btn-primary text-xs px-2.5 py-1.5 hidden sm:inline-flex">
+                    Депозит
+                  </Link>
+                  <Link
+                    href="/profile"
+                    className="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-white/5 text-gray-300 transition-colors text-xs"
+                  >
+                    <UserCircleIcon className="h-4 w-4" />
+                    <span className="hidden sm:inline">{user?.username || 'Профиль'}</span>
+                  </Link>
+                </div>
               ) : (
                 <div className="flex items-center gap-1">
                   <Link href="/login" className="px-2 py-1 text-xs text-gray-300 hover:text-white transition-colors">

@@ -48,10 +48,10 @@ export function TransactionHistory({ transactions }: TransactionHistoryProps) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-medium text-gray-900 dark:text-white">
+        <h3 className="text-sm font-semibold text-white">
           История транзакций
         </h3>
-        <button className="text-sm text-primary-600 hover:text-primary-700 dark:text-primary-400">
+        <button className="text-xs text-blue-400 hover:text-blue-300">
           Скачать выписку
         </button>
       </div>
@@ -67,7 +67,7 @@ export function TransactionHistory({ transactions }: TransactionHistoryProps) {
           {transactions.map((tx) => (
             <div
               key={tx.id}
-              className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 rounded-lg"
+              className="flex items-center justify-between p-3 bg-[rgb(var(--bg-primary))] rounded border border-[rgb(var(--border))]"
             >
               <div className="flex items-center space-x-4">
                 <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
@@ -78,10 +78,10 @@ export function TransactionHistory({ transactions }: TransactionHistoryProps) {
                   {tx.amount > 0 ? '↑' : '↓'}
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-gray-900 dark:text-white">
+                  <p className="text-xs font-medium text-gray-100">
                     {getTypeLabel(tx.type)}
                   </p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                  <p className="text-[10px] text-gray-500">
                     {tx.method} • {new Date(tx.createdAt).toLocaleDateString('ru-RU')}
                   </p>
                 </div>

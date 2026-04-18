@@ -1,10 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Balances } from '@components/wallet/balances'
 import { DepositForm } from '@components/wallet/deposit-form'
 import { WithdrawForm } from '@components/wallet/withdraw-form'
 import { TransactionHistory } from '@components/wallet/transaction-history'
+import { trackEvent } from '@lib/telemetry'
 
 const mockTransactions = [
   { id: '1', type: 'deposit' as const, amount: 1000, currency: 'RUB', status: 'completed' as const, method: 'Card', createdAt: '2024-03-24T10:00:00Z' },
@@ -15,9 +16,19 @@ const mockTransactions = [
 export function WalletPage() {
   const [activeTab, setActiveTab] = useState<'deposit' | 'withdraw' | 'history'>('deposit')
 
+  useEffect(() => {
+    trackEvent('page_view', { page: 'wallet' })
+  }, [])
+
   return (
     <div className="section max-w-2xl">
       <h1 className="text-sm font-bold text-white mb-4">Кошелёк</h1>
+
+      <div className="card p-2 mb-3">
+        <p className="text-[10px] text-gray-400">
+          Статусы выплат видны в истории. Для ускоренного вывода пройдите KYC Level 2.
+        </p>
+      </div>
 
       <div className="mb-4">
         <Balances />
@@ -32,7 +43,9 @@ export function WalletPage() {
         ] as const).map((tab) => (
           <button
             key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
+            onClick={() => {
+              setActiveTab(tab.id)
+            }}
             className={`flex-1 py-1.5 text-xs font-medium rounded transition-colors ${
               activeTab === tab.id ? 'bg-blue-600 text-white' : 'text-gray-500 hover:text-gray-300'
             }`}

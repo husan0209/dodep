@@ -1,9 +1,11 @@
 'use client'
 
 import { useState } from 'react'
+import { useEffect } from 'react'
 import { SportsEvent } from '@components/sportsbook/sports-event'
 import { BetSlip } from '@components/sportsbook/bet-slip'
 import { useBetSlipStore } from '@stores/bet-slip-store'
+import { trackEvent } from '@lib/telemetry'
 
 const mockEvents = [
   {
@@ -77,6 +79,7 @@ export function SportsbookPage() {
   const [selectedSport, setSelectedSport] = useState('all')
   const [showLiveOnly, setShowLiveOnly] = useState(false)
   const { selections } = useBetSlipStore()
+  const [mobileBetSlipOpen, setMobileBetSlipOpen] = useState(false)
 
   const filteredEvents = mockEvents.filter((event) => {
     if (showLiveOnly && !event.isLive) return false
@@ -85,6 +88,18 @@ export function SportsbookPage() {
   })
 
   const liveCount = mockEvents.filter(e => e.isLive).length
+
+  useEffect(() => {
+    trackEvent('page_view', { page: 'sportsbook' })
+  }, [])
+
+  useEffect(() => {
+    trackEvent('sportsbook_filter_changed', {
+      selectedSport,
+      showLiveOnly,
+      eventsVisible: filteredEvents.length,
+    })
+  }, [selectedSport, showLiveOnly, filteredEvents.length])
 
   return (
     <div className="flex max-w-[1440px] mx-auto">
@@ -161,7 +176,9 @@ export function SportsbookPage() {
                 <input
                   type="checkbox"
                   checked={showLiveOnly}
-                  onChange={(e) => setShowLiveOnly(e.target.checked)}
+                  onChange={(e) => {
+                    setShowLiveOnly(e.target.checked)
+                  }}
                   className="peer sr-only"
                 />
                 <div className="w-8 h-4 bg-[rgb(var(--bg-primary))] rounded-full peer-checked:bg-blue-600 transition-colors border border-[rgb(var(--border))]" />
@@ -192,6 +209,30 @@ export function SportsbookPage() {
       <aside className="hidden xl:block w-64 shrink-0 min-h-[calc(100vh-40px)] sticky top-10 p-2">
         <BetSlip />
       </aside>
+
+      {selections.length > 0 && (
+        <button
+          onClick={() => setMobileBetSlipOpen((value) => !value)}
+          className="xl:hidden fixed bottom-16 right-3 z-40 px-3 py-2 rounded-lg bg-blue-600 text-white text-xs font-semibold shadow-lg shadow-blue-900/40"
+        >
+          Купон ({selections.length})
+        </button>
+      )}
+
+      {mobileBetSlipOpen && (
+        <div className="xl:hidden fixed inset-x-0 bottom-0 z-50 bg-[rgb(var(--bg-secondary))] border-t border-[rgb(var(--border))] p-2 max-h-[70vh] overflow-y-auto">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-xs font-semibold text-white">Купон</h2>
+            <button
+              onClick={() => setMobileBetSlipOpen(false)}
+              className="text-[10px] text-gray-400 hover:text-white transition-colors"
+            >
+              Закрыть
+            </button>
+          </div>
+          <BetSlip />
+        </div>
+      )}
     </div>
   )
 }

@@ -1,13 +1,32 @@
 'use client'
 
+import { useEffect } from 'react'
 import { useBetSlipStore } from '@stores/bet-slip-store'
 import { XMarkIcon, TrashIcon } from '@heroicons/react/24/outline'
+import { trackEvent } from '@lib/telemetry'
 
 export function BetSlip() {
   const { selections, combinedOdds, stake, removeSelection, clear, setStake } = useBetSlipStore()
 
   const totalOdds = combinedOdds()
   const potentialWin = stake * totalOdds
+
+  useEffect(() => {
+    if (selections.length > 0) {
+      trackEvent('betslip_opened', { selections: selections.length })
+    }
+  }, [selections.length])
+
+  const handlePlaceBet = () => {
+    if (stake <= 0 || selections.length === 0) return
+
+    trackEvent('bet_placed', {
+      selections: selections.length,
+      stake,
+      totalOdds: Number(totalOdds.toFixed(2)),
+      potentialWin: Number(potentialWin.toFixed(2)),
+    })
+  }
 
   return (
     <div className="bg-[rgb(var(--bg-secondary))] border border-[rgb(var(--border))]">
@@ -86,6 +105,7 @@ export function BetSlip() {
 
           {/* Submit */}
           <button
+            onClick={handlePlaceBet}
             disabled={stake <= 0}
             className="btn-yellow w-full disabled:opacity-50 disabled:cursor-not-allowed py-1.5 text-xs font-semibold"
           >

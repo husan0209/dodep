@@ -4,10 +4,10 @@
 
 @layer base {
   :root {
-    --bg-primary: 15, 23, 42;
-    --bg-secondary: 22, 33, 50;
-    --bg-tertiary: 28, 41, 61;
-    --bg-elevated: 34, 50, 74;
+    --bg-primary: 9, 18, 33;
+    --bg-secondary: 14, 28, 46;
+    --bg-tertiary: 19, 35, 56;
+    --bg-elevated: 27, 46, 70;
     --text-primary: 226, 232, 240;
     --text-secondary: 148, 163, 184;
     --text-muted: 100, 116, 139;
@@ -15,15 +15,16 @@
     --accent-yellow: 251, 191, 36;
     --accent-green: 34, 197, 94;
     --accent-red: 239, 68, 68;
-    --border: 43, 62, 87;
-    --border-light: 56, 78, 108;
+    --border: 38, 58, 86;
+    --border-light: 58, 88, 122;
+    --ring: 59, 130, 246;
   }
 
   .dark {
-    --bg-primary: 15, 23, 42;
-    --bg-secondary: 22, 33, 50;
-    --bg-tertiary: 28, 41, 61;
-    --bg-elevated: 34, 50, 74;
+    --bg-primary: 9, 18, 33;
+    --bg-secondary: 14, 28, 46;
+    --bg-tertiary: 19, 35, 56;
+    --bg-elevated: 27, 46, 70;
     --text-primary: 226, 232, 240;
     --text-secondary: 148, 163, 184;
     --text-muted: 100, 116, 139;
@@ -31,8 +32,9 @@
     --accent-yellow: 251, 191, 36;
     --accent-green: 34, 197, 94;
     --accent-red: 239, 68, 68;
-    --border: 43, 62, 87;
-    --border-light: 56, 78, 108;
+    --border: 38, 58, 86;
+    --border-light: 58, 88, 122;
+    --ring: 59, 130, 246;
   }
 }
 
@@ -65,7 +67,8 @@
     background-color: rgb(var(--bg-primary));
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    font-size: 13px;
+    font-size: 14px;
+    line-height: 1.4;
   }
   
   ::selection {
@@ -105,24 +108,24 @@
 @layer components {
   /* Buttons */
   .btn-primary {
-    @apply bg-blue-600 hover:bg-blue-500 text-white font-medium py-1.5 px-3 rounded text-xs transition-colors duration-100;
+    @apply bg-blue-600 hover:bg-blue-500 text-white font-semibold py-2 px-3 rounded text-xs transition-all duration-150 shadow-md shadow-blue-900/30;
   }
 
   .btn-secondary {
-    @apply bg-[rgb(var(--bg-elevated))] hover:bg-[rgb(var(--border))] text-gray-200 font-medium py-1.5 px-3 rounded text-xs transition-colors duration-100;
+    @apply bg-[rgb(var(--bg-elevated))] hover:bg-[rgb(var(--border))] text-gray-200 font-medium py-2 px-3 rounded text-xs transition-colors duration-100;
   }
   
   .btn-outline {
-    @apply border border-[rgb(var(--border))] hover:border-[rgb(var(--border-light))] text-gray-400 hover:text-white font-medium py-1.5 px-3 rounded text-xs transition-colors duration-100;
+    @apply border border-[rgb(var(--border))] hover:border-[rgb(var(--border-light))] text-gray-300 hover:text-white font-medium py-2 px-3 rounded text-xs transition-colors duration-100;
   }
 
   .btn-yellow {
-    @apply bg-yellow-500 hover:bg-yellow-400 text-slate-900 font-semibold py-1.5 px-3 rounded text-xs transition-colors duration-100;
+    @apply bg-yellow-500 hover:bg-yellow-400 text-slate-900 font-semibold py-2 px-3 rounded text-xs transition-colors duration-100;
   }
 
   /* Cards */
   .card {
-    @apply bg-[rgb(var(--bg-secondary))] border border-[rgb(var(--border))] rounded;
+    @apply bg-[rgb(var(--bg-secondary))] border border-[rgb(var(--border))] rounded-lg shadow-lg shadow-black/20;
   }
 
   /* Odds Button - 1xbet style */
@@ -169,7 +172,7 @@
 
   /* Form Elements */
   .input-field {
-    @apply w-full px-2.5 py-1.5 bg-[rgb(var(--bg-primary))] border border-[rgb(var(--border))] rounded text-gray-200 placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-100 text-xs;
+    @apply w-full px-2.5 py-2 bg-[rgb(var(--bg-primary))] border border-[rgb(var(--border))] rounded text-gray-200 placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-colors duration-100 text-xs;
   }
 
   /* Tabs */

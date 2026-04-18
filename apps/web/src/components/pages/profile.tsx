@@ -30,6 +30,9 @@ export function ProfilePage() {
           <div className="bg-yellow-500 h-1.5 rounded-full" style={{ width: '33%' }} />
         </div>
         <p className="text-[10px] text-gray-600">Пройдите верификацию для увеличения лимитов</p>
+        <button className="btn-outline mt-3 w-full">
+          Пройти KYC сейчас
+        </button>
       </div>
     </div>
   )
