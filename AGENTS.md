@@ -36,7 +36,7 @@
 
 ## Примеры промптов
 
-### Для AI-агента (Claude, Qwen, Gemini, etc.):
+### Для AI-агента (Claude, Qwen, Gemini, Kiro, etc.):
 ```
 Я работаю как RUST_CORE_ENGINEER.
 Загрузи skills из профиля RUST_CORE_ENGINEER (файл .qwen/skills/_agents.md).

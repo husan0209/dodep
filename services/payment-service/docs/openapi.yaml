@@ -1,0 +1,1089 @@
+openapi: 3.0.3
+info:
+  title: Payment Service API
+  description: |
+    NOWPayments integration API for crypto deposits and withdrawals on a gambling platform.
+    
+    ## Authentication
+    All endpoints require Bearer token authentication via the `Authorization` header.
+    
+    ## Rate Limiting
+    - 100 requests per minute per user
+    - 1000 requests per minute per IP for webhook endpoints
+    
+    ## Idempotency
+    All write operations support idempotency via the `idempotency_key` field.
+    Replaying a request with the same key returns the original response.
+    
+    ## Error Codes
+    Payment service errors use codes in the 5000-5999 range.
+  version: 1.0.0
+  contact:
+    name: Platform Team
+    email: platform@example.com
+
+servers:
+  - url: https://api.example.com
+    description: Production
+  - url: https://api-staging.example.com
+    description: Staging
+
+tags:
+  - name: Deposits
+    description: Crypto deposit operations
+  - name: Withdrawals
+    description: Crypto withdrawal operations
+  - name: Webhooks
+    description: NOWPayments webhook handling
+
+security:
+  - BearerAuth: []
+
+paths:
+  /api/v1/payments/deposit:
+    post:
+      tags:
+        - Deposits
+      summary: Initiate a crypto deposit
+      description: |
+        Creates a new deposit payment request and returns a crypto address for the user to send funds to.
+        
+        The user must have a valid KYC level. Daily deposit limits are enforced based on KYC level:
+        - Level 0: $500/day
+        - Level 1: $2,000/day
+        - Level 2: $10,000/day
+        - Level 3: $50,000/day
+      operationId: initiateDeposit
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DepositRequest'
+            examples:
+              btc_deposit:
+                summary: BTC Deposit
+                value:
+                  amount: "100.00"
+                  currency: "BTC"
+                  idempotency_key: "dep_abc123xyz789"
+              usdt_deposit:
+                summary: USDT TRC-20 Deposit
+                value:
+                  amount: "500.00"
+                  currency: "USDTTRX"
+                  idempotency_key: "dep_def456uvw012"
+      responses:
+        '201':
+          description: Deposit created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepositResponse'
+              example:
+                success: true
+                data:
+                  payment_uuid: "550e8400-e29b-41d4-a716-446655440000"
+                  payment_id: "123456789"
+                  pay_address: "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh"
+                  pay_amount: "0.0025"
+                  pay_currency: "BTC"
+                  fiat_amount: "100.00"
+                  expires_at: "2024-01-15T12:00:00Z"
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalid_amount:
+                  summary: Invalid amount format
+                  value:
+                    code: 4000
+                    message: "invalid amount format"
+                invalid_currency:
+                  summary: Currency not supported
+                  value:
+                    code: 5009
+                    message: "cryptocurrency not supported"
+                    details:
+                      currency: "DOGE"
+        '403':
+          description: KYC level insufficient
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: 5004
+                message: "KYC level 2 required for withdrawals"
+                details:
+                  current_level: 1
+                  required_level: 2
+        '422':
+          description: Daily limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: 5005
+                message: "daily limit exceeded"
+                details:
+                  limit: 500.00
+                  used: 450.00
+                  requested: 100.00
+                  available: 50.00
+
+  /api/v1/payments/{id}:
+    get:
+      tags:
+        - Deposits
+      summary: Get payment by ID
+      description: Retrieves a specific payment by its UUID
+      operationId: getPayment
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Payment UUID
+          schema:
+            type: string
+            format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: Payment found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+              example:
+                success: true
+                data:
+                  uuid: "550e8400-e29b-41d4-a716-446655440000"
+                  payment_id: "123456789"
+                  user_id: 1001
+                  requested_amount: "100.00"
+                  actual_amount: "100.50"
+                  fiat_amount: "100.00"
+                  fiat_currency: "USD"
+                  crypto_currency: "BTC"
+                  pay_address: "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh"
+                  pay_amount: "0.0025"
+                  status: "finished"
+                  created_at: "2024-01-15T10:00:00Z"
+                  updated_at: "2024-01-15T10:30:00Z"
+                  completed_at: "2024-01-15T10:30:00Z"
+                  expires_at: "2024-01-15T12:00:00Z"
+        '404':
+          description: Payment not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: 5001
+                message: "payment not found"
+                details:
+                  payment_id: "550e8400-e29b-41d4-a716-446655440000"
+
+  /api/v1/payments/history:
+    get:
+      tags:
+        - Deposits
+      summary: List payment history
+      description: Retrieves paginated payment history for the authenticated user
+      operationId: getPaymentHistory
+      parameters:
+        - name: limit
+          in: query
+          description: Number of items per page (max 100)
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          example: 20
+        - name: cursor
+          in: query
+          description: Pagination cursor for next page
+          schema:
+            type: string
+          example: "eyJpZCI6MTIzNDU2fQ=="
+        - name: status
+          in: query
+          description: Filter by payment status
+          schema:
+            $ref: '#/components/schemas/PaymentStatus'
+      responses:
+        '200':
+          description: Payment history retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentHistoryResponse'
+              example:
+                success: true
+                data:
+                  items:
+                    - payment_uuid: "550e8400-e29b-41d4-a716-446655440000"
+                      amount: "100.00"
+                      currency: "BTC"
+                      status: "finished"
+                      created_at: "2024-01-15T10:00:00Z"
+                    - payment_uuid: "660f9500-f30c-52e5-b827-557766551111"
+                      amount: "50.00"
+                      currency: "ETH"
+                      status: "pending"
+                      created_at: "2024-01-14T15:00:00Z"
+                  next_cursor: "eyJpZCI6MTEwMDAwfQ=="
+                  has_more: true
+
+  /api/v1/payments/methods:
+    get:
+      tags:
+        - Deposits
+      summary: Get available payment methods
+      description: Returns list of supported cryptocurrencies for deposits
+      operationId: getPaymentMethods
+      responses:
+        '200':
+          description: Payment methods retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentMethodsResponse'
+              example:
+                success: true
+                data:
+                  currencies:
+                    - code: "BTC"
+                      name: "BTC"
+                      network: "bitcoin"
+                      min_amount: "10.00"
+                      is_available: true
+                    - code: "ETH"
+                      name: "ETH"
+                      network: "ethereum"
+                      min_amount: "10.00"
+                      is_available: true
+                    - code: "USDTTRX"
+                      name: "USDT"
+                      network: "tron"
+                      min_amount: "10.00"
+                      is_available: true
+                    - code: "USDTETH"
+                      name: "USDT"
+                      network: "ethereum"
+                      min_amount: "10.00"
+                      is_available: true
+                    - code: "USDC"
+                      name: "USDC"
+                      network: "ethereum"
+                      min_amount: "10.00"
+                      is_available: true
+                    - code: "LTC"
+                      name: "LTC"
+                      network: "litecoin"
+                      min_amount: "10.00"
+                      is_available: true
+                    - code: "BCH"
+                      name: "BCH"
+                      network: "bitcoincash"
+                      min_amount: "10.00"
+                      is_available: true
+
+  /api/v1/payments/withdraw:
+    post:
+      tags:
+        - Withdrawals
+      summary: Initiate a crypto withdrawal
+      description: |
+        Creates a withdrawal request to send crypto to an external address.
+        
+        Requirements:
+        - KYC level 2 or higher required
+        - Sufficient available balance
+        - Valid crypto address for the selected currency
+        
+        Daily withdrawal limits by KYC level:
+        - Level 0: $0/day (not allowed)
+        - Level 1: $500/day
+        - Level 2: $5,000/day
+        - Level 3: $25,000/day
+      operationId: initiateWithdrawal
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WithdrawRequest'
+            examples:
+              btc_withdrawal:
+                summary: BTC Withdrawal
+                value:
+                  amount: "50.00"
+                  currency: "BTC"
+                  address: "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh"
+                  idempotency_key: "wdh_abc123xyz789"
+              usdt_withdrawal:
+                summary: USDT TRC-20 Withdrawal
+                value:
+                  amount: "100.00"
+                  currency: "USDTTRX"
+                  address: "TRX1234567890abcdefghijklmnopqrstuvwxyz"
+                  idempotency_key: "wdh_def456uvw012"
+      responses:
+        '201':
+          description: Withdrawal created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WithdrawResponse'
+              example:
+                success: true
+                data:
+                  withdrawal_uuid: "770g0600-g41d-63f6-c938-668877662222"
+                  withdrawal_id: "987654321"
+                  amount: "0.00125"
+                  fiat_amount: "50.00"
+                  currency: "BTC"
+                  address: "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh"
+                  status: "processing"
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalid_address:
+                  summary: Invalid crypto address
+                  value:
+                    code: 5008
+                    message: "invalid crypto address format"
+                invalid_amount:
+                  summary: Invalid amount
+                  value:
+                    code: 5014
+                    message: "invalid amount"
+        '403':
+          description: KYC level insufficient
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: 5004
+                message: "KYC level 2 required for withdrawals"
+                details:
+                  current_level: 1
+                  required_level: 2
+        '422':
+          description: Insufficient balance or limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                insufficient_balance:
+                  summary: Insufficient balance
+                  value:
+                    code: 5006
+                    message: "insufficient balance"
+                    details:
+                      available: 25.00
+                      requested: 50.00
+                limit_exceeded:
+                  summary: Daily limit exceeded
+                  value:
+                    code: 5005
+                    message: "daily limit exceeded"
+                    details:
+                      limit: 500.00
+                      used: 480.00
+                      requested: 50.00
+                      available: 20.00
+
+  /api/v1/payments/withdrawals/{id}:
+    get:
+      tags:
+        - Withdrawals
+      summary: Get withdrawal by ID
+      description: Retrieves a specific withdrawal by its UUID
+      operationId: getWithdrawal
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Withdrawal UUID
+          schema:
+            type: string
+            format: uuid
+          example: "770g0600-g41d-63f6-c938-668877662222"
+      responses:
+        '200':
+          description: Withdrawal found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WithdrawalResponse'
+              example:
+                success: true
+                data:
+                  uuid: "770g0600-g41d-63f6-c938-668877662222"
+                  withdrawal_id: "987654321"
+                  user_id: 1001
+                  amount: "0.00125"
+                  fiat_amount: "50.00"
+                  fiat_currency: "USD"
+                  crypto_currency: "BTC"
+                  address: "bc1qxy2k...0wlh"
+                  status: "finished"
+                  created_at: "2024-01-15T10:00:00Z"
+                  updated_at: "2024-01-15T10:30:00Z"
+                  completed_at: "2024-01-15T10:30:00Z"
+        '404':
+          description: Withdrawal not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: 5012
+                message: "withdrawal not found"
+                details:
+                  withdrawal_id: "770g0600-g41d-63f6-c938-668877662222"
+
+  /api/v1/payments/withdrawals/history:
+    get:
+      tags:
+        - Withdrawals
+      summary: List withdrawal history
+      description: Retrieves paginated withdrawal history for the authenticated user
+      operationId: getWithdrawalHistory
+      parameters:
+        - name: limit
+          in: query
+          description: Number of items per page (max 100)
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          example: 20
+        - name: cursor
+          in: query
+          description: Pagination cursor for next page
+          schema:
+            type: string
+          example: "eyJpZCI6MTIzNDU2fQ=="
+        - name: status
+          in: query
+          description: Filter by withdrawal status
+          schema:
+            $ref: '#/components/schemas/WithdrawalStatus'
+      responses:
+        '200':
+          description: Withdrawal history retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WithdrawalHistoryResponse'
+              example:
+                success: true
+                data:
+                  items:
+                    - withdrawal_uuid: "770g0600-g41d-63f6-c938-668877662222"
+                      amount: "50.00"
+                      currency: "BTC"
+                      address: "bc1qxy2k...0wlh"
+                      status: "finished"
+                      created_at: "2024-01-15T10:00:00Z"
+                    - withdrawal_uuid: "880h1700-h52e-74g7-d049-779988773333"
+                      amount: "100.00"
+                      currency: "ETH"
+                      address: "0x1234...5678"
+                      status: "processing"
+                      created_at: "2024-01-14T15:00:00Z"
+                  next_cursor: "eyJpZCI6MTEwMDAwfQ=="
+                  has_more: false
+
+  /api/v1/payments/webhooks/nowpayments:
+    post:
+      tags:
+        - Webhooks
+      summary: NOWPayments webhook endpoint
+      description: |
+        Receives IPN (Instant Payment Notification) webhooks from NOWPayments.
+        
+        The webhook payload is verified using HMAC-SHA512 signature in the `x-nowpayments-sig` header.
+        
+        Supported webhook types:
+        - Payment status updates (deposits)
+        - Payout status updates (withdrawals)
+      operationId: processNOWPaymentsWebhook
+      security: []
+      parameters:
+        - name: x-nowpayments-sig
+          in: header
+          required: true
+          description: HMAC-SHA512 signature of the payload
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NOWPaymentsWebhook'
+            examples:
+              deposit_finished:
+                summary: Deposit completed
+                value:
+                  payment_id: "123456789"
+                  payment_status: "finished"
+                  pay_address: "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh"
+                  price_amount: "100.00"
+                  price_currency: "USD"
+                  pay_amount: "0.0025"
+                  pay_currency: "BTC"
+                  order_id: "order_abc123"
+                  created_at: "2024-01-15T10:00:00Z"
+                  updated_at: "2024-01-15T10:30:00Z"
+              withdrawal_finished:
+                summary: Withdrawal completed
+                value:
+                  withdrawal_id: "987654321"
+                  status: "finished"
+                  amount: "0.00125"
+                  currency: "BTC"
+                  address: "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh"
+                  batch_id: "batch_xyz789"
+      responses:
+        '200':
+          description: Webhook processed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookResponse'
+              example:
+                processed: true
+                type: "deposit"
+                id: "123456789"
+                status: "finished"
+        '401':
+          description: Invalid or missing signature
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: 5011
+                message: "webhook signature verification failed"
+        '500':
+          description: Webhook processing failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: 5000
+                message: "webhook processing failed"
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token obtained from authentication service
+
+  schemas:
+    # Request schemas
+    DepositRequest:
+      type: object
+      required:
+        - amount
+        - currency
+        - idempotency_key
+      properties:
+        amount:
+          type: string
+          description: Fiat amount in USD (will be converted to crypto)
+          pattern: '^\d+(\.\d{1,2})?$'
+          example: "100.00"
+        currency:
+          type: string
+          description: Cryptocurrency code
+          enum:
+            - BTC
+            - ETH
+            - USDTETH
+            - USDTTRX
+            - USDC
+            - LTC
+            - BCH
+          example: "BTC"
+        idempotency_key:
+          type: string
+          description: Unique key for idempotent requests
+          minLength: 1
+          maxLength: 255
+          example: "dep_abc123xyz789"
+
+    WithdrawRequest:
+      type: object
+      required:
+        - amount
+        - currency
+        - address
+        - idempotency_key
+      properties:
+        amount:
+          type: string
+          description: Fiat amount in USD to withdraw
+          pattern: '^\d+(\.\d{1,2})?$'
+          example: "50.00"
+        currency:
+          type: string
+          description: Cryptocurrency code
+          enum:
+            - BTC
+            - ETH
+            - USDTETH
+            - USDTTRX
+            - USDC
+            - LTC
+            - BCH
+          example: "BTC"
+        address:
+          type: string
+          description: Destination crypto address
+          minLength: 26
+          maxLength: 100
+          example: "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh"
+        idempotency_key:
+          type: string
+          description: Unique key for idempotent requests
+          minLength: 1
+          maxLength: 255
+          example: "wdh_abc123xyz789"
+
+    # Response schemas
+    DepositResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            payment_uuid:
+              type: string
+              format: uuid
+              description: Internal payment UUID
+            payment_id:
+              type: string
+              description: NOWPayments payment ID
+            pay_address:
+              type: string
+              description: Crypto address to send funds to
+            pay_amount:
+              type: string
+              description: Expected crypto amount
+            pay_currency:
+              type: string
+              description: Cryptocurrency code
+            fiat_amount:
+              type: string
+              description: Fiat amount in USD
+            expires_at:
+              type: string
+              format: date-time
+              description: Payment expiration time
+
+    PaymentResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: '#/components/schemas/Payment'
+
+    Payment:
+      type: object
+      properties:
+        uuid:
+          type: string
+          format: uuid
+        payment_id:
+          type: string
+        user_id:
+          type: integer
+          format: int64
+        requested_amount:
+          type: string
+        actual_amount:
+          type: string
+          nullable: true
+        fiat_amount:
+          type: string
+        fiat_currency:
+          type: string
+        crypto_currency:
+          type: string
+        pay_address:
+          type: string
+        pay_amount:
+          type: string
+          nullable: true
+        status:
+          $ref: '#/components/schemas/PaymentStatus'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    PaymentHistoryResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/PaymentItem'
+            next_cursor:
+              type: string
+              nullable: true
+            has_more:
+              type: boolean
+
+    PaymentItem:
+      type: object
+      properties:
+        payment_uuid:
+          type: string
+          format: uuid
+        amount:
+          type: string
+        currency:
+          type: string
+        status:
+          $ref: '#/components/schemas/PaymentStatus'
+        created_at:
+          type: string
+          format: date-time
+
+    PaymentMethodsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            currencies:
+              type: array
+              items:
+                $ref: '#/components/schemas/CurrencyInfo'
+
+    CurrencyInfo:
+      type: object
+      properties:
+        code:
+          type: string
+          description: Currency code
+        name:
+          type: string
+          description: Display name
+        network:
+          type: string
+          description: Blockchain network
+        min_amount:
+          type: string
+          description: Minimum deposit amount in USD
+        is_available:
+          type: boolean
+          description: Whether currency is currently available
+
+    WithdrawResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            withdrawal_uuid:
+              type: string
+              format: uuid
+              description: Internal withdrawal UUID
+            withdrawal_id:
+              type: string
+              description: NOWPayments withdrawal ID
+            amount:
+              type: string
+              description: Crypto amount
+            fiat_amount:
+              type: string
+              description: Fiat amount in USD
+            currency:
+              type: string
+              description: Cryptocurrency code
+            address:
+              type: string
+              description: Destination address (may be masked)
+            status:
+              $ref: '#/components/schemas/WithdrawalStatus'
+
+    WithdrawalResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: '#/components/schemas/Withdrawal'
+
+    Withdrawal:
+      type: object
+      properties:
+        uuid:
+          type: string
+          format: uuid
+        withdrawal_id:
+          type: string
+        user_id:
+          type: integer
+          format: int64
+        amount:
+          type: string
+        fiat_amount:
+          type: string
+        fiat_currency:
+          type: string
+        crypto_currency:
+          type: string
+        address:
+          type: string
+          description: Destination address (may be masked)
+        status:
+          $ref: '#/components/schemas/WithdrawalStatus'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    WithdrawalHistoryResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/WithdrawalItem'
+            next_cursor:
+              type: string
+              nullable: true
+            has_more:
+              type: boolean
+
+    WithdrawalItem:
+      type: object
+      properties:
+        withdrawal_uuid:
+          type: string
+          format: uuid
+        amount:
+          type: string
+        currency:
+          type: string
+        address:
+          type: string
+          description: Destination address (masked)
+        status:
+          $ref: '#/components/schemas/WithdrawalStatus'
+        created_at:
+          type: string
+          format: date-time
+
+    # Enums
+    PaymentStatus:
+      type: string
+      enum:
+        - pending
+        - waiting
+        - confirming
+        - confirmed
+        - sending
+        - partially_paid
+        - finished
+        - failed
+        - expired
+        - refunded
+      description: |
+        Payment status values:
+        - `pending`: Payment created, waiting for initialization
+        - `waiting`: Waiting for crypto deposit
+        - `confirming`: Transaction detected, confirming on blockchain
+        - `confirmed`: Transaction confirmed
+        - `sending`: Sending to platform wallet
+        - `partially_paid`: Partial amount received
+        - `finished`: Payment completed successfully
+        - `failed`: Payment failed
+        - `expired`: Payment expired before completion
+        - `refunded`: Payment was refunded
+
+    WithdrawalStatus:
+      type: string
+      enum:
+        - processing
+        - sending
+        - sent
+        - finished
+        - failed
+        - cancelled
+      description: |
+        Withdrawal status values:
+        - `processing`: Withdrawal request being processed
+        - `sending`: Sending to destination address
+        - `sent`: Transaction sent to blockchain
+        - `finished`: Withdrawal completed successfully
+        - `failed`: Withdrawal failed
+        - `cancelled`: Withdrawal was cancelled
+
+    # Webhook schemas
+    NOWPaymentsWebhook:
+      type: object
+      description: NOWPayments IPN webhook payload
+      properties:
+        payment_id:
+          type: string
+          description: NOWPayments payment ID (for deposits)
+        withdrawal_id:
+          type: string
+          description: NOWPayments withdrawal ID (for withdrawals)
+        payment_status:
+          type: string
+          description: Payment status (for deposits)
+        status:
+          type: string
+          description: Withdrawal status (for withdrawals)
+        pay_address:
+          type: string
+        price_amount:
+          type: string
+        price_currency:
+          type: string
+        pay_amount:
+          type: string
+        pay_currency:
+          type: string
+        order_id:
+          type: string
+        amount:
+          type: string
+        currency:
+          type: string
+        address:
+          type: string
+        batch_id:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    WebhookResponse:
+      type: object
+      properties:
+        processed:
+          type: boolean
+        type:
+          type: string
+          enum:
+            - deposit
+            - withdrawal
+        id:
+          type: string
+        status:
+          type: string
+
+    # Error schemas
+    ErrorResponse:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: integer
+          description: Error code
+          example: 5001
+        message:
+          type: string
+          description: Human-readable error message
+          example: "payment not found"
+        details:
+          type: object
+          description: Additional error details
+          additionalProperties: true
+
+    # Error codes reference
+    ErrorCodes:
+      type: object
+      description: |
+        Payment Service Error Codes (5000-5999):
+        
+        | Code | Name | Description | HTTP Status |
+        |------|------|-------------|-------------|
+        | 5001 | PAYMENT_NOT_FOUND | Payment does not exist | 404 |
+        | 5002 | PAYMENT_ALREADY_PROCESSED | Payment already completed | 422 |
+        | 5003 | PAYMENT_EXPIRED | Payment has expired | 400 |
+        | 5004 | KYC_REQUIRED | KYC level 2 required | 403 |
+        | 5005 | DAILY_LIMIT_EXCEEDED | Daily limit exceeded | 422 |
+        | 5006 | INSUFFICIENT_BALANCE | Not enough balance | 422 |
+        | 5007 | WALLET_LOCKED | Wallet is locked | 403 |
+        | 5008 | INVALID_CRYPTO_ADDRESS | Invalid address format | 400 |
+        | 5009 | CURRENCY_NOT_SUPPORTED | Currency not supported | 400 |
+        | 5010 | PROVIDER_UNAVAILABLE | Payment provider unavailable | 502 |
+        | 5011 | WEBHOOK_SIGNATURE_INVALID | Invalid webhook signature | 401 |
+        | 5012 | WITHDRAWAL_NOT_FOUND | Withdrawal does not exist | 404 |
+        | 5013 | WITHDRAWAL_ALREADY_PROCESSED | Withdrawal already completed | 422 |
+        | 5014 | INVALID_AMOUNT | Invalid amount value | 400 |
+        | 5015 | INVALID_STATUS_TRANSITION | Invalid status change | 400 |

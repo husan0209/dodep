@@ -8,6 +8,14 @@
 Или в системном промпте:
 > «Load skills from profile: RUST_CORE_ENGINEER»
 
+## УРОВНИ ЗАГРУЗКИ
+
+| Уровень | Описание | Когда загружать |
+|---------|----------|----------------|
+| 🔵 **Основные** | Проектные скиллы роли | ВСЕГДА |
+| 🟢 **По задаче** | Доменные скиллы | По типу конкретной задачи |
+| 🟡 **Справочные** | Cross-cutting методологии | При дебаге, TDD, финансовой логике |
+
 ---
 
 ## PROFILE: RUST_CORE_ENGINEER
@@ -29,6 +37,11 @@
 - Wallet Core → + `domain-specific/wallet-financial-ops.skill.md` + `architecture/data-consistency.skill.md`
 - Risk/Fraud → + `domain-specific/fraud-detection.skill.md` + `rust/rust-performance.skill.md`
 
+**Справочные (при необходимости):**
+- При дебаге → `systematic-debugging/SKILL.md`
+- При TDD → `test-driven-development/SKILL.md`
+- При финансовой логике → `domain-fintech/SKILL.md`
+
 ---
 
 ## PROFILE: RUST_WEBSOCKET_ENGINEER
@@ -43,6 +56,10 @@
 - `rust/rust-performance.skill.md`
 - `rust/rust-error-handling.skill.md`
 - `data/redpanda-events.skill.md`
+
+**Справочные (при необходимости):**
+- При дебаге → `systematic-debugging/SKILL.md`
+- При финансовой логике → `domain-fintech/SKILL.md`
 
 ---
 
@@ -68,6 +85,11 @@
 - Casino → + `domain-specific/casino-integration.skill.md`
 - Notifications → + `data/redpanda-events.skill.md`
 
+**Справочные (при необходимости):**
+- При дебаге → `systematic-debugging/SKILL.md`
+- При TDD → `test-driven-development/SKILL.md`
+- При финансовой логике → `domain-fintech/SKILL.md`
+
 ---
 
 ## PROFILE: FRONTEND_WEB_ENGINEER
@@ -88,6 +110,10 @@
 - Casino UI → + `domain-specific/casino-integration.skill.md`
 - Wallet UI → + `domain-specific/wallet-financial-ops.skill.md`
 
+**Справочные (при необходимости):**
+- При дебаге → `systematic-debugging/SKILL.md`
+- При TDD → `test-driven-development/SKILL.md`
+
 ---
 
 ## PROFILE: FLUTTER_MOBILE_ENGINEER
@@ -101,6 +127,10 @@
 - `frontend/typescript-shared.skill.md` *(для понимания API types)*
 - `security/security-general.skill.md`
 
+**Справочные (при необходимости):**
+- При дебаге → `systematic-debugging/SKILL.md`
+- При TDD → `test-driven-development/SKILL.md`
+
 ---
 
 ## PROFILE: ADMIN_PANEL_ENGINEER
@@ -113,6 +143,10 @@
 - `frontend/typescript-shared.skill.md`
 - `frontend/nextjs-api-integration.skill.md` *(API client patterns)*
 - `security/security-general.skill.md`
+
+**Справочные (при необходимости):**
+- При дебаге → `systematic-debugging/SKILL.md`
+- При TDD → `test-driven-development/SKILL.md`
 
 ---
 
@@ -128,6 +162,10 @@
 - `data/dragonflydb-caching.skill.md`
 - `data/redpanda-events.skill.md`
 - `architecture/data-consistency.skill.md`
+
+**Справочные (при необходимости):**
+- При дебаге → `systematic-debugging/SKILL.md`
+- При финансовой логике → `domain-fintech/SKILL.md`
 
 ---
 
@@ -146,6 +184,9 @@
 - `observability/logging-standards.skill.md`
 - `observability/alerting-rules.skill.md`
 
+**Справочные (при необходимости):**
+- При дебаге → `systematic-debugging/SKILL.md`
+
 ---
 
 ## PROFILE: SECURITY_ENGINEER
@@ -161,6 +202,10 @@
 - `domain-specific/kyc-aml-compliance.skill.md`
 - `domain-specific/responsible-gambling.skill.md`
 
+**Справочные (при необходимости):**
+- При дебаге → `systematic-debugging/SKILL.md`
+- При финансовой логике → `domain-fintech/SKILL.md`
+
 ---
 
 ## PROFILE: ML_FRAUD_ENGINEER
@@ -174,6 +219,9 @@
 - `domain-specific/fraud-detection.skill.md`
 - `data/clickhouse-analytics.skill.md`
 - `data/redpanda-events.skill.md`
+
+**Справочные (при необходимости):**
+- При дебаге → `systematic-debugging/SKILL.md`
 
 ---
 
@@ -189,6 +237,9 @@
 - `observability/alerting-rules.skill.md`
 - `infrastructure/kubernetes-manifests.skill.md`
 
+**Справочные (при необходимости):**
+- При дебаге → `systematic-debugging/SKILL.md`
+
 ---
 
 ## PROFILE: PROTOBUF_CONTRACTS
@@ -200,3 +251,6 @@
 - `protobuf/protobuf-style-guide.skill.md`
 - `architecture/api-design-guidelines.skill.md`
 - `architecture/event-driven-design.skill.md`
+
+**Справочные (при необходимости):**
+- При дебаге → `systematic-debugging/SKILL.md`

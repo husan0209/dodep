@@ -1,0 +1,39 @@
+# Payment Service - Production Configuration
+# Override values for production environment
+
+environment: production
+
+server:
+  port: 8080
+  read_timeout_sec: 10
+  write_timeout_sec: 10
+  idle_timeout_sec: 60
+
+database:
+  ssl_mode: require
+  max_open_conns: 50
+  max_idle_conns: 10
+  conn_max_lifetime_sec: 600
+
+redis:
+  pool_size: 200
+
+kafka:
+  acks: all
+  compression: snappy
+  retry_max: 5
+  retry_backoff_ms: 200
+
+nowpayments:
+  base_url: https://api.nowpayments.io/v1
+  timeout: 30s
+  max_retries: 3
+  retry_delay: 2s
+
+wallet:
+  enable_tls: true
+  timeout: 5s
+
+user:
+  enable_tls: true
+  timeout: 5s
