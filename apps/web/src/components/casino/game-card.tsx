@@ -3,6 +3,7 @@
 import { useFavoritesStore } from '@stores/favorites-store'
 import { StarIcon as StarOutline } from '@heroicons/react/24/outline'
 import { StarIcon as StarSolid } from '@heroicons/react/24/solid'
+import { trackEvent } from '@lib/telemetry'
 
 interface GameCardProps {
   game: {
@@ -17,13 +18,15 @@ interface GameCardProps {
     rtp: number
     volatility: string
   }
+  compact?: boolean
 }
 
-export function GameCard({ game }: GameCardProps) {
+export function GameCard({ game, compact = false }: GameCardProps) {
   const { toggleFavorite, isFavorite } = useFavoritesStore()
   const favorite = isFavorite(game.id)
 
   const handlePlay = () => {
+    trackEvent('casino_game_play_clicked', { gameId: game.id, gameName: game.name })
     console.log('Playing game:', game.id)
   }
 
@@ -34,7 +37,8 @@ export function GameCard({ game }: GameCardProps) {
   return (
     <div className="group relative rounded bg-[rgb(var(--bg-secondary))] border border-[rgb(var(--border))] hover:border-[rgb(var(--border-light))] transition-colors overflow-hidden">
       {/* Game image */}
-      <div className="aspect-[3/4] relative overflow-hidden">
+      <div className={`relative overflow-hidden ${compact ? 'aspect-[4/5]' : 'aspect-[3/4]'}`}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={game.thumbnailUrl || '/placeholder-game.jpg'}
           alt={game.name}
