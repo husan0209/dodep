@@ -6,6 +6,7 @@ import {
   TrophyOutlined,
   PlayCircleOutlined,
   GiftOutlined,
+  TeamOutlined,
   SafetyOutlined,
   SettingOutlined,
   LogoutOutlined,
@@ -86,6 +87,29 @@ const menuItems: MenuItem[] = [
     icon: <GiftOutlined />,
     label: "Bonuses",
     permission: "bonus.create",
+  },
+  {
+    key: "/affiliates",
+    icon: <TeamOutlined />,
+    label: "Affiliates",
+    permission: "affiliate.manage",
+    children: [
+      {
+        key: "/affiliates",
+        label: "All Affiliates",
+        permission: "affiliate.manage",
+      },
+      {
+        key: "/affiliates/payouts",
+        label: "Payouts",
+        permission: "affiliate.manage",
+      },
+      {
+        key: "/affiliates/fraud",
+        label: "Fraud Flags",
+        permission: "affiliate.manage",
+      },
+    ],
   },
   {
     key: "/risk",
@@ -199,7 +223,7 @@ export default function AppLayout() {
               whiteSpace: "nowrap",
             }}
           >
-            {collapsed ? "OC" : "Opus Casino"}
+            {collapsed ? "DOD" : "DOD"}
           </Text>
         </div>
         <Menu

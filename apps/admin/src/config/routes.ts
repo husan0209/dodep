@@ -74,6 +74,17 @@ export const routeConfig: RouteConfig[] = [
     permission: "bonus.create",
   },
   {
+    path: "/affiliates",
+    label: "Affiliates",
+    icon: "TeamOutlined",
+    permission: "affiliate.manage",
+    children: [
+      { path: "/affiliates", label: "All Affiliates", permission: "affiliate.manage" },
+      { path: "/affiliates/payouts", label: "Payout Queue", permission: "affiliate.manage" },
+      { path: "/affiliates/fraud", label: "Fraud Flags", permission: "affiliate.manage" },
+    ],
+  },
+  {
     path: "/risk",
     label: "Risk & Compliance",
     icon: "SafetyOutlined",

@@ -25,34 +25,72 @@ func NewAuthRepository(pool *pgxpool.Pool, redis *redis.Client) *AuthRepository 
 }
 
 // CreateUser creates a new user
+// NOTE: Real DB has hybrid schema (TypeORM camelCase + Go snake_case columns).
+// We dual-write to both column sets for compatibility.
 func (r *AuthRepository) CreateUser(ctx context.Context, user *domain.User) error {
 	query := `
-		INSERT INTO users (uuid, email, phone, password_hash, username, status, country_code, currency_code, two_fa_enabled, email_verified, phone_verified, created_at, updated_at, metadata)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW(), '{}')
-		RETURNING id, created_at, updated_at
+		INSERT INTO users (
+			uuid, email, username, phone,
+			"passwordHash", password_hash,
+			status, country_code, currency_code,
+			two_fa_enabled, "twoFactorEnabled",
+			email_verified, "isEmailVerified",
+			phone_verified, "isPhoneVerified",
+			metadata
+		)
+		VALUES (
+			$1, $2, $3, $4,
+			$5, $5,
+			$6, $7, $8,
+			$9, $9,
+			$10, $10,
+			$11, $11,
+			'{}'
+		)
+		RETURNING id::text, "createdAt", "updatedAt"
 	`
 
 	return r.pool.QueryRow(ctx, query,
-		user.UUID, user.Email, user.Phone, user.PasswordHash, user.Username,
+		user.UUID, user.Email, user.Username, user.Phone,
+		user.PasswordHash,
 		user.Status, user.CountryCode, user.CurrencyCode,
 		user.TwoFAEnabled, user.EmailVerified, user.PhoneVerified,
 	).Scan(&user.ID, &user.CreatedAt, &user.UpdatedAt)
 }
 
 // GetUserByEmail retrieves a user by email
+// NOTE: Uses COALESCE to read from either camelCase or snake_case columns.
 func (r *AuthRepository) GetUserByEmail(ctx context.Context, email string) (*domain.User, error) {
 	query := `
-		SELECT id, uuid, email, phone, password_hash, username, status, kyc_level,
-		       country_code, currency_code, two_fa_enabled, two_fa_secret,
-		       email_verified, phone_verified, created_at, updated_at, last_login_at, metadata
+		SELECT
+			id::text,
+			COALESCE(uuid::text, id::text),
+			email,
+			COALESCE(phone, ''),
+			COALESCE(password_hash, "passwordHash"),
+			COALESCE(username, ''),
+			COALESCE(status, 'active'),
+			COALESCE(kyc_level, 0),
+			COALESCE(country_code, 'RU'),
+			COALESCE(currency_code, currency, 'USD'),
+			COALESCE(two_fa_enabled, "twoFactorEnabled", false),
+			COALESCE(two_fa_secret, "twoFactorSecret"),
+			COALESCE(email_verified, "isEmailVerified", false),
+			COALESCE(phone_verified, "isPhoneVerified", false),
+			COALESCE(created_at, "createdAt"),
+			COALESCE(updated_at, "updatedAt"),
+			last_login_at,
+			COALESCE(metadata::text, '{}')
 		FROM users
-		WHERE email = $1 AND deleted_at IS NULL
+		WHERE email = $1 AND (deleted_at IS NULL AND "isBanned" = false)
 	`
 
 	user := &domain.User{}
+	var phone string
 	err := r.pool.QueryRow(ctx, query, email).Scan(
-		&user.ID, &user.UUID, &user.Email, &user.Phone, &user.PasswordHash,
-		&user.Username, &user.Status, &user.KYCLevel,
+		&user.ID, &user.UUID, &user.Email, &phone,
+		&user.PasswordHash, &user.Username,
+		&user.Status, &user.KYCLevel,
 		&user.CountryCode, &user.CurrencyCode,
 		&user.TwoFAEnabled, &user.TwoFASecret,
 		&user.EmailVerified, &user.PhoneVerified,
@@ -64,24 +102,46 @@ func (r *AuthRepository) GetUserByEmail(ctx context.Context, email string) (*dom
 		}
 		return nil, fmt.Errorf("failed to get user by email: %w", err)
 	}
+	if phone != "" {
+		user.Phone = &phone
+	}
 
 	return user, nil
 }
 
 // GetUserByID retrieves a user by ID
-func (r *AuthRepository) GetUserByID(ctx context.Context, id int64) (*domain.User, error) {
+// NOTE: Uses COALESCE to read from either camelCase or snake_case columns.
+func (r *AuthRepository) GetUserByID(ctx context.Context, id string) (*domain.User, error) {
 	query := `
-		SELECT id, uuid, email, phone, password_hash, username, status, kyc_level,
-		       country_code, currency_code, two_fa_enabled, two_fa_secret,
-		       email_verified, phone_verified, created_at, updated_at, last_login_at, metadata
+		SELECT
+			id::text,
+			COALESCE(uuid::text, id::text),
+			email,
+			COALESCE(phone, ''),
+			COALESCE(password_hash, "passwordHash"),
+			COALESCE(username, ''),
+			COALESCE(status, 'active'),
+			COALESCE(kyc_level, 0),
+			COALESCE(country_code, 'RU'),
+			COALESCE(currency_code, currency, 'USD'),
+			COALESCE(two_fa_enabled, "twoFactorEnabled", false),
+			COALESCE(two_fa_secret, "twoFactorSecret"),
+			COALESCE(email_verified, "isEmailVerified", false),
+			COALESCE(phone_verified, "isPhoneVerified", false),
+			COALESCE(created_at, "createdAt"),
+			COALESCE(updated_at, "updatedAt"),
+			last_login_at,
+			COALESCE(metadata::text, '{}')
 		FROM users
-		WHERE id = $1 AND deleted_at IS NULL
+		WHERE id = $1::uuid AND (deleted_at IS NULL AND "isBanned" = false)
 	`
 
 	user := &domain.User{}
+	var phone string
 	err := r.pool.QueryRow(ctx, query, id).Scan(
-		&user.ID, &user.UUID, &user.Email, &user.Phone, &user.PasswordHash,
-		&user.Username, &user.Status, &user.KYCLevel,
+		&user.ID, &user.UUID, &user.Email, &phone,
+		&user.PasswordHash, &user.Username,
+		&user.Status, &user.KYCLevel,
 		&user.CountryCode, &user.CurrencyCode,
 		&user.TwoFAEnabled, &user.TwoFASecret,
 		&user.EmailVerified, &user.PhoneVerified,
@@ -93,19 +153,24 @@ func (r *AuthRepository) GetUserByID(ctx context.Context, id int64) (*domain.Use
 		}
 		return nil, fmt.Errorf("failed to get user by id: %w", err)
 	}
+	if phone != "" {
+		user.Phone = &phone
+	}
 
 	return user, nil
 }
 
-// UpdateUser updates user fields
+// UpdateUser updates user fields (dual-write to both column sets)
 func (r *AuthRepository) UpdateUser(ctx context.Context, user *domain.User) error {
 	query := `
 		UPDATE users
-		SET username = $2, two_fa_enabled = $3, two_fa_secret = $4, updated_at = NOW()
-		WHERE id = $1
+		SET two_fa_enabled = $2, "twoFactorEnabled" = $2,
+		    two_fa_secret = $3, "twoFactorSecret" = $3,
+		    updated_at = NOW(), "updatedAt" = NOW()
+		WHERE id = $1::uuid
 	`
 
-	_, err := r.pool.Exec(ctx, query, user.ID, user.Username, user.TwoFAEnabled, user.TwoFASecret)
+	_, err := r.pool.Exec(ctx, query, user.ID, user.TwoFAEnabled, user.TwoFASecret)
 	if err != nil {
 		return fmt.Errorf("failed to update user: %w", err)
 	}
@@ -114,15 +179,15 @@ func (r *AuthRepository) UpdateUser(ctx context.Context, user *domain.User) erro
 }
 
 // UpdateLastLogin updates the user's last login timestamp
-func (r *AuthRepository) UpdateLastLogin(ctx context.Context, userID int64) error {
-	query := `UPDATE users SET last_login_at = NOW() WHERE id = $1`
+func (r *AuthRepository) UpdateLastLogin(ctx context.Context, userID string) error {
+	query := `UPDATE users SET last_login_at = NOW(), "updatedAt" = NOW(), updated_at = NOW() WHERE id = $1::uuid`
 	_, err := r.pool.Exec(ctx, query, userID)
 	return err
 }
 
-// UpdatePassword updates the user's password hash
-func (r *AuthRepository) UpdatePassword(ctx context.Context, userID int64, passwordHash string) error {
-	query := `UPDATE users SET password_hash = $2, updated_at = NOW() WHERE id = $1`
+// UpdatePassword updates the user's password hash (dual-write both columns)
+func (r *AuthRepository) UpdatePassword(ctx context.Context, userID string, passwordHash string) error {
+	query := `UPDATE users SET password_hash = $2, "passwordHash" = $2, updated_at = NOW(), "updatedAt" = NOW() WHERE id = $1::uuid`
 	_, err := r.pool.Exec(ctx, query, userID, passwordHash)
 	return err
 }
@@ -142,7 +207,7 @@ func (r *AuthRepository) CreateSession(ctx context.Context, session *domain.Sess
 	}
 
 	// Also store in user's session set for management
-	userKey := fmt.Sprintf("user_sessions:%d", session.UserID)
+	userKey := fmt.Sprintf("user_sessions:%s", session.UserID)
 	r.redis.SAdd(ctx, userKey, session.ID)
 	r.redis.Expire(ctx, userKey, ttl)
 
@@ -169,26 +234,26 @@ func (r *AuthRepository) GetSession(ctx context.Context, sessionID string) (*dom
 }
 
 // DeleteSession deletes a session from Redis
-func (r *AuthRepository) DeleteSession(ctx context.Context, sessionID string, userID int64) error {
+func (r *AuthRepository) DeleteSession(ctx context.Context, sessionID string, userID string) error {
 	key := fmt.Sprintf("session:%s", sessionID)
 	r.redis.Del(ctx, key)
 
 	// Remove from user's session set
-	userKey := fmt.Sprintf("user_sessions:%d", userID)
+	userKey := fmt.Sprintf("user_sessions:%s", userID)
 	r.redis.SRem(ctx, userKey, sessionID)
 
 	return nil
 }
 
 // GetUserSessions retrieves all active session IDs for a user
-func (r *AuthRepository) GetUserSessions(ctx context.Context, userID int64) ([]string, error) {
-	key := fmt.Sprintf("user_sessions:%d", userID)
+func (r *AuthRepository) GetUserSessions(ctx context.Context, userID string) ([]string, error) {
+	key := fmt.Sprintf("user_sessions:%s", userID)
 	return r.redis.SMembers(ctx, key).Result()
 }
 
 // DeleteAllUserSessions deletes all sessions for a user
-func (r *AuthRepository) DeleteAllUserSessions(ctx context.Context, userID int64) error {
-	key := fmt.Sprintf("user_sessions:%d", userID)
+func (r *AuthRepository) DeleteAllUserSessions(ctx context.Context, userID string) error {
+	key := fmt.Sprintf("user_sessions:%s", userID)
 	sessionIDs, err := r.redis.SMembers(ctx, key).Result()
 	if err != nil {
 		return err
@@ -203,24 +268,24 @@ func (r *AuthRepository) DeleteAllUserSessions(ctx context.Context, userID int64
 }
 
 // StoreRefreshToken stores a refresh token in Redis
-func (r *AuthRepository) StoreRefreshToken(ctx context.Context, token string, userID int64, sessionID string, ttl time.Duration) error {
+func (r *AuthRepository) StoreRefreshToken(ctx context.Context, token string, userID string, sessionID string, ttl time.Duration) error {
 	key := fmt.Sprintf("refresh_token:%s", token)
-	data := fmt.Sprintf("%d:%s", userID, sessionID)
+	data := fmt.Sprintf("%s:%s", userID, sessionID)
 	return r.redis.Set(ctx, key, data, ttl).Err()
 }
 
 // GetRefreshToken retrieves a refresh token from Redis
-func (r *AuthRepository) GetRefreshToken(ctx context.Context, token string) (userID int64, sessionID string, err error) {
+func (r *AuthRepository) GetRefreshToken(ctx context.Context, token string) (userID string, sessionID string, err error) {
 	key := fmt.Sprintf("refresh_token:%s", token)
 	data, err := r.redis.Get(ctx, key).Result()
 	if err != nil {
 		if err == redis.Nil {
-			return 0, "", nil
+			return "", "", nil
 		}
-		return 0, "", err
+		return "", "", err
 	}
 
-	fmt.Sscanf(data, "%d:%s", &userID, &sessionID)
+	fmt.Sscanf(data, "%s:%s", &userID, &sessionID)
 	return userID, sessionID, nil
 }
 
@@ -268,17 +333,17 @@ func (r *AuthRepository) ClearLoginAttempts(ctx context.Context, email, ip strin
 }
 
 // StoreTempToken stores a temporary token for 2FA flow
-func (r *AuthRepository) StoreTempToken(ctx context.Context, token string, userID int64, ttl time.Duration) error {
+func (r *AuthRepository) StoreTempToken(ctx context.Context, token string, userID string, ttl time.Duration) error {
 	key := fmt.Sprintf("temp_token:%s", token)
 	return r.redis.Set(ctx, key, userID, ttl).Err()
 }
 
 // GetTempToken retrieves a temporary token for 2FA flow
-func (r *AuthRepository) GetTempToken(ctx context.Context, token string) (int64, error) {
+func (r *AuthRepository) GetTempToken(ctx context.Context, token string) (string, error) {
 	key := fmt.Sprintf("temp_token:%s", token)
-	val, err := r.redis.Get(ctx, key).Int64()
+	val, err := r.redis.Get(ctx, key).Result()
 	if err == redis.Nil {
-		return 0, nil
+		return "", nil
 	}
 	return val, err
 }

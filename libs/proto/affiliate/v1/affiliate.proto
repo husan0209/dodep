@@ -1,0 +1,394 @@
+syntax = "proto3";
+
+package affiliate.v1;
+
+option go_package = "github.com/opus-casino/proto/gen/go/affiliate/v1";
+option java_multiple_files = true;
+option java_package = "com.opuscasino.proto.affiliate.v1";
+
+import "common/v1/money.proto";
+import "common/v1/pagination.proto";
+import "google/protobuf/timestamp.proto";
+
+// Internal gRPC contract for affiliate enrollment, attribution,
+// NGR-based commission accrual, fraud review, and payout orchestration.
+service AffiliateService {
+  rpc EnrollAffiliate(EnrollAffiliateRequest) returns (EnrollAffiliateResponse);
+  rpc GetAffiliateProfile(GetAffiliateProfileRequest) returns (GetAffiliateProfileResponse);
+  rpc GetAffiliateDashboard(GetAffiliateDashboardRequest) returns (GetAffiliateDashboardResponse);
+  rpc CreateAffiliateLink(CreateAffiliateLinkRequest) returns (CreateAffiliateLinkResponse);
+  rpc ListAffiliateLinks(ListAffiliateLinksRequest) returns (ListAffiliateLinksResponse);
+  rpc TrackAffiliateClick(TrackAffiliateClickRequest) returns (TrackAffiliateClickResponse);
+  rpc BindReferredUser(BindReferredUserRequest) returns (BindReferredUserResponse);
+  rpc CalculateCommission(CalculateCommissionRequest) returns (CalculateCommissionResponse);
+  rpc ListAffiliateEarnings(ListAffiliateEarningsRequest) returns (ListAffiliateEarningsResponse);
+  rpc RequestAffiliatePayout(RequestAffiliatePayoutRequest) returns (RequestAffiliatePayoutResponse);
+  rpc ApproveAffiliatePayout(ApproveAffiliatePayoutRequest) returns (ApproveAffiliatePayoutResponse);
+  rpc RejectAffiliatePayout(RejectAffiliatePayoutRequest) returns (RejectAffiliatePayoutResponse);
+  rpc FlagAffiliateFraud(FlagAffiliateFraudRequest) returns (FlagAffiliateFraudResponse);
+}
+
+message AffiliateEnrollmentRequestRecord {
+  string id = 1;
+  int64 user_id = 2;
+  EnrollmentStatus status = 3;
+  string reason = 4;
+  string review_notes = 5;
+  string reviewed_by = 6;
+  google.protobuf.Timestamp reviewed_at = 7;
+  google.protobuf.Timestamp created_at = 8;
+  google.protobuf.Timestamp updated_at = 9;
+}
+
+message AffiliateCommissionPlan {
+  string id = 1;
+  string name = 2;
+  CommissionType commission_type = 3;
+  string commission_rate = 4;
+  int32 hold_period_days = 5;
+  common.v1.Money min_payout_amount = 6;
+  ApprovalMode approval_mode = 7;
+  PayoutSchedule payout_schedule = 8;
+  bool negative_carryover_enabled = 9;
+  bool is_default = 10;
+  bool is_active = 11;
+  google.protobuf.Timestamp created_at = 12;
+  google.protobuf.Timestamp updated_at = 13;
+}
+
+message AffiliateProfile {
+  string id = 1;
+  int64 user_id = 2;
+  AffiliateStatus status = 3;
+  string affiliate_code = 4;
+  string commission_plan_id = 5;
+  string commission_rate = 6;
+  int32 hold_period_days = 7;
+  common.v1.Money min_payout_amount = 8;
+  string currency = 9;
+  bool kyc_required = 10;
+  string approved_by = 11;
+  google.protobuf.Timestamp approved_at = 12;
+  google.protobuf.Timestamp created_at = 13;
+  google.protobuf.Timestamp updated_at = 14;
+  ApprovalMode approval_mode = 15;
+  PayoutSchedule payout_schedule = 16;
+}
+
+message AffiliateLink {
+  string id = 1;
+  string affiliate_id = 2;
+  string campaign_name = 3;
+  string landing_page = 4;
+  string referral_code = 5;
+  string referral_url = 6;
+  string utm_source = 7;
+  string utm_medium = 8;
+  string utm_campaign = 9;
+  bool is_active = 10;
+  google.protobuf.Timestamp created_at = 11;
+}
+
+message AffiliateDashboard {
+  common.v1.Money earnings_today = 1;
+  common.v1.Money earnings_this_month = 2;
+  common.v1.Money pending_amount = 3;
+  common.v1.Money available_amount = 4;
+  common.v1.Money paid_amount = 5;
+  google.protobuf.Timestamp next_payout_date = 6;
+  int64 clicks = 7;
+  int64 registrations = 8;
+  int64 ftd_count = 9;
+  int64 active_players = 10;
+  common.v1.Money ggr_amount = 11;
+  common.v1.Money ngr_amount = 12;
+  common.v1.Money commission_amount = 13;
+  common.v1.Money commission_reversed_amount = 14;
+  common.v1.Money commission_adjusted_amount = 15;
+}
+
+message AffiliateEarning {
+  string id = 1;
+  string affiliate_id = 2;
+  int64 referred_user_id = 3;
+  string source_type = 4;
+  string source_id = 5;
+  google.protobuf.Timestamp period_start = 6;
+  google.protobuf.Timestamp period_end = 7;
+  common.v1.Money ggr_amount = 8;
+  common.v1.Money ngr_amount = 9;
+  string commission_rate = 10;
+  common.v1.Money commission_amount = 11;
+  EarningStatus status = 12;
+  google.protobuf.Timestamp hold_until = 13;
+  google.protobuf.Timestamp created_at = 14;
+  string idempotency_key = 15;
+}
+
+message AffiliatePayoutMethod {
+  string id = 1;
+  string affiliate_id = 2;
+  PayoutMethodType method_type = 3;
+  string display_name = 4;
+  string details_masked = 5;
+  bool is_default = 6;
+  bool is_verified = 7;
+  google.protobuf.Timestamp created_at = 8;
+}
+
+message AffiliatePayout {
+  string id = 1;
+  string affiliate_id = 2;
+  common.v1.Money amount = 3;
+  string currency = 4;
+  string method_id = 5;
+  PayoutStatus status = 6;
+  google.protobuf.Timestamp requested_at = 7;
+  string approved_by = 8;
+  google.protobuf.Timestamp approved_at = 9;
+  string provider_reference = 10;
+  google.protobuf.Timestamp created_at = 11;
+  string rejection_reason = 12;
+  string idempotency_key = 13;
+}
+
+message AffiliateFraudFlag {
+  string id = 1;
+  string affiliate_id = 2;
+  int64 referred_user_id = 3;
+  string flag_type = 4;
+  FraudSeverity severity = 5;
+  FraudFlagStatus status = 6;
+  map<string, string> details = 7;
+  google.protobuf.Timestamp created_at = 8;
+  google.protobuf.Timestamp resolved_at = 9;
+  string resolved_by = 10;
+}
+
+message EnrollAffiliateRequest {
+  int64 user_id = 1;
+  string reason = 2;
+}
+
+message EnrollAffiliateResponse {
+  AffiliateEnrollmentRequestRecord request = 1;
+}
+
+message GetAffiliateProfileRequest {
+  int64 user_id = 1;
+}
+
+message GetAffiliateProfileResponse {
+  AffiliateProfile profile = 1;
+  AffiliateCommissionPlan commission_plan = 2;
+}
+
+message GetAffiliateDashboardRequest {
+  string affiliate_id = 1;
+}
+
+message GetAffiliateDashboardResponse {
+  AffiliateDashboard dashboard = 1;
+}
+
+message CreateAffiliateLinkRequest {
+  string affiliate_id = 1;
+  string campaign_name = 2;
+  string landing_page = 3;
+  string utm_source = 4;
+  string utm_medium = 5;
+  string utm_campaign = 6;
+}
+
+message CreateAffiliateLinkResponse {
+  AffiliateLink link = 1;
+}
+
+message ListAffiliateLinksRequest {
+  string affiliate_id = 1;
+  common.v1.PageRequest pagination = 2;
+}
+
+message ListAffiliateLinksResponse {
+  repeated AffiliateLink links = 1;
+  common.v1.PageResponse pagination = 2;
+}
+
+message TrackAffiliateClickRequest {
+  string affiliate_code = 1;
+  string campaign = 2;
+  string landing_page = 3;
+  string ip_hash = 4;
+  string user_agent_hash = 5;
+  string device_fingerprint = 6;
+  string country_code = 7;
+}
+
+message TrackAffiliateClickResponse {
+  string click_id = 1;
+  string affiliate_id = 2;
+  string redirect_url = 3;
+}
+
+message BindReferredUserRequest {
+  string affiliate_id = 1;
+  int64 referred_user_id = 2;
+  string click_id = 3;
+}
+
+message BindReferredUserResponse {
+  string attribution_id = 1;
+}
+
+message CalculateCommissionRequest {
+  string affiliate_id = 1;
+  int64 referred_user_id = 2;
+  string source_type = 3;
+  string source_id = 4;
+  google.protobuf.Timestamp period_start = 5;
+  google.protobuf.Timestamp period_end = 6;
+  common.v1.Money ggr_amount = 7;
+  common.v1.Money ngr_amount = 8;
+  common.v1.Money bonuses = 9;
+  common.v1.Money payment_fees = 10;
+  common.v1.Money chargebacks = 11;
+  common.v1.Money fraud_writeoffs = 12;
+  common.v1.Money taxes = 13;
+  common.v1.Money manual_adjustments = 14;
+  string idempotency_key = 15;
+}
+
+message CalculateCommissionResponse {
+  AffiliateEarning earning = 1;
+}
+
+message ListAffiliateEarningsRequest {
+  string affiliate_id = 1;
+  EarningStatus status = 2;
+  common.v1.PageRequest pagination = 3;
+}
+
+message ListAffiliateEarningsResponse {
+  repeated AffiliateEarning items = 1;
+  common.v1.PageResponse pagination = 2;
+}
+
+message RequestAffiliatePayoutRequest {
+  string affiliate_id = 1;
+  string method_id = 2;
+  common.v1.Money amount = 3;
+  string idempotency_key = 4;
+}
+
+message RequestAffiliatePayoutResponse {
+  AffiliatePayout payout = 1;
+}
+
+message ApproveAffiliatePayoutRequest {
+  string payout_id = 1;
+  string approved_by = 2;
+  string provider_reference = 3;
+}
+
+message ApproveAffiliatePayoutResponse {
+  AffiliatePayout payout = 1;
+}
+
+message RejectAffiliatePayoutRequest {
+  string payout_id = 1;
+  string rejected_by = 2;
+  string reason = 3;
+}
+
+message RejectAffiliatePayoutResponse {
+  AffiliatePayout payout = 1;
+}
+
+message FlagAffiliateFraudRequest {
+  string affiliate_id = 1;
+  int64 referred_user_id = 2;
+  string flag_type = 3;
+  FraudSeverity severity = 4;
+  map<string, string> details = 5;
+}
+
+message FlagAffiliateFraudResponse {
+  AffiliateFraudFlag flag = 1;
+}
+
+enum AffiliateStatus {
+  AFFILIATE_STATUS_UNSPECIFIED = 0;
+  AFFILIATE_STATUS_PENDING_REVIEW = 1;
+  AFFILIATE_STATUS_ACTIVE = 2;
+  AFFILIATE_STATUS_SUSPENDED = 3;
+  AFFILIATE_STATUS_REJECTED = 4;
+  AFFILIATE_STATUS_CLOSED = 5;
+}
+
+enum EnrollmentStatus {
+  ENROLLMENT_STATUS_UNSPECIFIED = 0;
+  ENROLLMENT_STATUS_PENDING_REVIEW = 1;
+  ENROLLMENT_STATUS_APPROVED = 2;
+  ENROLLMENT_STATUS_REJECTED = 3;
+}
+
+enum EarningStatus {
+  EARNING_STATUS_UNSPECIFIED = 0;
+  EARNING_STATUS_ACCRUED = 1;
+  EARNING_STATUS_PENDING = 2;
+  EARNING_STATUS_AVAILABLE = 3;
+  EARNING_STATUS_PAID = 4;
+  EARNING_STATUS_REVERSED = 5;
+}
+
+enum PayoutStatus {
+  PAYOUT_STATUS_UNSPECIFIED = 0;
+  PAYOUT_STATUS_REQUESTED = 1;
+  PAYOUT_STATUS_REVIEWING = 2;
+  PAYOUT_STATUS_APPROVED = 3;
+  PAYOUT_STATUS_PROCESSING = 4;
+  PAYOUT_STATUS_PAID = 5;
+  PAYOUT_STATUS_REJECTED = 6;
+  PAYOUT_STATUS_FAILED = 7;
+}
+
+enum CommissionType {
+  COMMISSION_TYPE_UNSPECIFIED = 0;
+  COMMISSION_TYPE_REVSHARE = 1;
+}
+
+enum ApprovalMode {
+  APPROVAL_MODE_UNSPECIFIED = 0;
+  APPROVAL_MODE_MANUAL = 1;
+  APPROVAL_MODE_AUTOMATIC = 2;
+}
+
+enum PayoutSchedule {
+  PAYOUT_SCHEDULE_UNSPECIFIED = 0;
+  PAYOUT_SCHEDULE_MANUAL = 1;
+  PAYOUT_SCHEDULE_WEEKLY = 2;
+  PAYOUT_SCHEDULE_MONTHLY = 3;
+}
+
+enum PayoutMethodType {
+  PAYOUT_METHOD_TYPE_UNSPECIFIED = 0;
+  PAYOUT_METHOD_TYPE_BANK_TRANSFER = 1;
+  PAYOUT_METHOD_TYPE_CRYPTO = 2;
+  PAYOUT_METHOD_TYPE_EWALLET = 3;
+}
+
+enum FraudSeverity {
+  FRAUD_SEVERITY_UNSPECIFIED = 0;
+  FRAUD_SEVERITY_LOW = 1;
+  FRAUD_SEVERITY_MEDIUM = 2;
+  FRAUD_SEVERITY_HIGH = 3;
+  FRAUD_SEVERITY_CRITICAL = 4;
+}
+
+enum FraudFlagStatus {
+  FRAUD_FLAG_STATUS_UNSPECIFIED = 0;
+  FRAUD_FLAG_STATUS_OPEN = 1;
+  FRAUD_FLAG_STATUS_IN_REVIEW = 2;
+  FRAUD_FLAG_STATUS_RESOLVED = 3;
+  FRAUD_FLAG_STATUS_DISMISSED = 4;
+}

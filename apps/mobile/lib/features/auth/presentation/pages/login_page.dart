@@ -36,7 +36,7 @@ class LoginPageView extends StatelessWidget {
             children: [
               // Logo
               const Text(
-                'OPUS\nCASINO',
+                'DOD',
                 style: TextStyle(
                   fontSize: 48,
                   fontWeight: FontWeight.bold,

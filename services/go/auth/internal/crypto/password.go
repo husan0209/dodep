@@ -85,7 +85,7 @@ func VerifyPassword(password, encodedHash string) (bool, error) {
 		salt,
 		iterations,
 		memory,
-		parallelism,
+		uint8(parallelism),
 		uint32(len(hash)),
 	)
 

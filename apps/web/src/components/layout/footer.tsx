@@ -26,8 +26,7 @@ export function Footer() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
           <div className="col-span-2 md:col-span-1">
             <Link href="/" className="flex items-center gap-1">
-              <span className="text-base font-bold text-blue-500">OPUS</span>
-              <span className="text-base font-bold text-gray-300">CASINO</span>
+              <span className="text-base font-bold text-blue-500">DOD</span>
             </Link>
             <p className="mt-2 text-[10px] text-gray-600 leading-relaxed">
               Лицензированная платформа для ставок и игр.
@@ -56,7 +55,7 @@ export function Footer() {
         </div>
 
         <div className="mt-4 pt-3 border-t border-[rgb(var(--border))] flex flex-col sm:flex-row items-center justify-between gap-2">
-          <p className="text-[10px] text-gray-600">© {new Date().getFullYear()} Opus Casino</p>
+          <p className="text-[10px] text-gray-600">© {new Date().getFullYear()} DOD</p>
           <p className="text-[10px] text-gray-700">Азартные игры могут вызывать зависимость</p>
         </div>
       </div>

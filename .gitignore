@@ -65,6 +65,11 @@ coverage/
 *.crt
 secrets/
 vault-keys/
+infra/k8s/secrets.yaml
+
+# Build artifacts
+*.exe
+*.test
 
 # Docker
 docker-compose.override.yml

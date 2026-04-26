@@ -33,11 +33,11 @@ func Load() *Config {
 		HTTPPort: getEnv("PORT", "8080"),
 
 		// Database
-		DatabaseURL: getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/opus_casino?sslmode=disable"),
+		DatabaseURL: getEnv("DATABASE_URL", "postgres://postgres:changeme@localhost:5433/opus_casino?sslmode=disable"),
 
 		// Redis
 		RedisAddr:     getEnv("REDIS_ADDR", "localhost:6379"),
-		RedisPassword: getEnv("REDIS_PASSWORD", ""),
+		RedisPassword: getEnv("REDIS_PASSWORD", "changeme"),
 		RedisDB:       getIntEnv("REDIS_DB", 0),
 
 		// JWT

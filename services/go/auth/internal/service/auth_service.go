@@ -30,6 +30,10 @@ func NewAuthService(repo *repository.AuthRepository, jwtSecretKey string, log *z
 	}
 }
 
+func (s *AuthService) Log() *zap.Logger {
+	return s.log
+}
+
 // Register creates a new user account
 func (s *AuthService) Register(ctx context.Context, req *domain.RegisterRequest) (*domain.AuthResult, error) {
 	// Check if user already exists
@@ -71,7 +75,7 @@ func (s *AuthService) Register(ctx context.Context, req *domain.RegisterRequest)
 		return nil, fmt.Errorf("failed to create session: %w", err)
 	}
 
-	s.log.Info("User registered", zap.Int64("user_id", user.ID), zap.String("email", user.Email))
+	s.log.Info("User registered", zap.String("user_id", user.ID), zap.String("email", user.Email))
 
 	return &domain.AuthResult{
 		UserID:  user.ID,
@@ -160,7 +164,7 @@ func (s *AuthService) Login(ctx context.Context, req *domain.LoginRequest) (*dom
 		return nil, fmt.Errorf("failed to create session: %w", err)
 	}
 
-	s.log.Info("User logged in", zap.Int64("user_id", user.ID), zap.String("email", user.Email))
+	s.log.Info("User logged in", zap.String("user_id", user.ID), zap.String("email", user.Email))
 
 	return &domain.AuthResult{
 		UserID:  user.ID,
@@ -173,7 +177,7 @@ func (s *AuthService) Login(ctx context.Context, req *domain.LoginRequest) (*dom
 func (s *AuthService) LoginWith2FA(ctx context.Context, tempToken, totpCode string) (*domain.AuthResult, error) {
 	// Get user ID from temp token
 	userID, err := s.repo.GetTempToken(ctx, tempToken)
-	if err != nil || userID == 0 {
+	if err != nil || userID == "" {
 		return nil, fmt.Errorf("invalid or expired temp token")
 	}
 
@@ -208,7 +212,7 @@ func (s *AuthService) LoginWith2FA(ctx context.Context, tempToken, totpCode stri
 		return nil, fmt.Errorf("failed to create session: %w", err)
 	}
 
-	s.log.Info("User logged in with 2FA", zap.Int64("user_id", user.ID))
+	s.log.Info("User logged in with 2FA", zap.String("user_id", user.ID))
 
 	return &domain.AuthResult{
 		UserID:  user.ID,
@@ -276,7 +280,7 @@ func (s *AuthService) RefreshTokens(ctx context.Context, refreshToken, deviceID 
 }
 
 // Logout invalidates a user session
-func (s *AuthService) Logout(ctx context.Context, userID int64, sessionID string) error {
+func (s *AuthService) Logout(ctx context.Context, userID string, sessionID string) error {
 	// Get session to verify ownership
 	session, err := s.repo.GetSession(ctx, sessionID)
 	if err != nil {
@@ -290,7 +294,7 @@ func (s *AuthService) Logout(ctx context.Context, userID int64, sessionID string
 	// Delete session
 	s.repo.DeleteSession(ctx, sessionID, userID)
 
-	s.log.Info("User logged out", zap.Int64("user_id", userID), zap.String("session_id", sessionID))
+	s.log.Info("User logged out", zap.String("user_id", userID), zap.String("session_id", sessionID))
 
 	return nil
 }
@@ -312,7 +316,7 @@ func (s *AuthService) ValidateToken(ctx context.Context, accessToken string) (*c
 }
 
 // Enable2FA enables two-factor authentication for a user
-func (s *AuthService) Enable2FA(ctx context.Context, userID int64) (secret, qrURI, backupCodes string, err error) {
+func (s *AuthService) Enable2FA(ctx context.Context, userID string) (secret, qrURI, backupCodes string, err error) {
 	user, err := s.repo.GetUserByID(ctx, userID)
 	if err != nil || user == nil {
 		return "", "", "", fmt.Errorf("user not found")
@@ -346,7 +350,7 @@ func (s *AuthService) Enable2FA(ctx context.Context, userID int64) (secret, qrUR
 }
 
 // Verify2FA verifies a TOTP code and completes 2FA setup
-func (s *AuthService) Verify2FA(ctx context.Context, userID int64, totpCode string) error {
+func (s *AuthService) Verify2FA(ctx context.Context, userID string, totpCode string) error {
 	user, err := s.repo.GetUserByID(ctx, userID)
 	if err != nil || user == nil {
 		return fmt.Errorf("user not found")
@@ -370,13 +374,13 @@ func (s *AuthService) Verify2FA(ctx context.Context, userID int64, totpCode stri
 	user.TwoFAEnabled = true
 	s.repo.UpdateUser(ctx, user)
 
-	s.log.Info("2FA enabled", zap.Int64("user_id", userID))
+	s.log.Info("2FA enabled", zap.String("user_id", userID))
 
 	return nil
 }
 
 // Disable2FA disables two-factor authentication
-func (s *AuthService) Disable2FA(ctx context.Context, userID int64, totpCode string) error {
+func (s *AuthService) Disable2FA(ctx context.Context, userID string, totpCode string) error {
 	user, err := s.repo.GetUserByID(ctx, userID)
 	if err != nil || user == nil {
 		return fmt.Errorf("user not found")
@@ -401,13 +405,13 @@ func (s *AuthService) Disable2FA(ctx context.Context, userID int64, totpCode str
 	user.TwoFASecret = nil
 	s.repo.UpdateUser(ctx, user)
 
-	s.log.Info("2FA disabled", zap.Int64("user_id", userID))
+	s.log.Info("2FA disabled", zap.String("user_id", userID))
 
 	return nil
 }
 
 // ChangePassword changes user password
-func (s *AuthService) ChangePassword(ctx context.Context, userID int64, currentPassword, newPassword string) error {
+func (s *AuthService) ChangePassword(ctx context.Context, userID string, currentPassword, newPassword string) error {
 	user, err := s.repo.GetUserByID(ctx, userID)
 	if err != nil || user == nil {
 		return fmt.Errorf("user not found")
@@ -434,7 +438,7 @@ func (s *AuthService) ChangePassword(ctx context.Context, userID int64, currentP
 	// Revoke all sessions (force re-login)
 	s.repo.DeleteAllUserSessions(ctx, userID)
 
-	s.log.Info("Password changed", zap.Int64("user_id", userID))
+	s.log.Info("Password changed", zap.String("user_id", userID))
 
 	return nil
 }

@@ -52,10 +52,10 @@ export function trackEvent(event: TelemetryEvent, payload: TelemetryPayload = {}
   lastTrackedAt = now
 
   try {
-    const raw = window.localStorage.getItem('opus.telemetry.events')
+    const raw = window.localStorage.getItem('dod.telemetry.events')
     const parsed = raw ? (JSON.parse(raw) as StoredTelemetryEvent[]) : []
     const next = [...parsed.slice(-MAX_STORED_EVENTS + 1), entry]
-    window.localStorage.setItem('opus.telemetry.events', JSON.stringify(next))
+    window.localStorage.setItem('dod.telemetry.events', JSON.stringify(next))
   } catch {
     // Ignore storage errors in privacy mode / full quota.
   }

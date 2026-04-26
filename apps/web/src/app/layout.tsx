@@ -17,20 +17,20 @@ const montserrat = Montserrat({
 })
 
 export const metadata: Metadata = {
-  title: 'Opus Casino - Премиум платформа для ставок и игр',
-  description: 'Делайте ставки на спорт, играйте в казино игры и получайте бонусы на лучшей игровой платформе.',
+  title: 'DOD - Премиум платформа для ставок и игр',
+  description: 'Делайте ставки на спорт, играйте в казино игры и получайте бонусы на платформе DOD.',
   keywords: ['казино', 'ставки', 'спорт', 'игры', 'бонусы'],
-  authors: [{ name: 'Opus Casino Team' }],
+  authors: [{ name: 'DOD Team' }],
   openGraph: {
-    title: 'Opus Casino',
+    title: 'DOD',
     description: 'Премиум платформа для ставок и игр',
     type: 'website',
     locale: 'ru_RU',
-    siteName: 'Opus Casino',
+    siteName: 'DOD',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Opus Casino',
+    title: 'DOD',
     description: 'Премиум платформа для ставок и игр',
   },
   robots: {

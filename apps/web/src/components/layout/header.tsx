@@ -15,6 +15,7 @@ import {
   Squares2X2Icon,
   WalletIcon,
   GiftIcon,
+  UserGroupIcon,
 } from '@heroicons/react/24/outline'
 import { useAuthStore } from '@stores/auth-store'
 
@@ -28,6 +29,7 @@ const mainNav = [
 const secondaryNav = [
   { name: 'Кошелёк', href: '/wallet', icon: WalletIcon },
   { name: 'Бонусы', href: '/bonuses', icon: GiftIcon },
+  { name: 'Affiliate', href: '/affiliate', icon: UserGroupIcon },
 ]
 
 export function Header() {
@@ -44,8 +46,7 @@ export function Header() {
           <div className="flex h-10 items-center justify-between">
             {/* Logo */}
             <Link href="/" className="flex items-center gap-1 shrink-0">
-              <span className="text-lg font-bold text-blue-500 tracking-tight">OPUS</span>
-              <span className="text-lg font-bold text-gray-300 tracking-tight">CASINO</span>
+              <span className="text-lg font-bold text-blue-500 tracking-tight">DOD</span>
             </Link>
 
             {/* Main nav */}

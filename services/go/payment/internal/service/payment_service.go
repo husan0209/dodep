@@ -3,122 +3,277 @@ package service
 import (
 	"context"
 	"fmt"
+	"time"
 
-	"go.uber.org/zap"
-
+	"github.com/google/uuid"
+	"github.com/opus-casino/payment/internal/client"
 	"github.com/opus-casino/payment/internal/domain"
+	"github.com/opus-casino/payment/internal/event"
 	"github.com/opus-casino/payment/internal/repository"
+	"github.com/rs/zerolog/log"
+	"github.com/shopspring/decimal"
+	"go.opentelemetry.io/otel/trace"
 )
 
+// PaymentService handles payment business logic
 type PaymentService struct {
-	repo *repository.PaymentRepository
-	log  *zap.Logger
+	paymentRepo      repository.PaymentRepository
+	idempotencyRepo  repository.IdempotencyRepository
+	exchangeRateRepo repository.ExchangeRateRepository
+	dailyLimitsRepo  repository.DailyLimitsRepository
+	nowpayments      client.NOWPaymentsAPI
+	wallet           client.WalletAPI
+	user             client.UserAPI
+	producer         *event.Producer
+	tracer           trace.Tracer
 }
 
-func NewPaymentService(repo *repository.PaymentRepository, log *zap.Logger) *PaymentService {
-	return &PaymentService{repo: repo, log: log}
+// NewPaymentService creates a new payment service
+func NewPaymentService(
+	paymentRepo repository.PaymentRepository,
+	idempotencyRepo repository.IdempotencyRepository,
+	exchangeRateRepo repository.ExchangeRateRepository,
+	dailyLimitsRepo repository.DailyLimitsRepository,
+	nowpayments client.NOWPaymentsAPI,
+	wallet client.WalletAPI,
+	user client.UserAPI,
+	producer *event.Producer,
+	tracer trace.Tracer,
+) *PaymentService {
+	return &PaymentService{
+		paymentRepo:      paymentRepo,
+		idempotencyRepo:  idempotencyRepo,
+		exchangeRateRepo: exchangeRateRepo,
+		dailyLimitsRepo:  dailyLimitsRepo,
+		nowpayments:      nowpayments,
+		wallet:           wallet,
+		user:             user,
+		producer:         producer,
+		tracer:           tracer,
+	}
 }
 
-func (s *PaymentService) CreateDeposit(ctx context.Context, req *domain.CreateDepositRequest) (*domain.Deposit, error) {
+// InitiateDepositRequest represents a deposit request
+type InitiateDepositRequest struct {
+	UserID         int64
+	Amount         decimal.Decimal
+	Currency       domain.CryptoCurrency
+	IdempotencyKey string
+	IPAddress      string
+	UserAgent      string
+}
+
+// InitiateDepositResponse represents a deposit response
+type InitiateDepositResponse struct {
+	PaymentUUID   string
+	PaymentID     string
+	PayAddress    string
+	PayAmount     decimal.Decimal
+	PayCurrency   string
+	FiatAmount    decimal.Decimal
+	ExpiresAt     time.Time
+}
+
+// InitiateDeposit creates a new deposit payment
+func (s *PaymentService) InitiateDeposit(ctx context.Context, req InitiateDepositRequest) (*InitiateDepositResponse, error) {
 	// Check idempotency
-	exists, err := s.repo.CheckIdempotency(ctx, req.IdempotencyKey)
-	if err != nil {
+	if existingPayment, err := s.paymentRepo.GetByIDempotencyKey(ctx, req.IdempotencyKey); err != nil {
 		return nil, fmt.Errorf("check idempotency: %w", err)
-	}
-	if exists {
-		return nil, fmt.Errorf("duplicate request")
+	} else if existingPayment != nil {
+		log.Info().
+			Str("idempotency_key", req.IdempotencyKey).
+			Str("payment_id", existingPayment.PaymentID).
+			Msg("Returning existing payment for idempotency key")
+		return s.toResponse(existingPayment), nil
 	}
 
-	deposit, err := s.repo.CreateDeposit(ctx, req)
+	// Validate KYC level and limits
+	if err := s.validateDepositLimits(ctx, req.UserID, req.Amount); err != nil {
+		return nil, err
+	}
+
+	// Validate currency
+	if !req.Currency.IsDepositSupported() {
+		return nil, domain.ErrorCurrencyNotSupported(string(req.Currency))
+	}
+
+	// Get exchange rate
+	fiatAmount, err := s.getFiatAmount(ctx, req.Amount, req.Currency)
 	if err != nil {
-		return nil, fmt.Errorf("create deposit: %w", err)
+		return nil, fmt.Errorf("get exchange rate: %w", err)
 	}
 
-	s.log.Info("Deposit created", zap.String("deposit_id", deposit.ID), zap.Int64("user_id", req.UserID), zap.String("amount", req.Amount))
-
-	// In production: call PSP here to get redirect_url / QR code
-	// For now: mark as processing and simulate completion
-	s.repo.UpdateDepositStatus(ctx, deposit.ID, domain.TransactionStatusProcessing, nil)
-
-	return deposit, nil
-}
-
-func (s *PaymentService) GetDeposit(ctx context.Context, userID int64, depositID string) (*domain.Deposit, error) {
-	deposit, err := s.repo.GetDeposit(ctx, userID, depositID)
+	// Create payment in NOWPayments
+	npResp, err := s.nowpayments.CreatePayment(ctx, client.CreatePaymentRequest{
+		PriceAmount:    req.Amount,
+		PriceCurrency:  "USD",
+		PayCurrency:    req.Currency.NOWPaymentsCurrency(),
+		IPNCallbackURL: s.getIPNCallbackURL(),
+		OrderID:        uuid.New().String(),
+	})
 	if err != nil {
-		return nil, fmt.Errorf("get deposit: %w", err)
+		return nil, domain.ErrorProviderUnavailable("NOWPayments", err)
 	}
-	if deposit == nil {
-		return nil, fmt.Errorf("deposit not found")
+
+	// Create payment record
+	payment := &domain.Payment{
+		UUID:            uuid.New(),
+		UserID:          req.UserID,
+		PaymentID:       npResp.PaymentID,
+		IdempotencyKey:  req.IdempotencyKey,
+		RequestedAmount: req.Amount,
+		FiatAmount:      fiatAmount,
+		FiatCurrency:    "USD",
+		CryptoCurrency:  string(req.Currency),
+		PayAddress:      npResp.PayAddress,
+		PayAmount:       &npResp.PayAmount,
+		Status:          domain.PaymentStatusPending,
+		ExpiresAt:       &npResp.ExpiresAt,
+		IPAddress:       req.IPAddress,
+		UserAgent:       req.UserAgent,
 	}
-	return deposit, nil
+
+	if err := s.paymentRepo.Create(ctx, payment); err != nil {
+		return nil, fmt.Errorf("create payment: %w", err)
+	}
+
+	log.Info().
+		Int64("user_id", req.UserID).
+		Str("payment_id", payment.PaymentID).
+		Str("amount", req.Amount.String()).
+		Msg("Deposit payment created")
+
+	return s.toResponse(payment), nil
 }
 
-func (s *PaymentService) ListDeposits(ctx context.Context, userID int64, limit, offset int) ([]*domain.Deposit, int, error) {
-	if limit <= 0 || limit > 100 {
-		limit = 20
-	}
-	return s.repo.ListDeposits(ctx, userID, limit, offset)
-}
-
-func (s *PaymentService) RequestWithdrawal(ctx context.Context, req *domain.RequestWithdrawalRequest) (*domain.Withdrawal, error) {
-	// Check idempotency
-	exists, err := s.repo.CheckIdempotency(ctx, req.IdempotencyKey)
+// GetPayment retrieves a payment by UUID
+func (s *PaymentService) GetPayment(ctx context.Context, paymentUUID string) (*domain.Payment, error) {
+	payment, err := s.paymentRepo.GetByUUID(ctx, paymentUUID)
 	if err != nil {
-		return nil, fmt.Errorf("check idempotency: %w", err)
+		return nil, err
 	}
-	if exists {
-		return nil, fmt.Errorf("duplicate request")
+	return payment, nil
+}
+
+// GetPaymentByID retrieves a payment by internal ID
+func (s *PaymentService) GetPaymentByID(ctx context.Context, id int64) (*domain.Payment, error) {
+	return s.paymentRepo.GetByID(ctx, id)
+}
+
+// GetPaymentByPaymentID retrieves a payment by NOWPayments ID
+func (s *PaymentService) GetPaymentByPaymentID(ctx context.Context, paymentID string) (*domain.Payment, error) {
+	return s.paymentRepo.GetByPaymentID(ctx, paymentID)
+}
+
+// ListPaymentsRequest represents a list payments request
+type ListPaymentsRequest struct {
+	UserID int64
+	Limit  int
+	Cursor string
+	Status string
+}
+
+// ListPayments lists payments for a user
+func (s *PaymentService) ListPayments(ctx context.Context, req ListPaymentsRequest) (*repository.ListResult[domain.Payment], error) {
+	filter := repository.ListFilter{
+		Limit:  req.Limit,
+		Cursor: req.Cursor,
+		Status: req.Status,
 	}
 
-	// In production: check KYC level >= 2, check limits, fraud check, lock funds in wallet
-	withdrawal, err := s.repo.CreateWithdrawal(ctx, req)
+	return s.paymentRepo.ListByUserID(ctx, req.UserID, filter)
+}
+
+// validateDepositLimits validates KYC level and daily limits
+func (s *PaymentService) validateDepositLimits(ctx context.Context, userID int64, amount decimal.Decimal) error {
+	// Get KYC level
+	kycLevel, err := s.user.GetKYCLevel(ctx, userID)
 	if err != nil {
-		return nil, fmt.Errorf("create withdrawal: %w", err)
+		return fmt.Errorf("get KYC level: %w", err)
 	}
 
-	s.log.Info("Withdrawal requested", zap.String("withdrawal_id", withdrawal.ID), zap.Int64("user_id", req.UserID), zap.String("amount", req.Amount))
+	// Get daily limit for KYC level
+	limit := s.getDepositLimit(kycLevel)
 
-	return withdrawal, nil
-}
-
-func (s *PaymentService) GetWithdrawal(ctx context.Context, userID int64, withdrawalID string) (*domain.Withdrawal, error) {
-	withdrawal, err := s.repo.GetWithdrawal(ctx, userID, withdrawalID)
+	// Get today's cumulative deposits
+	used, err := s.dailyLimitsRepo.Get(ctx, userID, "deposit")
 	if err != nil {
-		return nil, fmt.Errorf("get withdrawal: %w", err)
+		return fmt.Errorf("get daily deposits: %w", err)
 	}
-	if withdrawal == nil {
-		return nil, fmt.Errorf("withdrawal not found")
-	}
-	return withdrawal, nil
-}
 
-func (s *PaymentService) ListWithdrawals(ctx context.Context, userID int64, limit, offset int) ([]*domain.Withdrawal, int, error) {
-	if limit <= 0 || limit > 100 {
-		limit = 20
+	// Check if exceeds limit
+	if used.Add(amount).GreaterThan(decimal.NewFromFloat(limit)) {
+		return domain.ErrorDailyLimitExceeded(limit, used.InexactFloat64(), amount.InexactFloat64())
 	}
-	return s.repo.ListWithdrawals(ctx, userID, limit, offset)
-}
 
-func (s *PaymentService) CancelWithdrawal(ctx context.Context, userID int64, withdrawalID string) error {
-	if err := s.repo.CancelWithdrawal(ctx, userID, withdrawalID); err != nil {
-		return fmt.Errorf("cancel withdrawal: %w", err)
-	}
-	s.log.Info("Withdrawal cancelled", zap.String("withdrawal_id", withdrawalID), zap.Int64("user_id", userID))
 	return nil
 }
 
-func (s *PaymentService) GetPaymentMethods(ctx context.Context, userID int64) ([]*domain.PaymentMethodInfo, error) {
-	return s.repo.GetPaymentMethods(ctx, userID)
+// getDepositLimit returns the daily deposit limit for a KYC level
+func (s *PaymentService) getDepositLimit(kycLevel int) float64 {
+	limits := map[int]float64{
+		0: 500,
+		1: 2000,
+		2: 10000,
+		3: 50000,
+	}
+	if limit, ok := limits[kycLevel]; ok {
+		return limit
+	}
+	return 500 // Default to level 0
 }
 
-func (s *PaymentService) HandleWebhook(ctx context.Context, event *domain.WebhookEvent) error {
-	s.log.Info("Webhook received", zap.String("provider", event.Provider), zap.String("event", event.EventType), zap.String("tx_id", event.TransactionID))
-
-	// In production: verify signature, update deposit/withdrawal status, credit/debit wallet
-	if err := s.repo.RecordWebhookEvent(ctx, event); err != nil {
-		return fmt.Errorf("record webhook: %w", err)
+// getFiatAmount converts crypto amount to fiat
+func (s *PaymentService) getFiatAmount(ctx context.Context, amount decimal.Decimal, currency domain.CryptoCurrency) (decimal.Decimal, error) {
+	// Try cache first
+	rate, err := s.exchangeRateRepo.Get(ctx, currency.NOWPaymentsCurrency(), "USD")
+	if err != nil {
+		log.Warn().Err(err).Msg("Failed to get cached exchange rate")
 	}
 
-	return nil
+	if rate == nil {
+		// Fetch from NOWPayments
+		estResp, err := s.nowpayments.GetEstimatedPrice(ctx, amount, currency.NOWPaymentsCurrency(), "USD")
+		if err != nil {
+			return decimal.Zero, fmt.Errorf("get estimated price: %w", err)
+		}
+
+		rate = &estResp.EstimatedAmount
+
+		// Cache the rate
+		if err := s.exchangeRateRepo.Set(ctx, currency.NOWPaymentsCurrency(), "USD", *rate, 60); err != nil {
+			log.Warn().Err(err).Msg("Failed to cache exchange rate")
+		}
+	}
+
+	return amount.Mul(*rate), nil
+}
+
+// getIPNCallbackURL returns the webhook callback URL
+func (s *PaymentService) getIPNCallbackURL() string {
+	// TODO: Get from config
+	return "https://api.platform.com/api/v1/payments/webhooks/nowpayments"
+}
+
+// toResponse converts a payment to response
+func (s *PaymentService) toResponse(payment *domain.Payment) *InitiateDepositResponse {
+	var payAmount decimal.Decimal
+	if payment.PayAmount != nil {
+		payAmount = *payment.PayAmount
+	}
+
+	var expiresAt time.Time
+	if payment.ExpiresAt != nil {
+		expiresAt = *payment.ExpiresAt
+	}
+
+	return &InitiateDepositResponse{
+		PaymentUUID: payment.UUID.String(),
+		PaymentID:   payment.PaymentID,
+		PayAddress:  payment.PayAddress,
+		PayAmount:   payAmount,
+		PayCurrency: payment.CryptoCurrency,
+		FiatAmount:  payment.FiatAmount,
+		ExpiresAt:   expiresAt,
+	}
 }

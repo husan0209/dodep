@@ -9,7 +9,7 @@ import (
 
 // JWTClaims represents the JWT claims
 type JWTClaims struct {
-	UserID    int64  `json:"user_id"`
+	UserID    string `json:"user_id"`
 	SessionID string `json:"session_id"`
 	DeviceID  string `json:"device_id,omitempty"`
 	jwt.RegisteredClaims
@@ -32,7 +32,7 @@ func DefaultJWTConfig(secretKey string) *JWTConfig {
 }
 
 // GenerateAccessToken generates a JWT access token
-func (c *JWTConfig) GenerateAccessToken(userID int64, sessionID, deviceID string) (string, error) {
+func (c *JWTConfig) GenerateAccessToken(userID string, sessionID, deviceID string) (string, error) {
 	now := time.Now()
 	claims := &JWTClaims{
 		UserID:    userID,
@@ -43,7 +43,7 @@ func (c *JWTConfig) GenerateAccessToken(userID int64, sessionID, deviceID string
 			ExpiresAt: jwt.NewNumericDate(now.Add(c.AccessTokenTTL)),
 			NotBefore: jwt.NewNumericDate(now),
 			Issuer:    "opus-casino-auth",
-			Subject:   fmt.Sprintf("%d", userID),
+			Subject:   userID,
 		},
 	}
 
@@ -52,7 +52,7 @@ func (c *JWTConfig) GenerateAccessToken(userID int64, sessionID, deviceID string
 }
 
 // GenerateRefreshToken generates a JWT refresh token
-func (c *JWTConfig) GenerateRefreshToken(userID int64, sessionID string) (string, error) {
+func (c *JWTConfig) GenerateRefreshToken(userID string, sessionID string) (string, error) {
 	now := time.Now()
 	claims := &JWTClaims{
 		UserID:    userID,
@@ -62,7 +62,7 @@ func (c *JWTConfig) GenerateRefreshToken(userID int64, sessionID string) (string
 			ExpiresAt: jwt.NewNumericDate(now.Add(c.RefreshTokenTTL)),
 			NotBefore: jwt.NewNumericDate(now),
 			Issuer:    "opus-casino-auth",
-			Subject:   fmt.Sprintf("%d", userID),
+			Subject:   userID,
 		},
 	}
 

@@ -34,20 +34,20 @@ void main() async {
       providers: [
         BlocProvider<AuthBloc>.value(value: authBloc),
       ],
-      child: const OpusCasinoApp(),
+      child: const DODApp(),
     ),
   );
 }
 
-class OpusCasinoApp extends StatelessWidget {
-  const OpusCasinoApp({super.key});
+class DODApp extends StatelessWidget {
+  const DODApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return BlocBuilder<AuthBloc, AuthState>(
       builder: (context, authState) {
         return MaterialApp.router(
-          title: 'Opus Casino',
+          title: 'DOD',
           debugShowCheckedModeBanner: false,
           theme: AppTheme.lightTheme,
           darkTheme: AppTheme.darkTheme,

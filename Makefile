@@ -30,7 +30,10 @@ install:
 	@echo "Installing Rust dependencies..."
 	cd services/rust && cargo fetch
 	@echo "Installing Go dependencies..."
-	cd services/go/auth && go mod download
+	@for dir in services/go/*/; do \
+		echo "  Installing $$dir..."; \
+		(cd "$$dir" && go mod download); \
+	done
 	@echo "Installing Python dependencies..."
 	cd services/python/fraud-ml && pip install -e .
 	cd services/python/analytics && pip install -e .

@@ -9,11 +9,11 @@
   "env": {
     "NEXT_PUBLIC_API_URL": {
       "type": "encrypted",
-      "value": "https://api.opus-casino.com"
+      "value": "https://api.dod.casino"
     },
     "NEXT_PUBLIC_WS_URL": {
       "type": "encrypted",
-      "value": "wss://ws.opus-casino.com"
+      "value": "wss://ws.dod.casino"
     }
   }
 }

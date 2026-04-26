@@ -1,17 +1,22 @@
 import apiClient from "./api";
-import type { ApiResponse, PaginatedResponse } from "@/types/api";
+import type { PaginatedResponse } from "@/types/api";
 
 export interface Affiliate {
   id: string;
-  name: string;
-  email: string;
-  status: "pending" | "active" | "suspended" | "rejected";
-  commission_type: "revenue_share" | "cpa" | "hybrid";
-  commission_rate: number;
-  total_referrals: number;
-  total_revenue: string;
-  total_commission: string;
+  user_id: number;
+  status: string;
+  affiliate_code: string;
+  commission_rate: string;
+  hold_period_days: number;
+  min_payout_amount: string;
+  currency: string;
+  kyc_required: boolean;
+  approved_by: string;
+  approved_at: string | null;
   created_at: string;
+  // Dashboard fields (returned in detail view)
+  profile?: Record<string, unknown>;
+  dashboard?: Record<string, unknown>;
 }
 
 export const affiliatesService = {
@@ -28,35 +33,86 @@ export const affiliatesService = {
     return response.data;
   },
 
-  async getAffiliate(affiliateId: string): Promise<Affiliate> {
-    const response = await apiClient.get<ApiResponse<Affiliate>>(
+  async getAffiliate(affiliateId: string): Promise<Record<string, unknown>> {
+    const response = await apiClient.get(
       `/admin/affiliates/${affiliateId}`,
     );
-    return response.data.data;
+    return response.data;
   },
 
-  async approveAffiliate(affiliateId: string): Promise<void> {
-    await apiClient.post(`/admin/affiliates/${affiliateId}/approve`);
-  },
-
-  async rejectAffiliate(affiliateId: string, reason: string): Promise<void> {
-    await apiClient.post(`/admin/affiliates/${affiliateId}/reject`, { reason });
-  },
-
-  async updateCommission(
-    affiliateId: string,
-    data: { commission_type: string; commission_rate: number },
+  async approveAffiliate(
+    userId: string,
+    data?: {
+      commission_rate?: string;
+      hold_period_days?: number;
+      min_payout_amount?: string;
+      currency?: string;
+    },
   ): Promise<void> {
-    await apiClient.put(`/admin/affiliates/${affiliateId}/commission`, data);
+    await apiClient.post(`/admin/affiliates/${userId}/approve`, data || {});
   },
 
-  async getPayments(params?: {
-    affiliate_id?: string;
+  async rejectAffiliate(userId: string, reviewNotes: string): Promise<void> {
+    await apiClient.post(`/admin/affiliates/${userId}/reject`, {
+      review_notes: reviewNotes,
+    });
+  },
+
+  async suspendAffiliate(affiliateId: string): Promise<void> {
+    await apiClient.post(`/admin/affiliates/${affiliateId}/suspend`);
+  },
+
+  async updateCommissionRate(
+    affiliateId: string,
+    rate: number,
+  ): Promise<void> {
+    await apiClient.put(`/admin/affiliates/${affiliateId}/commission-rate`, {
+      commission_rate: String(rate),
+    });
+  },
+
+  async createAdjustment(
+    affiliateId: string,
+    data: { adjustment_type: string; amount: string; reason: string },
+  ): Promise<void> {
+    await apiClient.post(
+      `/admin/affiliates/${affiliateId}/adjustments`,
+      data,
+    );
+  },
+
+  async getPayouts(params?: {
     status?: string;
     page?: number;
     page_size?: number;
   }): Promise<PaginatedResponse<unknown>> {
-    const response = await apiClient.get("/admin/affiliates/payments", {
+    const response = await apiClient.get("/admin/affiliates/payouts", {
+      params,
+    });
+    return response.data;
+  },
+
+  async approvePayout(
+    payoutId: string,
+    providerReference?: string,
+  ): Promise<void> {
+    await apiClient.post(`/admin/affiliates/payouts/${payoutId}/approve`, {
+      provider_reference: providerReference || "",
+    });
+  },
+
+  async rejectPayout(payoutId: string, reason: string): Promise<void> {
+    await apiClient.post(`/admin/affiliates/payouts/${payoutId}/reject`, {
+      rejection_reason: reason,
+    });
+  },
+
+  async getFraudFlags(params?: {
+    status?: string;
+    page?: number;
+    page_size?: number;
+  }): Promise<PaginatedResponse<unknown>> {
+    const response = await apiClient.get("/admin/affiliates/fraud-flags", {
       params,
     });
     return response.data;

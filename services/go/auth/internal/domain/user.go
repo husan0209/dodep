@@ -18,7 +18,7 @@ const (
 
 // User represents a user account
 type User struct {
-	ID            int64       `json:"id" db:"id"`
+	ID            string      `json:"id" db:"id"`
 	UUID          string      `json:"uuid" db:"uuid"`
 	Email         string      `json:"email" db:"email"`
 	Phone         *string     `json:"phone,omitempty" db:"phone"`
@@ -43,10 +43,10 @@ type RegisterRequest struct {
 	Email        string `json:"email" validate:"required,email"`
 	Password     string `json:"password" validate:"required,min=8"`
 	Username     string `json:"username" validate:"required,min=3,max=30"`
-	CountryCode  string `json:"country_code" validate:"required,len=2"`
-	CurrencyCode string `json:"currency_code" validate:"required,len=3"`
-	DeviceID     string `json:"device_id"`
-	IPAddress    string `json:"ip_address"`
+	CountryCode  string `json:"country_code" json:"countryCode" validate:"required,len=2"`
+	CurrencyCode string `json:"currency_code" json:"currencyCode" validate:"required,len=3"`
+	DeviceID     string `json:"device_id" json:"deviceId"`
+	IPAddress    string `json:"ip_address" json:"ipAddress"`
 }
 
 // LoginRequest is the domain model for user login
@@ -61,7 +61,7 @@ type LoginRequest struct {
 
 // ChangePasswordRequest is the domain model for password change
 type ChangePasswordRequest struct {
-	UserID          int64  `json:"user_id"`
+	UserID          string  `json:"user_id"`
 	CurrentPassword string `json:"current_password" validate:"required"`
 	NewPassword     string `json:"new_password" validate:"required,min=8"`
 }

@@ -66,11 +66,11 @@ cargo run
 
 # Terminal 4: Go Auth Service
 cd services/go/auth
-go run main.go
+go run .
 
 # Terminal 5: Go Payment Service
 cd services/go/payment
-go run main.go
+go run .
 ```
 
 #### Вариант B: Запустить только один сервис для теста
@@ -78,9 +78,9 @@ go run main.go
 ```bash
 # Тест Go Auth Service
 cd services/go/auth
-go run main.go
+go run .
 
-# Проверка: curl http://localhost:8083/health
+# Проверка: curl http://localhost:8080/health
 ```
 
 ---

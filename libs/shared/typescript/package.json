@@ -1,7 +1,7 @@
 {
-  "name": "@opus-casino/shared",
+  "name": "@dod/shared",
   "version": "0.1.0",
-  "description": "Shared libraries and utilities for Opus Casino platform",
+  "description": "Shared libraries and utilities for DOD platform",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
@@ -14,11 +14,11 @@
     "proto:generate": "buf generate --template buf.gen.yaml --output src/proto"
   },
   "keywords": [
-    "opus-casino",
+    "dod",
     "gambling",
     "shared"
   ],
-  "author": "Opus Casino Team",
+  "author": "DOD Team",
   "license": "Proprietary",
   "dependencies": {
     "@grpc/grpc-js": "^1.9.0",
@@ -39,6 +39,6 @@
     "node": ">=20.0.0"
   },
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com/opus-casino"
+    "registry": "https://npm.pkg.github.com/dod"
   }
 }

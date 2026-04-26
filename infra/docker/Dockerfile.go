@@ -4,7 +4,7 @@
 # =============================================================================
 # Stage 1: Builder
 # =============================================================================
-FROM golang:1.21-alpine3.19 AS builder
+FROM golang:1.22-alpine3.19 AS builder
 
 # Install build dependencies
 RUN apk add --no-cache \
@@ -54,7 +54,7 @@ COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
 WORKDIR /
 
 # Environment variables
-ENV GIN_MODE=release
+ENV APP_ENV=production
 ENV TZ=UTC
 
 # Expose default port
@@ -85,7 +85,7 @@ COPY --from=builder /build/app /usr/local/bin/app
 
 WORKDIR /
 
-ENV GIN_MODE=debug
+ENV APP_ENV=development
 ENV TZ=UTC
 
 EXPOSE 8080

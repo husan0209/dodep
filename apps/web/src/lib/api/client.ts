@@ -49,7 +49,7 @@ class ApiClient {
       params?: Record<string, string>;
       headers?: Record<string, string>;
     } = {}
-  ): Promise<ApiResponse<T>> {
+  ): Promise<T> {
     const url = new URL(`${this.baseUrl}${path}`);
     if (options.params) {
       Object.entries(options.params).forEach(([k, v]) =>
@@ -62,7 +62,7 @@ class ApiClient {
 
     let token = accessToken;
 
-    const makeRequest = async (t: string | null) => {
+    const makeRequest = async (t: string | null): Promise<T> => {
       const response = await fetch(url.toString(), {
         method,
         headers: {
@@ -86,35 +86,27 @@ class ApiClient {
       return response.json();
     };
 
-    let response = await makeRequest(token);
-
-    // Auto-refresh token on 401
-    if (response.status === 401 && token) {
-      try {
-        await refreshTokens();
-        token = useAuthStore.getState().accessToken;
-        response = await makeRequest(token);
-      } catch {
-        logout();
-        window.location.href = "/login";
-        throw new ApiClientError(401, {
-          code: "AUTH_TOKEN_EXPIRED",
-          message: "Session expired",
-          request_id: "unknown",
-        });
+    try {
+      return await makeRequest(token);
+    } catch (error) {
+      // Auto-refresh token on 401
+      if (error instanceof ApiClientError && error.isUnauthorized && token) {
+        try {
+          await refreshTokens();
+          token = useAuthStore.getState().accessToken;
+          return await makeRequest(token);
+        } catch {
+          logout();
+          window.location.href = "/login";
+          throw new ApiClientError(401, {
+            code: "AUTH_TOKEN_EXPIRED",
+            message: "Session expired",
+            request_id: "unknown",
+          });
+        }
       }
+      throw error;
     }
-
-    if (!response.ok) {
-      const error: ApiError = await response.json().catch(() => ({
-        code: "UNKNOWN_ERROR",
-        message: response.statusText,
-        request_id: "unknown",
-      }));
-      throw new ApiClientError(response.status, error);
-    }
-
-    return response.json();
   }
 
   get<T>(path: string, params?: Record<string, string>) {

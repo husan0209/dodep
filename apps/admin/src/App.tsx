@@ -18,6 +18,10 @@ import FraudAlerts from "@/pages/risk/FraudAlerts";
 import AuditLog from "@/pages/risk/AuditLog";
 import Health from "@/pages/system/Health";
 import Config from "@/pages/system/Config";
+import Affiliates from "@/pages/affiliates/Affiliates";
+import AffiliateDetail from "@/pages/affiliates/AffiliateDetail";
+import AffiliatePayouts from "@/pages/affiliates/AffiliatePayouts";
+import AffiliateFraudFlags from "@/pages/affiliates/AffiliateFraudFlags";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient({
@@ -42,7 +46,12 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <ConfigProvider theme={theme}>
         <AntApp>
-          <BrowserRouter>
+          <BrowserRouter
+            future={{
+              v7_startTransition: true,
+              v7_relativeSplatPath: true,
+            }}
+          >
             <Routes>
               <Route path="/login" element={<Login />} />
               <Route
@@ -124,6 +133,38 @@ function App() {
                   element={
                     <ProtectedRoute permission="bonus.create">
                       <CampaignList />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="affiliates"
+                  element={
+                    <ProtectedRoute permission="affiliate.manage">
+                      <Affiliates />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="affiliates/:id"
+                  element={
+                    <ProtectedRoute permission="affiliate.manage">
+                      <AffiliateDetail />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="affiliates/payouts"
+                  element={
+                    <ProtectedRoute permission="affiliate.manage">
+                      <AffiliatePayouts />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="affiliates/fraud"
+                  element={
+                    <ProtectedRoute permission="affiliate.manage">
+                      <AffiliateFraudFlags />
                     </ProtectedRoute>
                   }
                 />

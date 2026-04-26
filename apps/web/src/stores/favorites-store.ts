@@ -23,7 +23,7 @@ export const useFavoritesStore = create<FavoritesState>()(
       },
     }),
     {
-      name: 'opus-favorites',
+      name: 'dod-favorites',
     }
   )
 )

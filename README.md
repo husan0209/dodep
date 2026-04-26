@@ -190,28 +190,28 @@ cd apps/admin && npm run dev
 
 ## 📊 Этапы Разработки
 
-| №   | Этап                      | Статус  |
-| --- | ------------------------- | ------- |
-| 1   | Инфраструктура            | ✅ 100% |
-| 2   | Observability             | ✅ 100% |
-| 3   | Базы данных               | ✅ 100% |
-| 4   | Proto-контракты           | ✅ 100% |
-| 5   | Rust Betting Engine       | ✅ 100% |
-| 6   | Rust Wallet Core          | ✅ 100% |
-| 7   | Rust WebSocket Gateway    | ✅ 100% |
-| 8   | Go Auth Service           | ✅ 100% |
-| 9   | Go User & Payment         | ✅ 100% |
-| 10  | Go Casino & Notifications | ✅ 100% |
-| 11  | Python Fraud ML           | ✅ 100% |
-| 12  | Next.js Web               | ✅ 100% |
-| 13  | Flutter Mobile            | ✅ 100% |
-| 14  | React Admin Panel         | ✅ 100% |
-| 15  | K8s Production            | ✅ 100% |
-| 16  | Terraform Production      | ✅ 100% |
-| 17  | CI/CD Production          | ✅ 100% |
-| 18  | Security & Testing        | ✅ 100% |
+| №   | Этап                      | Статус     |
+| --- | ------------------------- | ---------- |
+| 1   | Инфраструктура            | ✅ 100%    |
+| 2   | Observability             | ✅ 90%     |
+| 3   | Базы данных               | ✅ 100%    |
+| 4   | Proto-контракты           | ✅ 90%     |
+| 5   | Rust Betting Engine       | ✅ 90%     |
+| 6   | Rust Wallet Core          | ✅ 95%     |
+| 7   | Rust WebSocket Gateway    | 🟡 70%     |
+| 8   | Go Auth Service           | ✅ 85%     |
+| 9   | Go User & Payment         | 🟡 75%     |
+| 10  | Go Casino & Notifications | 🟡 50%     |
+| 11  | Python Fraud ML           | 🟡 60%     |
+| 12  | Next.js Web               | ✅ 85%     |
+| 13  | Flutter Mobile            | 🟡 50%     |
+| 14  | React Admin Panel         | 🟡 60%     |
+| 15  | K8s Production            | 🟡 30%     |
+| 16  | Terraform Production      | 🟡 40%     |
+| 17  | CI/CD Production          | ✅ 80%     |
+| 18  | Security & Testing        | 🟡 40%     |
 
-**Общий прогресс: 18/18 (100%)** ✅
+**Общий прогресс: ~70%** 🟡
 
 ---
 

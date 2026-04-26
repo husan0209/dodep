@@ -9,7 +9,7 @@ services:
     environment:
       POSTGRES_DB: opus_casino
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_PASSWORD: changeme
     ports:
       - "5433:5432"
     volumes:
@@ -24,12 +24,13 @@ services:
   redis:
     image: redis:7-alpine
     container_name: opus-redis
+    command: redis-server --requirepass changeme
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "changeme", "ping"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -41,7 +42,7 @@ services:
     environment:
       CLICKHOUSE_DB: opus_casino
       CLICKHOUSE_USER: default
-      CLICKHOUSE_PASSWORD: clickhouse
+      CLICKHOUSE_PASSWORD: changeme
     ports:
       - "8123:8123"
       - "9000:9000"
@@ -85,7 +86,7 @@ services:
     container_name: opus-minio
     environment:
       MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_ROOT_PASSWORD: changeme
     ports:
       - "9002:9000"
       - "9003:9001"

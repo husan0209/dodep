@@ -46,17 +46,17 @@ export interface TransactionFilters {
 
 export const walletApi = {
   getBalances: () =>
-    api.get<WalletBalance[]>("/api/v1/wallet/balances").then((r) => r.data),
+    api.get<WalletBalance[]>("/api/v1/wallet/balances"),
 
   getBalance: (currency: string) =>
-    api.get<WalletBalance>(`/api/v1/wallet/balances/${currency}`).then((r) => r.data),
+    api.get<WalletBalance>(`/api/v1/wallet/balances/${currency}`),
 
   getTransactions: (filters?: TransactionFilters) =>
-    api.get<Transaction[]>("/api/v1/wallet/transactions", filters as Record<string, string>).then((r) => r.data),
+    api.get<Transaction[]>("/api/v1/wallet/transactions", filters as Record<string, string>),
 
   deposit: (data: DepositRequest) =>
-    api.post<{ deposit_id: string; url?: string }>("/api/v1/wallet/deposit", data).then((r) => r.data),
+    api.post<{ deposit_id: string; url?: string }>("/api/v1/wallet/deposit", data),
 
   withdraw: (data: WithdrawRequest) =>
-    api.post<{ withdrawal_id: string }>("/api/v1/wallet/withdraw", data).then((r) => r.data),
+    api.post<{ withdrawal_id: string }>("/api/v1/wallet/withdraw", data),
 };

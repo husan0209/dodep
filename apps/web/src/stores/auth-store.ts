@@ -1,9 +1,10 @@
 import { create } from "zustand";
-import { authApi } from "@/lib/api/auth";
+import { persist } from "zustand/middleware";
+import { authApi, type AuthResult } from "@/lib/api/auth";
 import { getErrorMessage } from "@/lib/api/errors";
 
 interface User {
-  id: number;
+  id: string;
   uuid: string;
   email: string;
   username: string;
@@ -36,9 +37,19 @@ interface AuthState {
   refreshTokens: () => Promise<void>;
 }
 
-export const useAuthStore = create<AuthState>((set, get) => ({
-  // Initial state
-  user: null,
+const handleAuthResult = (result: AuthResult) => ({
+  accessToken: result.tokens.access_token,
+  refreshToken: result.tokens.refresh_token,
+  isAuthenticated: true,
+  isLoading: false,
+  error: null,
+});
+
+export const useAuthStore = create<AuthState>()(
+  persist(
+    (set, get) => ({
+      // Initial state
+      user: null,
   accessToken: null,
   refreshToken: null,
   isAuthenticated: false,
@@ -52,14 +63,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   login: async (email: string, password: string) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await authApi.login({ email, password });
-      set({
-        accessToken: response.access_token,
-        refreshToken: response.refresh_token,
-        user: response.user,
-        isAuthenticated: true,
-        isLoading: false,
-      });
+      const result = await authApi.login({ email, password });
+      set(handleAuthResult(result));
     } catch (error) {
       set({
         isLoading: false,
@@ -72,14 +77,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   register: async (email: string, password: string, username: string, countryCode: string, currencyCode: string) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await authApi.register({ email, password, username, country_code: countryCode, currency_code: currencyCode });
-      set({
-        accessToken: response.access_token,
-        refreshToken: response.refresh_token,
-        user: response.user,
-        isAuthenticated: true,
-        isLoading: false,
-      });
+      const result = await authApi.register({ email, password, username, country_code: countryCode, currency_code: currencyCode });
+      set(handleAuthResult(result));
     } catch (error) {
       set({
         isLoading: false,
@@ -136,10 +135,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
 
     try {
-      const response = await authApi.refresh(refreshToken);
+      const tokens = await authApi.refresh(refreshToken);
       set({
-        accessToken: response.access_token,
-        refreshToken: response.refresh_token,
+        accessToken: tokens.access_token,
+        refreshToken: tokens.refresh_token,
       });
     } catch (error) {
       set({
@@ -152,4 +151,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   clearError: () => set({ error: null }),
-}));
+    }),
+    {
+      name: "auth-storage",
+      partialize: (state) => ({
+        accessToken: state.accessToken,
+        refreshToken: state.refreshToken,
+        isAuthenticated: state.isAuthenticated,
+      }),
+    }
+  )
+);

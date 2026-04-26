@@ -52,23 +52,23 @@ export interface GameFilters {
 
 export const casinoApi = {
   getGames: (filters?: GameFilters) =>
-    api.get<Game[]>("/api/v1/casino/games", filters as Record<string, string>).then((r) => r.data),
+    api.get<Game[]>("/api/v1/casino/games", filters as Record<string, string>),
 
   getGame: (gameId: string) =>
-    api.get<Game>(`/api/v1/casino/games/${gameId}`).then((r) => r.data),
+    api.get<Game>(`/api/v1/casino/games/${gameId}`),
 
   launchGame: (gameId: string, deviceType: string = "web") =>
-    api.post<GameSession>("/api/v1/casino/games/launch", { game_id: gameId, device_type: deviceType }).then((r) => r.data),
+    api.post<GameSession>("/api/v1/casino/games/launch", { game_id: gameId, device_type: deviceType }),
 
   getGameSession: (sessionId: string) =>
-    api.get<GameSession>(`/api/v1/casino/sessions/${sessionId}`).then((r) => r.data),
+    api.get<GameSession>(`/api/v1/casino/sessions/${sessionId}`),
 
   endGameSession: (sessionId: string) =>
-    api.post<{ success: boolean }>(`/api/v1/casino/sessions/${sessionId}/end`).then((r) => r.data),
+    api.post<{ success: boolean }>(`/api/v1/casino/sessions/${sessionId}/end`),
 
   getGameHistory: (filters?: { game_id?: string; date_from?: string; date_to?: string; page?: number; page_size?: number }) =>
-    api.get<GameSession[]>("/api/v1/casino/history", filters as Record<string, string>).then((r) => r.data),
+    api.get<GameSession[]>("/api/v1/casino/history", filters as Record<string, string>),
 
   getProviders: () =>
-    api.get<Provider[]>("/api/v1/casino/providers").then((r) => r.data),
+    api.get<Provider[]>("/api/v1/casino/providers"),
 };

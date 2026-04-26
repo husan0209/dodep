@@ -951,8 +951,36 @@ HEALTH CHECKS:
 ## MONOREPO STRUCTURE
 
 ```text
-platform/
-├── proto/                          # Protobuf definitions (shared)
+⚠️ IMPORTANT: Read CONVENTIONS.md FIRST for strict file/naming rules.
+⚠️ The structure below reflects the ACTUAL project layout.
+
+opus-casino/
+├── apps/web/                       # Next.js 14
+├── apps/mobile/                    # Flutter
+├── apps/admin/                     # React + Ant Design
+├── services/rust/                  # Rust workspace
+│   ├── betting-engine/
+│   ├── wallet-core/
+│   └── websocket-gateway/
+├── services/go/                    # ALL Go services
+│   ├── auth/                       # module github.com/opus-casino/auth
+│   ├── user/                       # module github.com/opus-casino/user
+│   ├── payment/                    # module github.com/opus-casino/payment
+│   ├── bonus/                      # module github.com/opus-casino/bonus
+│   ├── casino/                     # module github.com/opus-casino/casino
+│   ├── notification/               # module github.com/opus-casino/notification
+│   ├── kyc/                        # module github.com/opus-casino/kyc
+│   └── affiliate/                  # module github.com/opus-casino/affiliate
+├── services/python/                # Python ML
+│   ├── fraud-ml/
+│   └── analytics/
+├── libs/proto/                     # SINGLE proto source (buf v2)
+├── libs/shared/                    # Shared code (ts/rust/go)
+├── libs/migrations/                # DB migrations
+├── infra/docker/                   # GENERIC Dockerfiles only
+├── infra/k8s/                      # K8s manifests
+├── infra/terraform/                # IaC
+├── CONVENTIONS.md                  # ⛔ MANDATORY rules
 │   ├── buf.yaml
 │   ├── common/v1/
 │   ├── auth/v1/

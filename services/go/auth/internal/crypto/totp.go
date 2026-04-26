@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
 )
 
@@ -36,7 +37,7 @@ func (c *TOTPConfig) GenerateSecret() (secret string, qrURI string, err error) {
 		Issuer:      c.Issuer,
 		AccountName: c.AccountName,
 		SecretSize:  c.SecretSize,
-		Digits:      totp.DigitsSix,
+		Digits:      otp.Digits(c.Digits),
 		Period:      c.Period,
 	})
 	if err != nil {

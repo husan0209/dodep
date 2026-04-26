@@ -45,8 +45,8 @@ func (h *AuthGRPCHandler) Register(ctx context.Context, req *pb.RegisterRequest)
 		h.log.Error("Register failed", zap.Error(err))
 		return &pb.RegisterResponse{
 			Error: &commonv1.ErrorDetails{
-				Code:    "AUTH_REGISTER_FAILED",
-				Message: err.Error(),
+				ErrorCode:    commonv1.ErrorCode_ERROR_CODE_INTERNAL_ERROR,
+				ErrorMessage: err.Error(),
 			},
 		}, nil
 	}
@@ -77,15 +77,15 @@ func (h *AuthGRPCHandler) Login(ctx context.Context, req *pb.LoginRequest) (*pb.
 		h.log.Error("Login failed", zap.Error(err))
 		return &pb.LoginResponse{
 			Error: &commonv1.ErrorDetails{
-				Code:    "AUTH_LOGIN_FAILED",
-				Message: err.Error(),
+				ErrorCode:    commonv1.ErrorCode_ERROR_CODE_AUTH_INVALID_CREDENTIALS,
+				ErrorMessage: err.Error(),
 			},
 		}, nil
 	}
 
 	resp := &pb.LoginResponse{
 		UserId:      &commonv1.UserId{Value: result.UserID},
-		Requires2Fa: result.Requires2FA,
+		Requires_2Fa: result.Requires2FA,
 	}
 
 	if result.Requires2FA {
@@ -105,8 +105,8 @@ func (h *AuthGRPCHandler) RefreshToken(ctx context.Context, req *pb.RefreshToken
 		h.log.Error("RefreshToken failed", zap.Error(err))
 		return &pb.RefreshTokenResponse{
 			Error: &commonv1.ErrorDetails{
-				Code:    "AUTH_REFRESH_FAILED",
-				Message: err.Error(),
+				ErrorCode:    commonv1.ErrorCode_ERROR_CODE_AUTH_TOKEN_INVALID,
+				ErrorMessage: err.Error(),
 			},
 		}, nil
 	}
@@ -118,14 +118,25 @@ func (h *AuthGRPCHandler) RefreshToken(ctx context.Context, req *pb.RefreshToken
 
 // Logout invalidates a user session
 func (h *AuthGRPCHandler) Logout(ctx context.Context, req *pb.LogoutRequest) (*pb.LogoutResponse, error) {
-	err := h.service.Logout(ctx, req.UserId.Value, req.SessionId)
+	userID := req.UserId.Value
+	if userID == "" {
+		return &pb.LogoutResponse{
+			Success: false,
+			Error: &commonv1.ErrorDetails{
+				ErrorCode:    commonv1.ErrorCode_ERROR_CODE_INVALID_ARGUMENT,
+				ErrorMessage: "invalid user ID format",
+			},
+		}, nil
+	}
+
+	err := h.service.Logout(ctx, userID, req.SessionId)
 	if err != nil {
 		h.log.Error("Logout failed", zap.Error(err))
 		return &pb.LogoutResponse{
 			Success: false,
 			Error: &commonv1.ErrorDetails{
-				Code:    "AUTH_LOGOUT_FAILED",
-				Message: err.Error(),
+				ErrorCode:    commonv1.ErrorCode_ERROR_CODE_INTERNAL_ERROR,
+				ErrorMessage: err.Error(),
 			},
 		}, nil
 	}
@@ -140,8 +151,8 @@ func (h *AuthGRPCHandler) ValidateToken(ctx context.Context, req *pb.ValidateTok
 		return &pb.ValidateTokenResponse{
 			Valid: false,
 			Error: &commonv1.ErrorDetails{
-				Code:    "AUTH_TOKEN_INVALID",
-				Message: err.Error(),
+				ErrorCode:    commonv1.ErrorCode_ERROR_CODE_AUTH_TOKEN_INVALID,
+				ErrorMessage: err.Error(),
 			},
 		}, nil
 	}
@@ -163,13 +174,23 @@ func (h *AuthGRPCHandler) GetSession(ctx context.Context, req *pb.GetSessionRequ
 
 // Enable2FA enables two-factor authentication
 func (h *AuthGRPCHandler) Enable2FA(ctx context.Context, req *pb.Enable2FARequest) (*pb.Enable2FAResponse, error) {
-	secret, qrURI, backupCodes, err := h.service.Enable2FA(ctx, req.UserId.Value)
+	userID := req.UserId.Value
+	if userID == "" {
+		return &pb.Enable2FAResponse{
+			Error: &commonv1.ErrorDetails{
+				ErrorCode:    commonv1.ErrorCode_ERROR_CODE_INVALID_ARGUMENT,
+				ErrorMessage: "invalid user ID format",
+			},
+		}, nil
+	}
+
+	secret, qrURI, backupCodes, err := h.service.Enable2FA(ctx, userID)
 	if err != nil {
 		h.log.Error("Enable2FA failed", zap.Error(err))
 		return &pb.Enable2FAResponse{
 			Error: &commonv1.ErrorDetails{
-				Code:    "AUTH_2FA_ENABLE_FAILED",
-				Message: err.Error(),
+				ErrorCode:    commonv1.ErrorCode_ERROR_CODE_INTERNAL_ERROR,
+				ErrorMessage: err.Error(),
 			},
 		}, nil
 	}
@@ -183,14 +204,25 @@ func (h *AuthGRPCHandler) Enable2FA(ctx context.Context, req *pb.Enable2FAReques
 
 // Verify2FA verifies a TOTP code
 func (h *AuthGRPCHandler) Verify2FA(ctx context.Context, req *pb.Verify2FARequest) (*pb.Verify2FAResponse, error) {
-	err := h.service.Verify2FA(ctx, req.UserId.Value, req.TotpCode)
+	userID := req.UserId.Value
+	if userID == "" {
+		return &pb.Verify2FAResponse{
+			Success: false,
+			Error: &commonv1.ErrorDetails{
+				ErrorCode:    commonv1.ErrorCode_ERROR_CODE_INVALID_ARGUMENT,
+				ErrorMessage: "invalid user ID format",
+			},
+		}, nil
+	}
+
+	err := h.service.Verify2FA(ctx, userID, req.TotpCode)
 	if err != nil {
 		h.log.Error("Verify2FA failed", zap.Error(err))
 		return &pb.Verify2FAResponse{
 			Success: false,
 			Error: &commonv1.ErrorDetails{
-				Code:    "AUTH_2FA_VERIFY_FAILED",
-				Message: err.Error(),
+				ErrorCode:    commonv1.ErrorCode_ERROR_CODE_AUTH_2FA_INVALID,
+				ErrorMessage: err.Error(),
 			},
 		}, nil
 	}
@@ -200,14 +232,25 @@ func (h *AuthGRPCHandler) Verify2FA(ctx context.Context, req *pb.Verify2FAReques
 
 // Disable2FA disables two-factor authentication
 func (h *AuthGRPCHandler) Disable2FA(ctx context.Context, req *pb.Disable2FARequest) (*pb.Disable2FAResponse, error) {
-	err := h.service.Disable2FA(ctx, req.UserId.Value, req.TotpCode)
+	userID := req.UserId.Value
+	if userID == "" {
+		return &pb.Disable2FAResponse{
+			Success: false,
+			Error: &commonv1.ErrorDetails{
+				ErrorCode:    commonv1.ErrorCode_ERROR_CODE_INVALID_ARGUMENT,
+				ErrorMessage: "invalid user ID format",
+			},
+		}, nil
+	}
+
+	err := h.service.Disable2FA(ctx, userID, req.TotpCode)
 	if err != nil {
 		h.log.Error("Disable2FA failed", zap.Error(err))
 		return &pb.Disable2FAResponse{
 			Success: false,
 			Error: &commonv1.ErrorDetails{
-				Code:    "AUTH_2FA_DISABLE_FAILED",
-				Message: err.Error(),
+				ErrorCode:    commonv1.ErrorCode_ERROR_CODE_INTERNAL_ERROR,
+				ErrorMessage: err.Error(),
 			},
 		}, nil
 	}
@@ -217,14 +260,25 @@ func (h *AuthGRPCHandler) Disable2FA(ctx context.Context, req *pb.Disable2FARequ
 
 // ChangePassword changes user password
 func (h *AuthGRPCHandler) ChangePassword(ctx context.Context, req *pb.ChangePasswordRequest) (*pb.ChangePasswordResponse, error) {
-	err := h.service.ChangePassword(ctx, req.UserId.Value, req.CurrentPassword, req.NewPassword)
+	userID := req.UserId.Value
+	if userID == "" {
+		return &pb.ChangePasswordResponse{
+			Success: false,
+			Error: &commonv1.ErrorDetails{
+				ErrorCode:    commonv1.ErrorCode_ERROR_CODE_INVALID_ARGUMENT,
+				ErrorMessage: "invalid user ID format",
+			},
+		}, nil
+	}
+
+	err := h.service.ChangePassword(ctx, userID, req.CurrentPassword, req.NewPassword)
 	if err != nil {
 		h.log.Error("ChangePassword failed", zap.Error(err))
 		return &pb.ChangePasswordResponse{
 			Success: false,
 			Error: &commonv1.ErrorDetails{
-				Code:    "AUTH_CHANGE_PASSWORD_FAILED",
-				Message: err.Error(),
+				ErrorCode:    commonv1.ErrorCode_ERROR_CODE_INTERNAL_ERROR,
+				ErrorMessage: err.Error(),
 			},
 		}, nil
 	}
@@ -232,11 +286,11 @@ func (h *AuthGRPCHandler) ChangePassword(ctx context.Context, req *pb.ChangePass
 	return &pb.ChangePasswordResponse{Success: true}, nil
 }
 
-// ResetPasswordRequest initiates password reset
-func (h *AuthGRPCHandler) ResetPasswordRequest(ctx context.Context, req *pb.ResetPasswordRequestRequest) (*pb.ResetPasswordRequestResponse, error) {
+// RequestPasswordReset initiates password reset flow
+func (h *AuthGRPCHandler) RequestPasswordReset(ctx context.Context, req *pb.RequestPasswordResetRequest) (*pb.RequestPasswordResetResponse, error) {
 	h.service.ResetPasswordRequest(ctx, req.Email, req.IpAddress)
 	// Always return success to prevent email enumeration
-	return &pb.ResetPasswordRequestResponse{Success: true}, nil
+	return &pb.RequestPasswordResetResponse{Success: true}, nil
 }
 
 // ResetPassword completes password reset
@@ -247,8 +301,8 @@ func (h *AuthGRPCHandler) ResetPassword(ctx context.Context, req *pb.ResetPasswo
 		return &pb.ResetPasswordResponse{
 			Success: false,
 			Error: &commonv1.ErrorDetails{
-				Code:    "AUTH_RESET_PASSWORD_FAILED",
-				Message: err.Error(),
+				ErrorCode:    commonv1.ErrorCode_ERROR_CODE_INTERNAL_ERROR,
+				ErrorMessage: err.Error(),
 			},
 		}, nil
 	}

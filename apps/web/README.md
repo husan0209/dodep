@@ -1,6 +1,6 @@
-# Opus Casino Web Platform
+# DOD Web Platform
 
-Next.js 14 web application for Opus Casino gambling platform.
+Next.js 14 web application for DOD gambling platform.
 
 ## 🏗 Architecture
 
@@ -248,8 +248,8 @@ npm run lint
 ### Docker
 
 ```bash
-docker build -t opus-casino-web apps/web
-docker run -p 3000:3000 opus-casino-web
+docker build -t dod-web apps/web
+docker run -p 3000:3000 dod-web
 ```
 
 ### Kubernetes
@@ -271,4 +271,4 @@ helm upgrade --install web infra/helm/charts/web \
 
 ## 📝 License
 
-Proprietary - Opus Casino
+Proprietary - DOD

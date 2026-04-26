@@ -1,4 +1,4 @@
-import { Form, Input, Button, Card, Typography, message, Space } from "antd";
+import { Form, Input, Button, Card, Typography, App as AntApp, Space } from "antd";
 import { UserOutlined, LockOutlined } from "@ant-design/icons";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
@@ -37,6 +37,7 @@ export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
   const { setTokens, setAdmin } = useAuthStore();
+  const { message } = AntApp.useApp();
   const from =
     (location.state as { from?: { pathname: string } })?.from?.pathname ||
     "/dashboard";
@@ -58,12 +59,12 @@ export default function Login() {
         role,
         permissions,
       );
-      message.success("Login successful");
+      message.success("Login successful", 3);
       navigate(from, { replace: true });
     },
     onError: (error: Error) => {
       const errorMsg = error.message || "Login failed";
-      message.error(errorMsg);
+      message.error(errorMsg, 3);
     },
   });
 
@@ -85,7 +86,7 @@ export default function Login() {
         >
           <div>
             <Title level={2} style={{ marginBottom: 4 }}>
-              Opus Casino
+              DOD
             </Title>
             <Text type="secondary">Admin Panel</Text>
           </div>

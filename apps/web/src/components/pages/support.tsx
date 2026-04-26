@@ -63,9 +63,9 @@ export function SupportPage() {
       <div className="card p-3">
         <h2 className="text-xs font-semibold text-white mb-2">Контакты</h2>
         <div className="space-y-1 text-[10px] text-gray-500">
-          <p>Email: support@opus.casino</p>
+          <p>Email: support@dod.casino</p>
           <p>Live чат: 24/7</p>
-          <p>Telegram: @opuscasino_support</p>
+          <p>Telegram: @dod_support</p>
         </div>
       </div>
     </div>

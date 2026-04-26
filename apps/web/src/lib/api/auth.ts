@@ -3,6 +3,7 @@ import { api } from "./client";
 export interface LoginRequest {
   email: string;
   password: string;
+  device_id?: string;
 }
 
 export interface RegisterRequest {
@@ -13,15 +14,35 @@ export interface RegisterRequest {
   currency_code: string;
 }
 
-export interface AuthTokens {
+export interface TokenPair {
   access_token: string;
   refresh_token: string;
   expires_in: number;
+  refresh_expires_in: number;
   token_type: string;
 }
 
+export interface Session {
+  id: string;
+  user_id: string;
+  device_id: string;
+  ip_address: string;
+  country: string;
+  created_at: string;
+  expires_at: string;
+  is_active: boolean;
+}
+
+export interface AuthResult {
+  user_id: string;
+  tokens: TokenPair;
+  session: Session;
+  requires_2fa: boolean;
+  temp_token?: string;
+}
+
 export interface User {
-  id: number;
+  id: string;
   uuid: string;
   email: string;
   username: string;
@@ -37,15 +58,15 @@ export interface User {
 
 export const authApi = {
   login: (data: LoginRequest) =>
-    api.post<AuthTokens & { user: User }>("/api/v1/auth/login", data).then((r) => r.data),
+    api.post<AuthResult>("/api/v1/auth/login", data),
 
   register: (data: RegisterRequest) =>
-    api.post<AuthTokens & { user: User }>("/api/v1/auth/register", data).then((r) => r.data),
+    api.post<AuthResult>("/api/v1/auth/register", data),
 
   logout: () => api.post("/api/v1/auth/logout"),
 
-  me: () => api.get<User>("/api/v1/auth/me").then((r) => r.data),
+  me: () => api.get<User>("/api/v1/auth/me"),
 
   refresh: (refreshToken: string) =>
-    api.post<AuthTokens>("/api/v1/auth/refresh", { refresh_token: refreshToken }).then((r) => r.data),
+    api.post<TokenPair>("/api/v1/auth/refresh", { refresh_token: refreshToken }),
 };

@@ -1,6 +1,6 @@
-# Opus Casino Mobile
+# DOD Mobile
 
-Flutter mobile application for Opus Casino platform - iOS & Android
+Flutter mobile application for DOD platform - iOS & Android
 
 ## 🏗 Architecture
 
@@ -225,4 +225,4 @@ class Env {
 
 ## 📄 License
 
-Proprietary - Opus Casino
+Proprietary - DOD

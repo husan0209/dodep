@@ -7,7 +7,7 @@ import (
 // Session represents an active user session
 type Session struct {
 	ID           string     `json:"id" db:"id"`
-	UserID       int64      `json:"user_id" db:"user_id"`
+	UserID       string     `json:"user_id" db:"user_id"`
 	DeviceID     string     `json:"device_id" db:"device_id"`
 	DeviceType   string     `json:"device_type" db:"device_type"`
 	IPAddress    string     `json:"ip_address" db:"ip_address"`
@@ -30,7 +30,7 @@ type TokenPair struct {
 
 // AuthResult is the result of authentication
 type AuthResult struct {
-	UserID       int64   `json:"user_id"`
+	UserID       string   `json:"user_id"`
 	Tokens       *TokenPair `json:"tokens"`
 	Session      *Session   `json:"session"`
 	Requires2FA  bool       `json:"requires_2fa"`

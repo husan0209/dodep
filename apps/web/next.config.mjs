@@ -51,7 +51,7 @@ const nextConfig = {
               "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: https: blob:",
-              "connect-src 'self' https://api.opus.casino wss://ws.opus.casino http://localhost:* ws://localhost:*",
+              "connect-src 'self' https://api.dod.casino wss://ws.dod.casino http://localhost:* ws://localhost:*",
               "frame-src https://*.casino-provider.com",
               "font-src 'self' data:",
             ].join("; "),
@@ -82,11 +82,11 @@ const nextConfig = {
     remotePatterns: [
       {
         protocol: "https",
-        hostname: "cdn.opus.casino",
+        hostname: "cdn.dod.casino",
       },
       {
         protocol: "https",
-        hostname: "images.opus.casino",
+        hostname: "images.dod.casino",
       },
     ],
     formats: ["image/avif", "image/webp"],
