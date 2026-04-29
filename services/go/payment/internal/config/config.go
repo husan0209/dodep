@@ -6,6 +6,8 @@ import (
 
 	"fmt"
 
+	"strings"
+
 	"time"
 
 
@@ -156,19 +158,13 @@ type KafkaConfig struct {
 
 
 // NOWPayments holds NOWPayments API configuration
-
 type NOWPayments struct {
-
-	BaseURL   string      `mapstructure:"base_url"`
-
-	APIKey    string      `mapstructure:"api_key"`
-
-	IPNSecret string      `mapstructure:"ipn_secret"`
-
-	Timeout   time.Duration `mapstructure:"timeout"`
-
-	Retry     RetryConfig `mapstructure:"retry"`
-
+	BaseURL         string        `mapstructure:"base_url"`
+	APIKey          string        `mapstructure:"api_key"`
+	IPNSecret       string        `mapstructure:"ipn_secret"`
+	IPNCallbackURL  string        `mapstructure:"ipn_callback_url"`
+	Timeout         time.Duration `mapstructure:"timeout"`
+	Retry           RetryConfig   `mapstructure:"retry"`
 }
 
 
@@ -272,6 +268,9 @@ func LoadWithPath(configPath string) (*Config, error) {
 
 
 	// Environment variable overrides
+	// SetEnvKeyReplacer converts nested key "nowpayments.api_key"
+	// → env var "PAYMENT_NOWPAYMENTS_API_KEY"
+	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 
 	v.AutomaticEnv()
 
@@ -408,6 +407,13 @@ func (c *Config) Validate() error {
 	if c.NOWPayments.IPNSecret == "" {
 
 		return fmt.Errorf("nowpayments ipn_secret is required")
+
+	}
+
+	// IPN callback URL is required in production only
+	if c.Environment == "production" && c.NOWPayments.IPNCallbackURL == "" {
+
+		return fmt.Errorf("nowpayments ipn_callback_url is required in production")
 
 	}
 

@@ -1,7 +1,7 @@
 //! Constants for Opus Casino platform
 
 use rust_decimal::Decimal;
-use std::sync::LazyLock;
+use once_cell::sync::Lazy;
 
 /// Default pagination settings
 pub mod pagination {
@@ -171,23 +171,25 @@ pub mod rate_limits {
 /// Betting limits
 pub mod bet_limits {
     use rust_decimal::Decimal;
+    use once_cell::sync::Lazy;
     
-    pub static MIN_STAKE: LazyLock<Decimal> = LazyLock::new(|| Decimal::new(10, 2)); // 0.10
-    pub static MAX_STAKE: LazyLock<Decimal> = LazyLock::new(|| Decimal::new(1000000, 2)); // 10000.00
+    pub static MIN_STAKE: Lazy<Decimal> = Lazy::new(|| Decimal::new(10, 2)); // 0.10
+    pub static MAX_STAKE: Lazy<Decimal> = Lazy::new(|| Decimal::new(1000000, 2)); // 10000.00
     pub const MAX_WIN_MULTIPLIER: u32 = 10000; // Max win = stake * multiplier
-    pub static MAX_ODDS: LazyLock<Decimal> = LazyLock::new(|| Decimal::new(100000, 2)); // 1000.00
-    pub static MIN_ODDS: LazyLock<Decimal> = LazyLock::new(|| Decimal::new(101, 2)); // 1.01
+    pub static MAX_ODDS: Lazy<Decimal> = Lazy::new(|| Decimal::new(100000, 2)); // 1000.00
+    pub static MIN_ODDS: Lazy<Decimal> = Lazy::new(|| Decimal::new(101, 2)); // 1.01
 }
 
 /// Payment limits
 pub mod payment_limits {
     use rust_decimal::Decimal;
+    use once_cell::sync::Lazy;
     
-    pub static MIN_DEPOSIT: LazyLock<Decimal> = LazyLock::new(|| Decimal::new(100, 2)); // 1.00
-    pub static MAX_DEPOSIT_DAILY: LazyLock<Decimal> = LazyLock::new(|| Decimal::new(1000000, 2)); // 10000.00
-    pub static MIN_WITHDRAWAL: LazyLock<Decimal> = LazyLock::new(|| Decimal::new(1000, 2)); // 10.00
-    pub static MAX_WITHDRAWAL_DAILY: LazyLock<Decimal> = LazyLock::new(|| Decimal::new(5000000, 2)); // 50000.00
-    pub static MAX_WITHDRAWAL_MONTHLY: LazyLock<Decimal> = LazyLock::new(|| Decimal::new(50000000, 2)); // 500000.00
+    pub static MIN_DEPOSIT: Lazy<Decimal> = Lazy::new(|| Decimal::new(100, 2)); // 1.00
+    pub static MAX_DEPOSIT_DAILY: Lazy<Decimal> = Lazy::new(|| Decimal::new(1000000, 2)); // 10000.00
+    pub static MIN_WITHDRAWAL: Lazy<Decimal> = Lazy::new(|| Decimal::new(1000, 2)); // 10.00
+    pub static MAX_WITHDRAWAL_DAILY: Lazy<Decimal> = Lazy::new(|| Decimal::new(5000000, 2)); // 50000.00
+    pub static MAX_WITHDRAWAL_MONTHLY: Lazy<Decimal> = Lazy::new(|| Decimal::new(50000000, 2)); // 500000.00
 }
 
 /// Session settings

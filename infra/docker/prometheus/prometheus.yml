@@ -1,0 +1,69 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    environment: production
+
+scrape_configs:
+  - job_name: 'auth'
+    static_configs:
+      - targets: ['auth:8083']
+    metrics_path: /metrics
+
+  - job_name: 'user'
+    static_configs:
+      - targets: ['user:8085']
+    metrics_path: /metrics
+
+  - job_name: 'payment'
+    static_configs:
+      - targets: ['payment:9104']
+    metrics_path: /metrics
+
+  - job_name: 'casino'
+    static_configs:
+      - targets: ['casino:8086']
+    metrics_path: /metrics
+
+  - job_name: 'bonus'
+    static_configs:
+      - targets: ['bonus:8088']
+    metrics_path: /metrics
+
+  - job_name: 'notification'
+    static_configs:
+      - targets: ['notification:8087']
+    metrics_path: /metrics
+
+  - job_name: 'kyc'
+    static_configs:
+      - targets: ['kyc:8089']
+    metrics_path: /metrics
+
+  - job_name: 'admin-bff'
+    static_configs:
+      - targets: ['admin-bff:8091']
+    metrics_path: /metrics
+
+  - job_name: 'wallet-core'
+    static_configs:
+      - targets: ['wallet-core:8081']
+    metrics_path: /metrics
+
+  - job_name: 'betting-engine'
+    static_configs:
+      - targets: ['betting-engine:8080']
+    metrics_path: /metrics
+
+  - job_name: 'websocket-gateway'
+    static_configs:
+      - targets: ['websocket-gateway:8082']
+    metrics_path: /metrics
+
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres:9187']
+
+  - job_name: 'nginx'
+    static_configs:
+      - targets: ['nginx:9113']

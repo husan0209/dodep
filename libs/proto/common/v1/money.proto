@@ -10,6 +10,7 @@ option java_multiple_files = true;
 option java_package = "com.opuscasino.proto.common.v1";
 
 import "common/v1/types.proto";
+import "google/protobuf/timestamp.proto";
 
 // Balance represents a wallet balance with all states
 message Balance {

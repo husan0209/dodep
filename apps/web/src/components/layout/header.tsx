@@ -2,13 +2,10 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useTheme } from 'next-themes'
 import { useState } from 'react'
 import {
   Bars3Icon,
   XMarkIcon,
-  SunIcon,
-  MoonIcon,
   UserCircleIcon,
   StarIcon,
   TrophyIcon,
@@ -16,55 +13,67 @@ import {
   WalletIcon,
   GiftIcon,
   UserGroupIcon,
+  FireIcon,
+  CurrencyDollarIcon,
 } from '@heroicons/react/24/outline'
 import { useAuthStore } from '@stores/auth-store'
+import { cn } from '@/lib/cn'
 
 const mainNav = [
-  { name: 'Спорт', href: '/sportsbook', icon: TrophyIcon },
-  { name: 'Казино', href: '/casino', icon: Squares2X2Icon },
-  { name: 'Live', href: '/casino?tab=live', icon: Squares2X2Icon },
-  { name: 'Избранное', href: '/casino?tab=favorites', icon: StarIcon },
+  { name: 'Спорт', href: '/sportsbook', icon: TrophyIcon, badge: null as string | null },
+  { name: 'Казино', href: '/casino', icon: Squares2X2Icon, badge: null },
+  { name: 'Live', href: '/casino?tab=live', icon: FireIcon, badge: 'LIVE' },
+  { name: 'Избранное', href: '/casino?tab=favorites', icon: StarIcon, badge: null },
 ]
 
 const secondaryNav = [
-  { name: 'Кошелёк', href: '/wallet', icon: WalletIcon },
-  { name: 'Бонусы', href: '/bonuses', icon: GiftIcon },
-  { name: 'Affiliate', href: '/affiliate', icon: UserGroupIcon },
+  { name: 'Кошелёк', href: '/wallet', icon: WalletIcon, badge: null as string | null },
+  { name: 'Бонусы', href: '/bonuses', icon: GiftIcon, badge: null as string | null },
+  { name: 'Affiliate', href: '/affiliate', icon: UserGroupIcon, badge: null as string | null },
 ]
 
 export function Header() {
   const pathname = usePathname()
-  const { theme, setTheme } = useTheme()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const { user, isAuthenticated } = useAuthStore()
 
   return (
     <header className="sticky top-0 z-50">
-      {/* Top bar */}
-      <div className="bg-[rgb(var(--bg-primary))] border-b border-[rgb(var(--border))]">
-        <div className="mx-auto max-w-[1440px] px-3">
-          <div className="flex h-10 items-center justify-between">
+      {/* Glassmorphism top bar */}
+      <div className="bg-bg-primary/80 backdrop-blur-xl backdrop-saturate-150 border-b border-border/60">
+        <div className="mx-auto max-w-[1440px] px-4">
+          <div className="flex h-14 items-center justify-between gap-4">
             {/* Logo */}
-            <Link href="/" className="flex items-center gap-1 shrink-0">
-              <span className="text-lg font-bold text-blue-500 tracking-tight">DOD</span>
+            <Link href="/" className="flex items-center gap-2 shrink-0 group">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-yellow-400 to-amber-500 flex items-center justify-center shadow-glow-gold-sm group-hover:shadow-glow-gold transition-shadow duration-300">
+                <CurrencyDollarIcon className="h-5 w-5 text-slate-950" />
+              </div>
+              <span className="text-xl font-bold tracking-tight text-gradient-gold hidden sm:block">DOD</span>
             </Link>
 
-            {/* Main nav */}
-            <nav className="hidden lg:flex items-center gap-0.5">
+            {/* Main nav - pill style */}
+            <nav className="hidden lg:flex items-center gap-1 bg-bg-secondary/60 rounded-2xl p-1 border border-border/40">
               {mainNav.map((item) => {
                 const isActive = pathname === item.href || (item.href !== '/' && pathname?.startsWith(item.href.split('?')[0]))
                 return (
                   <Link
                     key={item.name}
                     href={item.href}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded transition-colors ${
+                    className={cn(
+                      'relative flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-xl transition-all duration-200',
                       isActive
-                        ? 'text-white bg-blue-600'
-                        : 'text-gray-400 hover:text-white hover:bg-white/5'
-                    }`}
+                        ? 'text-white bg-bg-tertiary shadow-sm'
+                        : 'text-text-secondary hover:text-text-primary hover:bg-white/5'
+                    )}
                   >
-                    <item.icon className="h-3.5 w-3.5" />
+                    <item.icon className={cn('h-4 w-4', item.badge === 'LIVE' && 'text-red-400')} />
                     {item.name}
+                    {item.badge === 'LIVE' && (
+                      <span className="absolute -top-0.5 -right-0.5 flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                      </span>
+                    )}
                   </Link>
                 )
               })}
@@ -76,41 +85,50 @@ export function Header() {
                 <Link
                   key={item.name}
                   href={item.href}
-                  className="hidden sm:flex items-center gap-1 px-2 py-1 text-xs text-gray-300 hover:text-white hover:bg-white/5 rounded transition-colors"
+                  className="hidden lg:flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-text-secondary hover:text-text-primary hover:bg-white/5 rounded-xl transition-all duration-200"
                 >
-                  <item.icon className="h-3.5 w-3.5" />
+                  <item.icon className="h-4 w-4" />
                   {item.name}
                 </Link>
               ))}
 
-              {/* Theme toggle */}
-              <button
-                onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-                className="p-1.5 rounded hover:bg-white/5 text-gray-500 transition-colors"
-              >
-                {theme === 'dark' ? <SunIcon className="h-4 w-4" /> : <MoonIcon className="h-4 w-4" />}
-              </button>
-
               {/* Auth */}
               {isAuthenticated ? (
-                <div className="flex items-center gap-1">
-                  <Link href="/wallet" className="btn-primary text-xs px-2.5 py-1.5 hidden sm:inline-flex">
+                <div className="flex items-center gap-2">
+                  {/* Balance display */}
+                  <Link
+                    href="/wallet"
+                    className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-bg-secondary/60 border border-border/40 hover:border-border-light/60 transition-all duration-200"
+                  >
+                    <WalletIcon className="h-4 w-4 text-text-muted" />
+                    <span className="text-sm font-bold text-text-primary font-mono tabular-nums">
+                      {'balance' in (user || {}) && (user as unknown as { balance?: number }).balance
+                        ? (user as unknown as { balance: number }).balance.toLocaleString('ru-RU', { minimumFractionDigits: 2 })
+                        : '0.00'}
+                    </span>
+                    <span className="text-xs text-text-muted">₽</span>
+                  </Link>
+
+                  <Link href="/wallet" className="btn-primary text-xs px-4 py-2 shadow-glow-gold-sm hidden sm:inline-flex">
                     Депозит
                   </Link>
+
                   <Link
                     href="/profile"
-                    className="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-white/5 text-gray-300 transition-colors text-xs"
+                    className="flex items-center gap-1.5 px-2.5 py-2 rounded-xl hover:bg-white/5 text-text-secondary hover:text-text-primary transition-all duration-200"
                   >
-                    <UserCircleIcon className="h-4 w-4" />
-                    <span className="hidden sm:inline">{user?.username || 'Профиль'}</span>
+                    <div className="w-7 h-7 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center text-white text-xs font-bold">
+                      {user?.username?.charAt(0).toUpperCase() || 'U'}
+                    </div>
+                    <span className="hidden lg:inline text-sm font-medium">{user?.username || 'Профиль'}</span>
                   </Link>
                 </div>
               ) : (
-                <div className="flex items-center gap-1">
-                  <Link href="/login" className="px-2 py-1 text-xs text-gray-300 hover:text-white transition-colors">
+                <div className="flex items-center gap-2">
+                  <Link href="/login" className="px-4 py-2 text-sm font-medium text-text-secondary hover:text-text-primary hover:bg-white/5 rounded-xl transition-all duration-200">
                     Войти
                   </Link>
-                  <Link href="/register" className="btn-yellow text-xs">
+                  <Link href="/register" className="btn-primary text-xs px-4 py-2.5 shadow-glow-gold-sm">
                     Регистрация
                   </Link>
                 </div>
@@ -119,48 +137,54 @@ export function Header() {
               {/* Mobile menu */}
               <button
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                className="lg:hidden p-1.5 rounded hover:bg-white/5 text-gray-500 transition-colors"
+                className="lg:hidden p-2 rounded-xl hover:bg-white/5 text-text-muted hover:text-text-primary transition-all duration-200"
               >
-                {mobileMenuOpen ? <XMarkIcon className="h-4 w-4" /> : <Bars3Icon className="h-4 w-4" />}
+                {mobileMenuOpen ? <XMarkIcon className="h-5 w-5" /> : <Bars3Icon className="h-5 w-5" />}
               </button>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Mobile menu */}
+      {/* Mobile menu - glassmorphism drawer */}
       {mobileMenuOpen && (
-        <div className="lg:hidden bg-[rgb(var(--bg-secondary))] border-b border-[rgb(var(--border))] fade-in">
-          <div className="mx-auto max-w-[1440px] px-3 py-2">
-            <div className="flex flex-col gap-0.5">
+        <div className="lg:hidden bg-bg-secondary/95 backdrop-blur-2xl backdrop-saturate-150 border-b border-border/60 animate-slide-down">
+          <div className="mx-auto max-w-[1440px] px-4 py-3">
+            <div className="flex flex-col gap-1">
               {[...mainNav, ...secondaryNav].map((item) => (
                 <Link
                   key={item.name}
                   href={item.href}
                   onClick={() => setMobileMenuOpen(false)}
-                  className={`flex items-center gap-2 px-3 py-2 rounded text-xs font-medium transition-colors ${
+                  className={cn(
+                    'flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-200',
                     pathname === item.href
-                      ? 'text-white bg-blue-600'
-                      : 'text-gray-400 hover:text-white hover:bg-white/5'
-                  }`}
+                      ? 'text-white bg-bg-tertiary shadow-sm'
+                      : 'text-text-secondary hover:text-text-primary hover:bg-white/5'
+                  )}
                 >
-                  <item.icon className="h-4 w-4" />
+                  <item.icon className={cn('h-5 w-5', item.badge === 'LIVE' && 'text-red-400')} />
                   {item.name}
+                  {item.badge && (
+                    <span className="ml-auto badge badge-live animate-pulse-fast text-[9px]">
+                      {item.badge}
+                    </span>
+                  )}
                 </Link>
               ))}
               {!isAuthenticated && (
-                <div className="flex gap-2 pt-2 mt-1 border-t border-[rgb(var(--border))]">
+                <div className="flex gap-2 pt-3 mt-2 border-t border-border/40">
                   <Link
                     href="/login"
                     onClick={() => setMobileMenuOpen(false)}
-                    className="flex-1 text-center px-3 py-1.5 text-xs border border-[rgb(var(--border))] rounded hover:bg-white/5 transition-colors text-gray-300"
+                    className="flex-1 text-center py-2.5 text-sm font-semibold border border-border rounded-xl hover:bg-white/5 transition-colors text-text-secondary"
                   >
                     Войти
                   </Link>
                   <Link
                     href="/register"
                     onClick={() => setMobileMenuOpen(false)}
-                    className="flex-1 text-center btn-yellow text-xs"
+                    className="flex-1 text-center btn-primary text-sm py-2.5"
                   >
                     Регистрация
                   </Link>

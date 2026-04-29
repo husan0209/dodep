@@ -1,6 +1,25 @@
 import apiClient from "./api";
 import type { PaginatedResponse } from "@/types/api";
 
+export interface AffiliateDashboard {
+  earnings_today?: string;
+  earnings_this_month?: string;
+  pending_amount?: string;
+  available_amount?: string;
+  paid_amount?: string;
+  next_payout_date?: string | null;
+  clicks?: number;
+  registrations?: number;
+  ftd_count?: number;
+  active_players?: number;
+  ggr_amount?: string;
+  ngr_amount?: string;
+  commission_amount?: string;
+  commission_reversed_amount?: string;
+  commission_adjusted_amount?: string;
+  currency?: string;
+}
+
 export interface Affiliate {
   id: string;
   user_id: number;
@@ -15,8 +34,35 @@ export interface Affiliate {
   approved_at: string | null;
   created_at: string;
   // Dashboard fields (returned in detail view)
-  profile?: Record<string, unknown>;
-  dashboard?: Record<string, unknown>;
+  profile?: any;
+  dashboard?: AffiliateDashboard;
+}
+
+export interface Payout {
+  id: string;
+  affiliate_id: string;
+  amount: string;
+  currency: string;
+  status: string;
+  period_start?: string;
+  period_end?: string;
+  provider_reference?: string | null;
+  rejection_reason?: string | null;
+  created_at: string;
+}
+
+export interface FraudFlag {
+  id: string;
+  affiliate_id: string;
+  referred_user_id: number;
+  flag_type: string;
+  status: string;
+  details?: Record<string, unknown> | null;
+  flagged_by?: string | null;
+  resolved_by?: string | null;
+  resolved_at?: string | null;
+  notes?: string | null;
+  created_at: string;
 }
 
 export const affiliatesService = {
@@ -33,8 +79,8 @@ export const affiliatesService = {
     return response.data;
   },
 
-  async getAffiliate(affiliateId: string): Promise<Record<string, unknown>> {
-    const response = await apiClient.get(
+  async getAffiliate(affiliateId: string): Promise<Affiliate> {
+    const response = await apiClient.get<Affiliate>(
       `/admin/affiliates/${affiliateId}`,
     );
     return response.data;
@@ -85,10 +131,11 @@ export const affiliatesService = {
     status?: string;
     page?: number;
     page_size?: number;
-  }): Promise<PaginatedResponse<unknown>> {
-    const response = await apiClient.get("/admin/affiliates/payouts", {
-      params,
-    });
+  }): Promise<PaginatedResponse<Record<string, unknown>>> {
+    const response = await apiClient.get<PaginatedResponse<Record<string, unknown>>>(
+      "/admin/affiliates/payouts",
+      { params },
+    );
     return response.data;
   },
 
@@ -111,10 +158,11 @@ export const affiliatesService = {
     status?: string;
     page?: number;
     page_size?: number;
-  }): Promise<PaginatedResponse<unknown>> {
-    const response = await apiClient.get("/admin/affiliates/fraud-flags", {
-      params,
-    });
+  }): Promise<PaginatedResponse<Record<string, unknown>>> {
+    const response = await apiClient.get<PaginatedResponse<Record<string, unknown>>>(
+      "/admin/affiliates/fraud-flags",
+      { params },
+    );
     return response.data;
   },
 };

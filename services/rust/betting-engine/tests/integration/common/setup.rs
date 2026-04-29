@@ -89,7 +89,7 @@ impl TestApp {
                 event_id        BIGINT,
                 market_id       BIGINT,
                 selection_id    BIGINT,
-                idempotency_key UUID UNIQUE NOT NULL,
+                idempotency_key UUID NOT NULL,
                 ip_address      VARCHAR(45),
                 device_fingerprint VARCHAR(64),
                 placed_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -97,6 +97,18 @@ impl TestApp {
                 updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                 metadata        JSONB DEFAULT '{}',
                 CONSTRAINT ck_stake_positive CHECK (stake > 0)
+            )
+            "#
+        ).execute(pool).await.unwrap();
+
+        // Idempotency safety net for partitioned table
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS bet_idempotency_keys (
+                idempotency_key UUID PRIMARY KEY,
+                bet_id BIGINT NOT NULL,
+                user_id BIGINT NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )
             "#
         ).execute(pool).await.unwrap();

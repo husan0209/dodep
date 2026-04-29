@@ -46,7 +46,7 @@ export default function Transactions() {
     {
       title: "Amount",
       dataIndex: "amount",
-      render: (v: string, r: Record<string, unknown>) => (
+      render: (v: string, r: any) => (
         <MoneyDisplay amount={v} currency={r.currency_code as string} />
       ),
     },
@@ -70,7 +70,7 @@ export default function Transactions() {
     {
       title: "Reference",
       dataIndex: "reference_type",
-      render: (v: string, r: Record<string, unknown>) =>
+      render: (v: string, r: any) =>
         v ? `${v} #${(r.reference_id as string)?.slice(0, 8)}` : "—",
     },
     {

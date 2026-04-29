@@ -6,23 +6,22 @@ import (
 	"errors"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
-	"go.uber.org/zap"
+	"gorm.io/gorm"
 )
 
-// CasinoRepository handles data persistence for casino operations
+// CasinoRepository handles data persistence for casino operations.
+// Uses GORM (per CONVENTIONS.md) for all DB operations.
 type CasinoRepository struct {
-	db    *pgxpool.Pool
+	db    *gorm.DB
 	redis *redis.Client
-	log   *zap.Logger
 }
 
 var errCasinoDatabaseUnavailable = errors.New("database client is not initialized")
 var errCasinoRedisUnavailable = errors.New("redis client is not initialized")
 
-// NewCasinoRepository creates a new casino repository
-func NewCasinoRepository(db *pgxpool.Pool, rdb *redis.Client) *CasinoRepository {
+// NewCasinoRepository creates a new casino repository.
+func NewCasinoRepository(db *gorm.DB, rdb *redis.Client) *CasinoRepository {
 	return &CasinoRepository{
 		db:    db,
 		redis: rdb,
@@ -125,7 +124,30 @@ func (r *CasinoRepository) GetGames(ctx context.Context, opts GetGamesOptions) (
 	if r.db == nil {
 		return nil, 0, errCasinoDatabaseUnavailable
 	}
-	return []Game{}, 0, nil
+
+	query := r.db.WithContext(ctx).Model(&Game{}).Where("is_active = true")
+	if opts.ProviderID != nil {
+		query = query.Where("provider_id = ?", *opts.ProviderID)
+	}
+	if opts.Category != nil {
+		query = query.Where("category = ?", *opts.Category)
+	}
+	if opts.Search != nil {
+		query = query.Where("name ILIKE ?", "%"+*opts.Search+"%")
+	}
+
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	var games []Game
+	if err := query.Limit(int(opts.Limit)).Offset(int(opts.Offset)).
+		Order("popularity_score DESC").Find(&games).Error; err != nil {
+		return nil, 0, err
+	}
+
+	return games, total, nil
 }
 
 // GetGame returns a game by ID
@@ -133,7 +155,11 @@ func (r *CasinoRepository) GetGame(ctx context.Context, gameID string) (*Game, e
 	if r.db == nil {
 		return nil, errCasinoDatabaseUnavailable
 	}
-	return nil, nil
+	var game Game
+	if err := r.db.WithContext(ctx).Where("id = ?", gameID).First(&game).Error; err != nil {
+		return nil, err
+	}
+	return &game, nil
 }
 
 // GetProviders returns all providers
@@ -141,7 +167,15 @@ func (r *CasinoRepository) GetProviders(ctx context.Context, isActive *bool) ([]
 	if r.db == nil {
 		return nil, errCasinoDatabaseUnavailable
 	}
-	return []Provider{}, nil
+	query := r.db.WithContext(ctx).Model(&Provider{})
+	if isActive != nil {
+		query = query.Where("is_active = ?", *isActive)
+	}
+	var providers []Provider
+	if err := query.Find(&providers).Error; err != nil {
+		return nil, err
+	}
+	return providers, nil
 }
 
 // GetProvider returns a provider by ID
@@ -149,7 +183,11 @@ func (r *CasinoRepository) GetProvider(ctx context.Context, providerID string) (
 	if r.db == nil {
 		return nil, errCasinoDatabaseUnavailable
 	}
-	return nil, nil
+	var p Provider
+	if err := r.db.WithContext(ctx).Where("id = ?", providerID).First(&p).Error; err != nil {
+		return nil, err
+	}
+	return &p, nil
 }
 
 // CreateGameSession creates a new game session
@@ -157,7 +195,7 @@ func (r *CasinoRepository) CreateGameSession(ctx context.Context, session *GameS
 	if r.db == nil {
 		return errCasinoDatabaseUnavailable
 	}
-	return nil
+	return r.db.WithContext(ctx).Create(session).Error
 }
 
 // GetGameSession returns a game session by ID
@@ -165,7 +203,11 @@ func (r *CasinoRepository) GetGameSession(ctx context.Context, sessionID string)
 	if r.db == nil {
 		return nil, errCasinoDatabaseUnavailable
 	}
-	return nil, nil
+	var s GameSession
+	if err := r.db.WithContext(ctx).Where("id = ?", sessionID).First(&s).Error; err != nil {
+		return nil, err
+	}
+	return &s, nil
 }
 
 // UpdateGameSession updates a game session
@@ -176,12 +218,14 @@ func (r *CasinoRepository) UpdateGameSession(ctx context.Context, session *GameS
 	return nil
 }
 
-// EndGameSession ends a game session
+// EndGameSession marks a session as ended
 func (r *CasinoRepository) EndGameSession(ctx context.Context, sessionID string, endedAt time.Time) error {
 	if r.db == nil {
 		return errCasinoDatabaseUnavailable
 	}
-	return nil
+	return r.db.WithContext(ctx).Model(&GameSession{}).
+		Where("id = ?", sessionID).
+		Updates(map[string]interface{}{"status": "ended", "ended_at": endedAt}).Error
 }
 
 // GetGameHistory returns user's game history
@@ -189,7 +233,23 @@ func (r *CasinoRepository) GetGameHistory(ctx context.Context, userID string, ga
 	if r.db == nil {
 		return nil, 0, errCasinoDatabaseUnavailable
 	}
-	return []GameSession{}, 0, nil
+	query := r.db.WithContext(ctx).Model(&GameSession{}).Where("user_id = ?", userID)
+	if gameID != nil {
+		query = query.Where("game_id = ?", *gameID)
+	}
+	if dateRange != nil {
+		query = query.Where("started_at BETWEEN ? AND ?", dateRange.From, dateRange.To)
+	}
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	var sessions []GameSession
+	if err := query.Limit(int(limit)).Offset(int(offset)).
+		Order("started_at DESC").Find(&sessions).Error; err != nil {
+		return nil, 0, err
+	}
+	return sessions, total, nil
 }
 
 // GetRoundHistory returns round history for a session
@@ -197,7 +257,16 @@ func (r *CasinoRepository) GetRoundHistory(ctx context.Context, sessionID string
 	if r.db == nil {
 		return nil, 0, errCasinoDatabaseUnavailable
 	}
-	return []GameRound{}, 0, nil
+	var total int64
+	if err := r.db.WithContext(ctx).Model(&GameRound{}).Where("session_id = ?", sessionID).Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	var rounds []GameRound
+	if err := r.db.WithContext(ctx).Where("session_id = ?", sessionID).
+		Limit(int(limit)).Offset(int(offset)).Order("started_at ASC").Find(&rounds).Error; err != nil {
+		return nil, 0, err
+	}
+	return rounds, total, nil
 }
 
 // CreateGameRound creates a new game round
@@ -205,7 +274,7 @@ func (r *CasinoRepository) CreateGameRound(ctx context.Context, round *GameRound
 	if r.db == nil {
 		return errCasinoDatabaseUnavailable
 	}
-	return nil
+	return r.db.WithContext(ctx).Create(round).Error
 }
 
 // CacheGame caches game data in Redis

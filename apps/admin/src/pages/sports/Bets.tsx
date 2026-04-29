@@ -40,7 +40,7 @@ export default function Bets() {
       sportsService.getBets({
         page,
         page_size: pageSize,
-        status: status,
+        status: status as any,
         user_id: userId || undefined,
       }),
   });
@@ -74,7 +74,7 @@ export default function Bets() {
     {
       title: "Stake",
       dataIndex: "stake",
-      render: (v: string, r: Record<string, unknown>) => (
+      render: (v: string, r: any) => (
         <MoneyDisplay amount={v} currency={r.currency_code as string} />
       ),
     },

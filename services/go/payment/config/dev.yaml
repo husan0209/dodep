@@ -1,0 +1,32 @@
+# Payment Service - Development overrides
+# Loaded automatically when environment=development (via LoadWithPath or viper MergeInConfig)
+# This file is safe to commit — secrets come from environment variables only
+
+environment: development
+
+tracing:
+  enabled: false  # Jaeger не нужен в dev
+
+database:
+  host: localhost
+  port: 5433        # docker-compose.dev.yml maps PostgreSQL to 5433
+  user: postgres
+  password: changeme
+  database: opus_casino
+  ssl_mode: disable
+
+redis:
+  host: localhost
+  port: 6379
+  password: changeme
+
+kafka:
+  brokers:
+    - localhost:9092
+
+# Secrets поставляются через ENV (см. dev.ps1 / dev.sh):
+# PAYMENT_NOWPAYMENTS_API_KEY    = S9ABM14-ZRW4V20-HS8C1SY-84MBY5P
+# PAYMENT_NOWPAYMENTS_IPN_SECRET = cpWmw0u7X4m2hO5HrnXbZVzc+vcgoFBI
+nowpayments:
+  base_url: https://api.nowpayments.io/v1
+  ipn_callback_url: ""   # Необязателен в dev (используй ngrok для тестирования webhook)

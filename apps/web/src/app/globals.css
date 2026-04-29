@@ -4,37 +4,86 @@
 
 @layer base {
   :root {
-    --bg-primary: 9, 18, 33;
-    --bg-secondary: 14, 28, 46;
-    --bg-tertiary: 19, 35, 56;
-    --bg-elevated: 27, 46, 70;
-    --text-primary: 226, 232, 240;
-    --text-secondary: 148, 163, 184;
-    --text-muted: 100, 116, 139;
-    --accent-blue: 59, 130, 246;
-    --accent-yellow: 251, 191, 36;
-    --accent-green: 34, 197, 94;
-    --accent-red: 239, 68, 68;
-    --border: 38, 58, 86;
-    --border-light: 58, 88, 122;
-    --ring: 59, 130, 246;
+    /* Premium Dark Color System */
+    --bg-primary: 11, 14, 26;
+    --bg-secondary: 16, 20, 36;
+    --bg-tertiary: 22, 28, 50;
+    --bg-elevated: 28, 35, 62;
+    --bg-glass: 16, 20, 36;
+    --text-primary: 244, 246, 250;
+    --text-secondary: 160, 170, 195;
+    --text-muted: 100, 110, 140;
+    --text-disabled: 70, 78, 100;
+
+    /* Accent System - Obsidian Frost */
+    --accent-frost: 248, 250, 252;
+    --accent-platinum: 203, 213, 225;
+    --accent-gold: 248, 250, 252;
+    --accent-gold-dim: 203, 213, 225;
+    --accent-cyan: 103, 232, 249;
+    --accent-emerald: 45, 212, 191;
+    --accent-rose: 251, 113, 133;
+    --accent-violet: 167, 139, 250;
+    --accent-orange: 251, 146, 60;
+
+    /* Semantic Accents */
+    --accent-primary: 250, 204, 21;
+    --accent-success: 52, 211, 153;
+    --accent-danger: 251, 113, 133;
+    --accent-warning: 251, 146, 60;
+    --accent-info: 34, 211, 238;
+
+    /* Live indicator */
+    --accent-live: 239, 68, 68;
+
+    /* Border system */
+    --border: 35, 42, 68;
+    --border-light: 50, 60, 95;
+    --border-glow: 103, 232, 249;
+    --ring: 103, 232, 249;
+
+    /* Glow / Shadow */
+    --shadow-frost: 248, 250, 252;
+    --shadow-gold: 248, 250, 252;
+    --shadow-cyan: 103, 232, 249;
+
+    /* Surface opacity for glassmorphism */
+    --glass-opacity: 0.75;
+    --glass-saturation: 1.2;
   }
 
   .dark {
-    --bg-primary: 9, 18, 33;
-    --bg-secondary: 14, 28, 46;
-    --bg-tertiary: 19, 35, 56;
-    --bg-elevated: 27, 46, 70;
-    --text-primary: 226, 232, 240;
-    --text-secondary: 148, 163, 184;
-    --text-muted: 100, 116, 139;
-    --accent-blue: 59, 130, 246;
-    --accent-yellow: 251, 191, 36;
-    --accent-green: 34, 197, 94;
-    --accent-red: 239, 68, 68;
-    --border: 38, 58, 86;
-    --border-light: 58, 88, 122;
-    --ring: 59, 130, 246;
+    --bg-primary: 11, 14, 26;
+    --bg-secondary: 16, 20, 36;
+    --bg-tertiary: 22, 28, 50;
+    --bg-elevated: 28, 35, 62;
+    --bg-glass: 16, 20, 36;
+    --text-primary: 244, 246, 250;
+    --text-secondary: 160, 170, 195;
+    --text-muted: 100, 110, 140;
+    --text-disabled: 70, 78, 100;
+    --accent-frost: 248, 250, 252;
+    --accent-platinum: 203, 213, 225;
+    --accent-gold: 248, 250, 252;
+    --accent-gold-dim: 203, 213, 225;
+    --accent-cyan: 103, 232, 249;
+    --accent-emerald: 45, 212, 191;
+    --accent-rose: 251, 113, 133;
+    --accent-violet: 167, 139, 250;
+    --accent-orange: 251, 146, 60;
+    --accent-primary: 250, 204, 21;
+    --accent-success: 52, 211, 153;
+    --accent-danger: 251, 113, 133;
+    --accent-warning: 251, 146, 60;
+    --accent-info: 34, 211, 238;
+    --accent-live: 239, 68, 68;
+    --border: 35, 42, 68;
+    --border-light: 50, 60, 95;
+    --border-glow: 103, 232, 249;
+    --ring: 103, 232, 249;
+    --shadow-frost: 248, 250, 252;
+    --shadow-gold: 248, 250, 252;
+    --shadow-cyan: 103, 232, 249;
   }
 }
 
@@ -45,8 +94,8 @@
   }
 
   *::-webkit-scrollbar {
-    width: 5px;
-    height: 5px;
+    width: 4px;
+    height: 4px;
   }
 
   *::-webkit-scrollbar-track {
@@ -55,11 +104,15 @@
 
   *::-webkit-scrollbar-thumb {
     background-color: rgb(var(--border));
-    border-radius: 3px;
+    border-radius: 4px;
   }
 
   *::-webkit-scrollbar-thumb:hover {
     background-color: rgb(var(--border-light));
+  }
+
+  html {
+    scroll-behavior: smooth;
   }
 
   body {
@@ -68,12 +121,13 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     font-size: 14px;
-    line-height: 1.4;
+    line-height: 1.5;
+    letter-spacing: -0.01em;
   }
-  
+
   ::selection {
-    background-color: rgb(var(--accent-blue) / 0.3);
-    color: white;
+    background-color: rgb(var(--accent-cyan) / 0.25);
+    color: rgb(var(--text-primary));
   }
 }
 
@@ -81,130 +135,260 @@
   .text-balance {
     text-wrap: balance;
   }
-  
-  .text-gradient {
-    @apply bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-cyan-400;
+
+  /* Premium Gradients */
+  .text-gradient-gold {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-white via-slate-200 to-cyan-200;
   }
 
+  .text-gradient-frost {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-white via-slate-200 to-cyan-200;
+  }
+
+  .text-gradient-cyan {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-teal-400;
+  }
+
+  .bg-gradient-radial {
+    background: radial-gradient(ellipse at top, rgb(var(--bg-tertiary)) 0%, rgb(var(--bg-primary)) 60%);
+  }
+
+  /* Glassmorphism */
+  .glass {
+    @apply bg-[rgb(var(--bg-glass)/var(--glass-opacity))] backdrop-blur-xl backdrop-saturate-[var(--glass-saturation)];
+    border: 1px solid rgb(var(--border-light) / 0.3);
+  }
+
+  .glass-strong {
+    @apply bg-[rgb(var(--bg-secondary)/0.85)] backdrop-blur-2xl backdrop-saturate-150;
+    border: 1px solid rgb(var(--border-light) / 0.4);
+  }
+
+  /* Glow effects */
+  .glow-gold {
+    box-shadow: 0 0 20px -5px rgb(var(--shadow-frost) / 0.2), 0 0 40px -10px rgb(var(--shadow-cyan) / 0.12);
+  }
+
+  .glow-gold-sm {
+    box-shadow: 0 0 12px -3px rgb(var(--shadow-cyan) / 0.18);
+  }
+
+  .glow-frost {
+    box-shadow: 0 0 20px -5px rgb(var(--shadow-frost) / 0.2), 0 0 40px -10px rgb(var(--shadow-cyan) / 0.12);
+  }
+
+  .glow-frost-sm {
+    box-shadow: 0 0 12px -3px rgb(var(--shadow-cyan) / 0.18);
+  }
+
+  .glow-cyan {
+    box-shadow: 0 0 20px -5px rgb(var(--shadow-cyan) / 0.3);
+  }
+
+  /* Live pulse - smoother */
   .live-pulse {
-    animation: livePulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    animation: livePulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   }
 
   @keyframes livePulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.4; }
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.92); }
   }
 
+  /* Animations */
   .fade-in {
-    animation: fadeIn 0.15s ease-out;
+    animation: fadeIn 0.2s ease-out forwards;
   }
 
   @keyframes fadeIn {
     from { opacity: 0; }
     to { opacity: 1; }
   }
+
+  .slide-up {
+    animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .scale-in {
+    animation: scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  @keyframes scaleIn {
+    from { opacity: 0; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1); }
+  }
+
+  .shimmer {
+    animation: shimmer 2s infinite linear;
+    background: linear-gradient(90deg, transparent 0%, rgb(var(--bg-elevated) / 0.5) 50%, transparent 100%);
+    background-size: 200% 100%;
+  }
+
+  @keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
+  /* Hover lift effect */
+  .hover-lift {
+    @apply transition-all duration-300 ease-out;
+  }
+  .hover-lift:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 30px -8px rgb(0 0 0 / 0.5);
+  }
 }
 
 @layer components {
-  /* Buttons */
+  /* Buttons - Premium */
   .btn-primary {
-    @apply bg-blue-600 hover:bg-blue-500 text-white font-semibold py-2 px-3 rounded text-xs transition-all duration-150 shadow-md shadow-blue-900/30;
+    @apply relative overflow-hidden bg-gradient-to-r from-white to-slate-300 hover:from-white hover:to-slate-200 text-slate-950 font-bold py-2.5 px-5 rounded-xl text-sm transition-all duration-200 shadow-lg shadow-cyan-200/10 hover:shadow-cyan-200/20 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98];
   }
 
   .btn-secondary {
-    @apply bg-[rgb(var(--bg-elevated))] hover:bg-[rgb(var(--border))] text-gray-200 font-medium py-2 px-3 rounded text-xs transition-colors duration-100;
+    @apply bg-[rgb(var(--bg-elevated))] hover:bg-[rgb(var(--border-light))] text-gray-200 font-semibold py-2.5 px-5 rounded-xl text-sm transition-all duration-200 border border-[rgb(var(--border-light)/0.5)] hover:border-[rgb(var(--border-light))];
   }
-  
+
   .btn-outline {
-    @apply border border-[rgb(var(--border))] hover:border-[rgb(var(--border-light))] text-gray-300 hover:text-white font-medium py-2 px-3 rounded text-xs transition-colors duration-100;
+    @apply border border-[rgb(var(--border-light)/0.6)] hover:border-[rgb(var(--accent-cyan)/0.5)] text-gray-300 hover:text-white font-semibold py-2.5 px-5 rounded-xl text-sm transition-all duration-200 hover:bg-white/5;
   }
 
-  .btn-yellow {
-    @apply bg-yellow-500 hover:bg-yellow-400 text-slate-900 font-semibold py-2 px-3 rounded text-xs transition-colors duration-100;
+  .btn-ghost {
+    @apply text-gray-400 hover:text-white font-medium py-2 px-3 rounded-lg text-sm transition-colors duration-150 hover:bg-white/5;
   }
 
-  /* Cards */
+  .btn-danger {
+    @apply bg-gradient-to-r from-rose-500 to-red-500 hover:from-rose-400 hover:to-red-400 text-white font-bold py-2.5 px-5 rounded-xl text-sm transition-all duration-200 shadow-lg shadow-rose-500/20;
+  }
+
+  /* Cards - Premium */
   .card {
-    @apply bg-[rgb(var(--bg-secondary))] border border-[rgb(var(--border))] rounded-lg shadow-lg shadow-black/20;
+    @apply bg-[rgb(var(--bg-secondary))] border border-[rgb(var(--border))] rounded-2xl overflow-hidden;
+    box-shadow: 0 4px 24px -6px rgb(0 0 0 / 0.4), inset 0 1px 0 0 rgb(255 255 255 / 0.03);
   }
 
-  /* Odds Button - 1xbet style */
+  .card-hover {
+    @apply card transition-all duration-300 ease-out;
+  }
+  .card-hover:hover {
+    @apply border-[rgb(var(--border-light))];
+    box-shadow: 0 8px 40px -8px rgb(0 0 0 / 0.5), inset 0 1px 0 0 rgb(255 255 255 / 0.05);
+    transform: translateY(-2px);
+  }
+
+  /* Odds Button - Premium */
   .odds-btn {
-    @apply flex items-center justify-between px-2 py-1.5 bg-[rgb(var(--bg-primary))] border border-[rgb(var(--border))] rounded hover:border-blue-500 hover:bg-blue-500/10 transition-all duration-100 min-w-[56px] cursor-pointer;
+    @apply flex items-center justify-between px-3 py-2 bg-[rgb(var(--bg-primary))] border border-[rgb(var(--border))] rounded-xl hover:border-[rgb(var(--accent-cyan)/0.5)] hover:bg-[rgb(var(--accent-cyan)/0.08)] transition-all duration-200 min-w-[64px] cursor-pointer select-none;
   }
 
   .odds-btn .odds-label {
-    @apply text-[10px] text-gray-500;
+    @apply text-[11px] text-gray-500 font-medium;
   }
 
   .odds-btn .odds-value {
-    @apply text-xs font-bold text-gray-200;
+    @apply text-sm font-bold text-gray-200 tracking-tight;
   }
 
   .odds-btn-selected {
-    @apply border-blue-500 bg-blue-500/15;
+    @apply border-[rgb(var(--accent-cyan)/0.6)] bg-[rgb(var(--accent-cyan)/0.1)];
   }
 
   .odds-btn-selected .odds-value {
-    @apply text-blue-400;
+    @apply text-cyan-100;
   }
 
-  /* Badge */
+  /* Badges - Premium */
   .badge {
-    @apply inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium;
+    @apply inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold uppercase tracking-wider;
   }
 
   .badge-live {
-    @apply bg-red-500/20 text-red-400;
+    @apply bg-red-500/15 text-red-400 border border-red-500/20;
   }
 
-  .badge-yellow {
-    @apply bg-yellow-500/20 text-yellow-400;
+  .badge-gold {
+    @apply bg-slate-100/10 text-slate-100 border border-slate-100/20;
   }
 
-  .badge-green {
-    @apply bg-green-500/20 text-green-400;
+  .badge-frost {
+    @apply bg-slate-100/10 text-slate-100 border border-slate-100/20;
   }
 
-  .badge-blue {
-    @apply bg-blue-500/20 text-blue-400;
+  .badge-cyan {
+    @apply bg-cyan-500/15 text-cyan-400 border border-cyan-500/20;
   }
 
-  /* Form Elements */
+  .badge-emerald {
+    @apply bg-emerald-500/15 text-emerald-400 border border-emerald-500/20;
+  }
+
+  .badge-violet {
+    @apply bg-violet-500/15 text-violet-400 border border-violet-500/20;
+  }
+
+  /* Form Elements - Premium */
   .input-field {
-    @apply w-full px-2.5 py-2 bg-[rgb(var(--bg-primary))] border border-[rgb(var(--border))] rounded text-gray-200 placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-colors duration-100 text-xs;
+    @apply w-full px-4 py-3 bg-[rgb(var(--bg-primary))] border border-[rgb(var(--border))] rounded-xl text-gray-200 placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-[rgb(var(--accent-cyan)/0.3)] focus:border-[rgb(var(--accent-cyan)/0.5)] transition-all duration-200 text-sm;
   }
 
-  /* Tabs */
+  .input-field-error {
+    @apply w-full px-4 py-3 bg-[rgb(var(--bg-primary))] border border-red-500/40 rounded-xl text-gray-200 placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-red-500/30 focus:border-red-500/60 transition-all duration-200 text-sm;
+  }
+
+  /* Tabs - Premium */
   .tab {
-    @apply px-3 py-1.5 text-xs font-medium text-gray-400 hover:text-white hover:bg-white/5 rounded transition-colors duration-100;
+    @apply px-4 py-2 text-sm font-semibold text-gray-500 hover:text-gray-300 rounded-xl transition-all duration-200;
   }
 
   .tab-active {
-    @apply bg-blue-600 text-white;
+    @apply bg-[rgb(var(--bg-tertiary))] text-white shadow-sm;
   }
 
-  /* Section */
+  /* Section - Premium */
   .section {
-    @apply max-w-[1440px] mx-auto px-3 py-4;
+    @apply max-w-[1440px] mx-auto px-4 py-6;
   }
 
-  /* Sidebar */
+  /* Sidebar - Premium */
   .sidebar {
     @apply bg-[rgb(var(--bg-secondary))] border-r border-[rgb(var(--border))];
   }
 
-  /* Table row */
+  /* Table row - Premium */
   .table-row {
-    @apply flex items-center justify-between px-3 py-2 border-b border-[rgb(var(--border))] hover:bg-[rgb(var(--bg-tertiary))] transition-colors;
+    @apply flex items-center justify-between px-4 py-3 border-b border-[rgb(var(--border))] hover:bg-[rgb(var(--bg-tertiary))] transition-colors duration-150;
   }
 
-  /* Star button for favorites */
+  /* Star button - Premium */
   .star-btn {
-    @apply p-1 rounded hover:bg-white/10 text-gray-600 hover:text-yellow-400 transition-colors;
+    @apply p-1.5 rounded-lg hover:bg-white/10 text-gray-500 hover:text-cyan-100 transition-all duration-150;
   }
 
   .star-btn-active {
-    @apply text-yellow-400;
+    @apply text-cyan-100;
+  }
+
+  /* Status indicators */
+  .status-dot {
+    @apply w-2 h-2 rounded-full;
+  }
+
+  .status-dot-live {
+    @apply status-dot bg-red-500 live-pulse;
+  }
+
+  .status-dot-online {
+    @apply status-dot bg-emerald-500;
+  }
+
+  /* Jackpot / Counter display */
+  .jackpot-display {
+    @apply font-mono text-2xl font-bold tracking-tight text-gradient-frost;
+    font-variant-numeric: tabular-nums;
   }
 }

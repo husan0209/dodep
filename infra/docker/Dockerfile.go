@@ -27,14 +27,17 @@ RUN go mod download
 COPY . .
 
 # Build arguments
-ARG SERVICE_PATH=auth
-ARG PROFILE=release
+# SERVICE: directory name under services/go/ (default: auth)
+# CMD_PATH: relative path to main package within service dir (default: .)
+ARG SERVICE=auth
+ARG CMD_PATH=.
+ARG VERSION=dev
 
 # Build the service
 RUN CGO_ENABLED=0 GOOS=linux go build \
-    -ldflags="-w -s -X main.Version=${VERSION:-dev}" \
+    -ldflags="-w -s -X main.Version=${VERSION}" \
     -o /build/app \
-    ./${SERVICE_PATH}
+    ./${CMD_PATH}
 
 # =============================================================================
 # Stage 2: Runtime (distroless for security)

@@ -69,12 +69,57 @@ clean:
 	rm -rf services/python/*/dist
 	rm -rf services/python/*/build
 
-# Docker Compose
+# Docker Compose — development (infra only)
 docker-up:
-	docker-compose -f infra/docker/docker-compose.dev.yml up -d
+	docker compose -f infra/docker/docker-compose.dev.yml up -d
 
 docker-down:
-	docker-compose -f infra/docker/docker-compose.dev.yml down
+	docker compose -f infra/docker/docker-compose.dev.yml down
+
+docker-logs:
+	docker compose -f infra/docker/docker-compose.dev.yml logs -f
+
+# Docker Compose — production (all services)
+prod-up:
+	docker compose -f infra/docker/docker-compose.prod.yml --env-file .env.production up -d
+
+prod-down:
+	docker compose -f infra/docker/docker-compose.prod.yml --env-file .env.production down
+
+prod-logs:
+	docker compose -f infra/docker/docker-compose.prod.yml --env-file .env.production logs -f
+
+prod-ps:
+	docker compose -f infra/docker/docker-compose.prod.yml --env-file .env.production ps
+
+prod-pull:
+	docker compose -f infra/docker/docker-compose.prod.yml --env-file .env.production pull
+
+prod-build:
+	docker compose -f infra/docker/docker-compose.prod.yml --env-file .env.production build --parallel
+
+prod-restart:
+	docker compose -f infra/docker/docker-compose.prod.yml --env-file .env.production restart
+
+prod-migrate:
+	@echo "Running PostgreSQL migrations..."
+	bash tools/migrate.sh --env production
+	@echo "Migrations complete."
+
+prod-seed:
+	@echo "Seeding reference data..."
+	bash tools/seed.sh --env production
+	@echo "Seed complete."
+
+prod-backup:
+	@echo "Running manual backup..."
+	docker compose -f infra/docker/docker-compose.prod.yml --env-file .env.production exec backup /scripts/postgres-backup.sh
+	@echo "Backup complete."
+
+smoke:
+	@echo "Running smoke tests..."
+	bash tools/smoke-test.sh
+	@echo "Smoke tests complete."
 
 # Kubernetes
 k8s-apply:
@@ -98,21 +143,24 @@ security-scan:
 	@echo "Running Semgrep..."
 	semgrep --config auto .
 
-# Generate Protobuf
+# Generate Protobuf (Linux/macOS)
 proto-generate: ## Generate Protobuf code for all languages
 	@echo "Generating Protobuf code..."
-	cd libs/proto && make gen
+	cd libs/proto && buf generate
 	@echo "Protobuf generation complete!"
 
 # Lint Protobuf files
 proto-lint: ## Lint Protobuf files
-	@echo "Linting Protobuf files..."
-	cd libs/proto && make lint
+	cd libs/proto && buf lint
 
 # Check Protobuf breaking changes
 proto-breaking: ## Check Protobuf breaking changes against main
-	@echo "Checking Protobuf breaking changes..."
-	cd libs/proto && make breaking
+	cd libs/proto && buf breaking --against '.git#branch=main,subdir=libs/proto'
+
+# Windows PowerShell alternatives (no make required):
+#   pwsh -File tools\proto-gen.ps1 all
+#   pwsh -File tools\dev-payment.ps1
+#   pwsh -File tools\dev-start.ps1
 
 # Install Rust protoc plugins
 proto-install-rust: ## Install Rust protoc plugins

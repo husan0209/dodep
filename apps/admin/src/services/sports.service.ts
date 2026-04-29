@@ -1,6 +1,6 @@
 import apiClient from "./api";
 import type { ApiResponse, PaginatedResponse } from "@/types/api";
-import type { Bet, BetSearchParams } from "@/types/bet";
+import type { Bet, BetSearchParams, SportEvent, EventSearchParams } from "@/types/bet";
 
 export const sportsService = {
   async getBets(params: BetSearchParams): Promise<PaginatedResponse<Bet>> {
@@ -26,16 +26,24 @@ export const sportsService = {
     await apiClient.post(`/admin/sports/bets/${betId}/resettle`, { result });
   },
 
-  async getEvents(params?: {
-    sport_id?: number;
-    status?: string;
-    page?: number;
-    page_size?: number;
-  }): Promise<PaginatedResponse<unknown>> {
-    const response = await apiClient.get<PaginatedResponse<unknown>>(
+  async getEvents(params?: EventSearchParams): Promise<PaginatedResponse<SportEvent>> {
+    const response = await apiClient.get<PaginatedResponse<SportEvent>>(
       "/admin/sports/events",
       { params },
     );
+    return response.data;
+  },
+
+  async updateEvent(eventId: string, payload: Partial<SportEvent>): Promise<SportEvent> {
+    const response = await apiClient.patch<ApiResponse<SportEvent>>(
+      `/admin/sports/events/${eventId}`,
+      payload,
+    );
+    return response.data.data;
+  },
+
+  async getOddsSnapshot(sport: string): Promise<{ data: Array<{ event_id: string; home_odds: number; draw_odds?: number; away_odds: number; timestamp: string }> }> {
+    const response = await apiClient.get("/admin/sports/odds/snapshot", { params: { sport } });
     return response.data;
   },
 

@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/gofiber/fiber/v2"
@@ -19,11 +20,29 @@ import (
 	"google.golang.org/grpc/reflection"
 
 	"github.com/opus-casino/auth/internal/config"
+	"github.com/opus-casino/auth/internal/crypto"
 	"github.com/opus-casino/auth/internal/handlers"
 	"github.com/opus-casino/auth/internal/repository"
 	"github.com/opus-casino/auth/internal/service"
 	pb "github.com/opus-casino/proto/gen/go/auth/v1"
 )
+
+// corsOriginsFromEnv reads $CORS_ORIGINS (comma-separated) and rejects "*".
+// If unset, returns devDefault (used only in non-production environments).
+func corsOriginsFromEnv(devDefault string) string {
+	raw := strings.TrimSpace(os.Getenv("CORS_ORIGINS"))
+	if raw == "" {
+		raw = devDefault
+	}
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if t := strings.TrimSpace(p); t != "" && t != "*" {
+			out = append(out, t)
+		}
+	}
+	return strings.Join(out, ", ")
+}
 
 func main() {
 	// Load configuration
@@ -31,7 +50,7 @@ func main() {
 
 	// Initialize logger
 	log, _ := zap.NewProduction()
-	defer log.Sync()
+	defer func() { _ = log.Sync() }()
 
 	// Initialize database connection
 	dbPool, err := pgxpool.New(context.Background(), cfg.DatabaseURL)
@@ -56,7 +75,12 @@ func main() {
 	authRepo := repository.NewAuthRepository(dbPool, rdb)
 
 	// Initialize service
-	authService := service.NewAuthService(authRepo, cfg.JWTSecretKey, log)
+	jwtConfig, err := crypto.NewJWTConfigFromEnv(cfg.Env, cfg.JWTSecretKey, cfg.JWTEd25519PrivateKeyBase64, cfg.JWTEd25519PublicKeyBase64)
+	if err != nil {
+		log.Fatal("Failed to initialize JWT config", zap.Error(err))
+	}
+	authService := service.NewAuthService(authRepo, jwtConfig, log)
+	authService.ConfigureGoogleOAuth(cfg.GoogleClientID, cfg.GoogleClientSecret, cfg.GoogleRedirectURI, cfg.WebAppURL)
 
 	// Initialize gRPC server
 	grpcServer := grpc.NewServer()
@@ -81,10 +105,15 @@ func main() {
 	})
 
 	app.Use(recover.New())
+	// CORS: allowlist from $CORS_ORIGINS (comma-separated). Wildcard "*" is
+	// stripped. Dev fallback covers local web (3000) and admin (3001) origins.
+	// In production set $CORS_ORIGINS explicitly via Helm values.
+	devDefault := "http://localhost:3000, http://127.0.0.1:3000, http://0.0.0.0:3000, http://web:3000, http://localhost:3001, http://127.0.0.1:3001"
+	allowedOrigins := corsOriginsFromEnv(devDefault)
 	app.Use(cors.New(cors.Config{
-		AllowOrigins:     "http://localhost:3000, http://127.0.0.1:3000, http://localhost:3001, http://127.0.0.1:3001",
-		AllowHeaders:     "Origin, Content-Type, Accept, Authorization, X-Request-ID",
-		AllowCredentials: true,
+		AllowOrigins:     allowedOrigins,
+		AllowHeaders:     "Origin, Content-Type, Accept, Authorization, X-Request-ID, X-Idempotency-Key",
+		AllowCredentials: allowedOrigins != "",
 	}))
 	app.Use(logger.New())
 

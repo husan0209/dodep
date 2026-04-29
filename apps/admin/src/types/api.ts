@@ -35,6 +35,7 @@ export interface ApiError {
 export interface LoginRequest {
   email: string;
   password: string;
+  totp_code?: string;
 }
 
 export interface LoginResponse {
@@ -48,6 +49,7 @@ export interface LoginResponse {
     permissions: string[];
   };
   expires_in: number;
+  totp_required?: boolean;
 }
 
 export interface PaginationParams {

@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { authApi, type AuthResult } from "@/lib/api/auth";
 import { getErrorMessage } from "@/lib/api/errors";
+import { createSingleFlight } from "@/lib/single-flight";
 
 interface User {
   id: string;
@@ -9,10 +10,10 @@ interface User {
   email: string;
   username: string;
   phone?: string;
-  country: string;
-  currency: string;
+  country_code: string;
+  currency_code: string;
   kyc_level: number;
-  status: "pending" | "active" | "blocked" | "suspended";
+  status: "pending" | "active" | "blocked" | "suspended" | "self_excluded" | "closed";
   created_at: string;
   updated_at: string;
   last_login_at?: string;
@@ -28,7 +29,7 @@ interface AuthState {
   error: string | null;
 
   // Actions
-  login: (email: string, password: string) => Promise<void>;
+  login: (identifier: string, password: string) => Promise<void>;
   register: (email: string, password: string, username: string, countryCode: string, currencyCode: string) => Promise<void>;
   logout: () => Promise<void>;
   fetchUser: () => Promise<void>;
@@ -45,6 +46,8 @@ const handleAuthResult = (result: AuthResult) => ({
   error: null,
 });
 
+const registerSingleFlight = createSingleFlight<void>();
+
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
@@ -60,11 +63,29 @@ export const useAuthStore = create<AuthState>()(
     set({ accessToken, refreshToken, isAuthenticated: true });
   },
 
-  login: async (email: string, password: string) => {
+  login: async (identifier: string, password: string) => {
     set({ isLoading: true, error: null });
     try {
-      const result = await authApi.login({ email, password });
+      // ✅ Генерируем уникальный device_id для сессии
+      const deviceId = `web-${crypto.randomUUID()}`;
+      
+      const normalizedIdentifier = identifier.trim();
+      const looksLikeEmail = normalizedIdentifier.includes("@");
+      const result = await authApi.login({
+        identifier: normalizedIdentifier,
+        username: normalizedIdentifier,
+        email: looksLikeEmail ? normalizedIdentifier : undefined,
+        password,
+        device_id: deviceId,
+        deviceId,
+      });
       set(handleAuthResult(result));
+      
+      const user = await authApi.me();
+      set({
+        user,
+        isLoading: false,
+      });
     } catch (error) {
       set({
         isLoading: false,
@@ -74,19 +95,39 @@ export const useAuthStore = create<AuthState>()(
     }
   },
 
-  register: async (email: string, password: string, username: string, countryCode: string, currencyCode: string) => {
-    set({ isLoading: true, error: null });
-    try {
-      const result = await authApi.register({ email, password, username, country_code: countryCode, currency_code: currencyCode });
-      set(handleAuthResult(result));
-    } catch (error) {
-      set({
-        isLoading: false,
-        error: getErrorMessage(error),
-      });
-      throw error;
-    }
-  },
+  register: async (email: string, password: string, username: string, countryCode: string, currencyCode: string) =>
+    registerSingleFlight.run(async () => {
+      set({ isLoading: true, error: null });
+      try {
+        // Prevent duplicate account creation when users double-click submit.
+        const deviceId = `web-${crypto.randomUUID()}`;
+
+        const result = await authApi.register({
+          email,
+          password,
+          username,
+          country_code: countryCode,
+          countryCode,
+          currency_code: currencyCode,
+          currencyCode,
+          device_id: deviceId,
+          deviceId,
+        });
+        set(handleAuthResult(result));
+
+        const user = await authApi.me();
+        set({
+          user,
+          isLoading: false,
+        });
+      } catch (error) {
+        set({
+          isLoading: false,
+          error: getErrorMessage(error),
+        });
+        throw error;
+      }
+    }),
 
   logout: async () => {
     try {

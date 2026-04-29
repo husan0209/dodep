@@ -61,4 +61,32 @@ export const riskService = {
     const response = await apiClient.get(`/admin/risk/users/${userId}/profile`);
     return response.data.data;
   },
+
+  async getRules(params?: { search?: string; rule_type?: string }): Promise<unknown[]> {
+    const response = await apiClient.get<ApiResponse<unknown[]>>("/admin/risk/rules", { params });
+    return response.data.data;
+  },
+
+  async createRule(data: unknown): Promise<unknown> {
+    const response = await apiClient.post<ApiResponse<unknown>>("/admin/risk/rules", data);
+    return response.data.data;
+  },
+
+  async updateRule(ruleId: string, data: unknown): Promise<unknown> {
+    const response = await apiClient.put<ApiResponse<unknown>>(`/admin/risk/rules/${ruleId}`, data);
+    return response.data.data;
+  },
+
+  async deleteRule(ruleId: string): Promise<void> {
+    await apiClient.delete(`/admin/risk/rules/${ruleId}`);
+  },
+
+  async getScreeningHits(params?: { list_type?: string }): Promise<unknown[]> {
+    const response = await apiClient.get<ApiResponse<unknown[]>>("/admin/risk/screening", { params });
+    return response.data.data;
+  },
+
+  async resolveScreeningHit(hitId: string, data: { status: string; notes?: string }): Promise<void> {
+    await apiClient.post(`/admin/risk/screening/${hitId}/resolve`, data);
+  },
 };

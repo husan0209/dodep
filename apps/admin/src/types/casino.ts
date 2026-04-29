@@ -43,3 +43,40 @@ export interface Provider {
   enabled: boolean;
   games_count: number;
 }
+
+// Casino Bets (Round-level)
+export interface CasinoBet {
+  id: string;
+  session_id: string;
+  user_id: string;
+  game_id: string;
+  game_name: string;
+  provider: string;
+  bet_amount: string;
+  win_amount: string;
+  balance_after: string;
+  created_at: string;
+}
+
+export interface CasinoBetSession {
+  session_id: string;
+  game_id: string;
+  game_name: string;
+  provider: string;
+  total_bet: string;
+  total_win: string;
+  rounds: number;
+  started_at: string;
+  ended_at: string | null;
+  bets: CasinoBet[];
+}
+
+export interface CasinoBetSearchParams {
+  user_id?: string;
+  game_id?: string;
+  session_id?: string;
+  created_from?: string;
+  created_to?: string;
+  page?: number;
+  page_size?: number;
+}

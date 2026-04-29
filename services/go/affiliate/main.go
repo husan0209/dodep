@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/gofiber/fiber/v2"
@@ -19,6 +20,24 @@ import (
 	"github.com/opus-casino/affiliate/internal/repository"
 	"github.com/opus-casino/affiliate/internal/service"
 )
+
+// corsOriginsFromEnv reads $CORS_ORIGINS (comma-separated) and trims spaces.
+// Falls back to http://localhost:3000 when unset so local dev works out of the
+// box. Production must always set CORS_ORIGINS explicitly.
+func corsOriginsFromEnv() string {
+	raw := strings.TrimSpace(os.Getenv("CORS_ORIGINS"))
+	if raw == "" {
+		return "http://localhost:3000"
+	}
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if t := strings.TrimSpace(p); t != "" && t != "*" {
+			out = append(out, t)
+		}
+	}
+	return strings.Join(out, ", ")
+}
 
 func main() {
 	// 1. Load configuration
@@ -48,9 +67,16 @@ func main() {
 
 	app.Use(recover.New())
 	app.Use(logger.New())
+	// CORS: explicit allowlist from $CORS_ORIGINS (comma-separated).
+	// Wildcard "*" was a security misconfiguration (Phase 0.4) and is
+	// stripped by corsOriginsFromEnv. Empty list = deny browser fetch
+	// preflight (redirect endpoints under /r/* are unaffected — they are
+	// browser-navigation, not subject to CORS).
+	allowedOrigins := corsOriginsFromEnv()
 	app.Use(cors.New(cors.Config{
-		AllowOrigins: "*",
-		AllowHeaders: "Origin, Content-Type, Accept, Authorization",
+		AllowOrigins:     allowedOrigins,
+		AllowHeaders:     "Origin, Content-Type, Accept, Authorization, X-Request-ID, X-Idempotency-Key",
+		AllowCredentials: allowedOrigins != "",
 	}))
 
 	// 6. Health endpoints

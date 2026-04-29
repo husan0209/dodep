@@ -2,10 +2,17 @@ import axios, { type AxiosError, type InternalAxiosRequestConfig } from "axios";
 import { useAuthStore } from "@/stores/authStore";
 import { API_BASE_URL } from "@/utils/constants";
 
+function generateIdempotencyKey(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+}
+
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
   timeout: 30000,
   headers: { "Content-Type": "application/json" },
+  // Phase 0.5: send cookies (admin_refresh_token is HttpOnly, scoped to
+  // /admin/auth). Required for cross-origin dev (3001 → 8090) and prod.
+  withCredentials: true,
 });
 
 apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
@@ -13,6 +20,17 @@ apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   if (token && config.headers) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+
+  // Idempotency key for mutating requests
+  const method = config.method?.toUpperCase();
+  if (
+    method &&
+    ["POST", "PUT", "PATCH", "DELETE"].includes(method) &&
+    config.headers
+  ) {
+    config.headers["X-Idempotency-Key"] = generateIdempotencyKey();
+  }
+
   return config;
 });
 
@@ -55,24 +73,22 @@ apiClient.interceptors.response.use(
       originalRequest._retry = true;
       isRefreshing = true;
 
-      const { refreshToken, clearAuth, setTokens } = useAuthStore.getState();
-
-      if (!refreshToken) {
-        clearAuth();
-        window.location.href = "/login";
-        return Promise.reject(error);
-      }
+      const { clearAuth, setTokens } = useAuthStore.getState();
 
       try {
+        // Phase 0.5: refresh_token is read from the HttpOnly cookie by the
+        // server. We must NOT send it from JS — that defeats the purpose.
+        // withCredentials is required so the browser attaches the cookie.
         const response = await axios.post(
           `${API_BASE_URL}/admin/auth/refresh`,
-          {
-            refresh_token: refreshToken,
-          },
+          {},
+          { withCredentials: true },
         );
         const { access_token, refresh_token: newRefreshToken } =
           response.data.data;
-        setTokens(access_token, newRefreshToken);
+        // newRefreshToken is the deprecated body fallback; kept in state for
+        // one release window only. Cookie is the authoritative store.
+        setTokens(access_token, newRefreshToken ?? "");
         processQueue(null, access_token);
         if (originalRequest.headers) {
           originalRequest.headers.Authorization = `Bearer ${access_token}`;

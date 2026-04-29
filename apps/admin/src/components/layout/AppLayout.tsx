@@ -12,10 +12,16 @@ import {
   LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
+  FileProtectOutlined,
+  MailOutlined,
+  BarChartOutlined,
+  FileTextOutlined,
 } from "@ant-design/icons";
 import { useState } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useAuthStore } from "@/stores/authStore";
+import { useInactivityLogout } from "@/hooks/useInactivityLogout";
+import { authService } from "@/services/auth.service";
 import { hasPermission } from "@/utils/permissions";
 import type { Permission } from "@/types/admin";
 
@@ -35,8 +41,22 @@ const menuItems: MenuItem[] = [
   {
     key: "/users",
     icon: <UserOutlined />,
-    label: "Users",
+    label: "Players",
     permission: "user.view",
+  },
+  {
+    key: "/kyc",
+    icon: <FileProtectOutlined />,
+    label: "KYC",
+    permission: "kyc.review",
+    children: [
+      { key: "/kyc/queue", label: "Review Queue", permission: "kyc.review" },
+      { key: "/kyc/sof", label: "Source of Funds", permission: "kyc.sof_review" },
+      { key: "/kyc/expiry", label: "Expiry Monitor", permission: "kyc.review" },
+      { key: "/kyc/screening", label: "PEP / Sanctions", permission: "fraud.screening" },
+      { key: "/kyc/team", label: "Team Metrics", permission: "kyc.review" },
+      { key: "/kyc/rg", label: "RG Dashboard", permission: "kyc.review" },
+    ],
   },
   {
     key: "/finance",
@@ -59,27 +79,53 @@ const menuItems: MenuItem[] = [
         label: "Transactions",
         permission: "transaction.view",
       },
+      {
+        key: "/finance/chargebacks",
+        label: "Chargebacks",
+        permission: "transaction.view",
+      },
+      {
+        key: "/finance/crypto",
+        label: "Crypto Wallets",
+        permission: "finance.crypto_wallet",
+      },
+      {
+        key: "/finance/balance-sheet",
+        label: "Balance Sheet",
+        permission: "finance.balance_sheet",
+      },
+      {
+        key: "/finance/p2p",
+        label: "P2P Queue",
+        permission: "transaction.view",
+      },
+      {
+        key: "/finance/reconciliation",
+        label: "Reconciliation",
+        permission: "transaction.view",
+      },
     ],
   },
   {
     key: "/sports",
     icon: <TrophyOutlined />,
-    label: "Sports",
+    label: "Sportsbook",
     permission: "bet.view",
-    children: [{ key: "/sports/bets", label: "Bets", permission: "bet.view" }],
+    children: [
+      { key: "/sports/bets", label: "Bets", permission: "bet.view" },
+      { key: "/sports/events", label: "Events", permission: "sportsbook.manage" },
+      { key: "/sports/trading", label: "Trading Terminal", permission: "sportsbook.trading_terminal" },
+    ],
   },
   {
     key: "/casino",
     icon: <PlayCircleOutlined />,
     label: "Casino",
-    permission: "reports.view",
+    permission: "casino.manage",
     children: [
-      { key: "/casino/games", label: "Games", permission: "reports.view" },
-      {
-        key: "/casino/sessions",
-        label: "Sessions",
-        permission: "reports.view",
-      },
+      { key: "/casino/games", label: "Games", permission: "casino.manage" },
+      { key: "/casino/sessions", label: "Sessions", permission: "casino.manage" },
+      { key: "/casino/rtp", label: "RTP Config", permission: "casino.rtp_config" },
     ],
   },
   {
@@ -112,6 +158,28 @@ const menuItems: MenuItem[] = [
     ],
   },
   {
+    key: "/crm",
+    icon: <MailOutlined />,
+    label: "CRM",
+    permission: "communication.manage",
+    children: [
+      { key: "/crm/campaigns", label: "Campaigns", permission: "crm.campaign" },
+      { key: "/crm/segments", label: "Segments", permission: "crm.segment" },
+      { key: "/crm/templates", label: "Templates", permission: "communication.manage" },
+    ],
+  },
+  {
+    key: "/support",
+    icon: <MailOutlined />,
+    label: "Support",
+    permission: "communication.manage",
+    children: [
+      { key: "/support/tickets", label: "Tickets", permission: "communication.manage" },
+      { key: "/support/dashboard", label: "Team Dashboard", permission: "communication.manage" },
+      { key: "/support/sla", label: "SLA Config", permission: "system.config" },
+    ],
+  },
+  {
     key: "/risk",
     icon: <SafetyOutlined />,
     label: "Risk & Compliance",
@@ -123,24 +191,64 @@ const menuItems: MenuItem[] = [
         permission: "fraud.review",
       },
       {
+        key: "/risk/rules",
+        label: "Rule Builder",
+        permission: "fraud.rule_builder",
+      },
+      {
+        key: "/risk/screening",
+        label: "PEP/Sanctions",
+        permission: "fraud.screening",
+      },
+      {
         key: "/risk/audit-log",
         label: "Audit Log",
-        permission: "reports.view",
+        permission: "audit.view",
       },
     ],
   },
   {
-    key: "/system",
+    key: "/reports",
+    icon: <BarChartOutlined />,
+    label: "Reports",
+    permission: "reports.view",
+    children: [
+      { key: "/reports/financial", label: "Financial", permission: "reports.view" },
+      { key: "/reports/player", label: "Player Analytics", permission: "reports.view" },
+      { key: "/reports/compliance", label: "Compliance", permission: "reports.view" },
+      { key: "/reports/games", label: "Game Analytics", permission: "reports.view" },
+    ],
+  },
+  {
+    key: "/regulatory",
+    icon: <FileProtectOutlined />,
+    label: "Regulatory",
+    permission: "reports.view",
+    children: [
+      { key: "/regulatory", label: "Dashboard", permission: "reports.view" },
+      { key: "/regulatory/generator", label: "Report Generator", permission: "reports.view" },
+      { key: "/regulatory/sar", label: "SAR Management", permission: "reports.view" },
+      { key: "/regulatory/complaints", label: "Complaints Log", permission: "reports.view" },
+      { key: "/regulatory/tax", label: "Tax Config", permission: "reports.view" },
+      { key: "/regulatory/player-funds", label: "Player Funds", permission: "reports.view" },
+    ],
+  },
+  {
+    key: "/cms",
+    icon: <FileTextOutlined />,
+    label: "CMS",
+    permission: "content.manage",
+  },
+  {
+    key: "/settings",
     icon: <SettingOutlined />,
-    label: "System",
+    label: "Settings",
     permission: "system.config",
     children: [
-      { key: "/system/health", label: "Health", permission: "system.config" },
-      {
-        key: "/system/config",
-        label: "Configuration",
-        permission: "system.config",
-      },
+      { key: "/settings/general", label: "General", permission: "system.config" },
+      { key: "/settings/maintenance", label: "Maintenance", permission: "system.maintenance" },
+      { key: "/settings/admin-users", label: "Admin Users", permission: "admin.manage" },
+      { key: "/settings/audit", label: "Audit Log", permission: "audit.view" },
     ],
   },
 ];
@@ -172,11 +280,19 @@ export default function AppLayout() {
   const { adminName, adminEmail, adminRole, permissions, clearAuth } =
     useAuthStore();
 
+  useInactivityLogout();
+
   const filteredMenu = filterMenuByPermissions(menuItems, permissions);
 
-  const handleLogout = () => {
-    clearAuth();
-    navigate("/login");
+  const handleLogout = async () => {
+    try {
+      await authService.logout();
+    } catch {
+      // ignore network errors on logout
+    } finally {
+      clearAuth();
+      navigate("/login", { replace: true });
+    }
   };
 
   const dropdownItems = {

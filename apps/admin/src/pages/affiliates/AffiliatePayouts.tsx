@@ -167,7 +167,7 @@ export default function AffiliatePayouts() {
           />
         </Space>
         <DataTable
-          data={data?.data || []}
+          data={(data?.data || []) as unknown as Payout[]}
           columns={columns}
           loading={isLoading}
           total={data?.pagination?.total || 0}

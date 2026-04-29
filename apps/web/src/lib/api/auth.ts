@@ -1,9 +1,12 @@
-import { api } from "./client";
+import { authApiClient, resolveAuthApiBaseUrl } from "./client";
 
 export interface LoginRequest {
-  email: string;
+  identifier?: string;
+  username?: string;
+  email?: string;
   password: string;
   device_id?: string;
+  deviceId?: string;
 }
 
 export interface RegisterRequest {
@@ -11,7 +14,11 @@ export interface RegisterRequest {
   password: string;
   username: string;
   country_code: string;
+  countryCode?: string;
   currency_code: string;
+  currencyCode?: string;
+  device_id?: string;
+  deviceId?: string;
 }
 
 export interface TokenPair {
@@ -47,10 +54,10 @@ export interface User {
   email: string;
   username: string;
   phone?: string;
-  country: string;
-  currency: string;
+  country_code: string;
+  currency_code: string;
   kyc_level: number;
-  status: "pending" | "active" | "blocked" | "suspended";
+  status: "pending" | "active" | "blocked" | "suspended" | "self_excluded" | "closed";
   created_at: string;
   updated_at: string;
   last_login_at?: string;
@@ -58,15 +65,18 @@ export interface User {
 
 export const authApi = {
   login: (data: LoginRequest) =>
-    api.post<AuthResult>("/api/v1/auth/login", data),
+    authApiClient.post<AuthResult>("/api/v1/auth/login", data),
 
   register: (data: RegisterRequest) =>
-    api.post<AuthResult>("/api/v1/auth/register", data),
+    authApiClient.post<AuthResult>("/api/v1/auth/register", data),
 
-  logout: () => api.post("/api/v1/auth/logout"),
+  logout: () => authApiClient.post("/api/v1/auth/logout"),
 
-  me: () => api.get<User>("/api/v1/auth/me"),
+  me: () => authApiClient.get<User>("/api/v1/auth/me"),
 
   refresh: (refreshToken: string) =>
-    api.post<TokenPair>("/api/v1/auth/refresh", { refresh_token: refreshToken }),
+    authApiClient.post<TokenPair>("/api/v1/auth/refresh", { refresh_token: refreshToken }),
+
+  getGoogleStartUrl: () =>
+    `${resolveAuthApiBaseUrl()}/api/v1/auth/google/start`,
 };

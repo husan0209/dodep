@@ -26,6 +26,7 @@ type PaymentService struct {
 	user             client.UserAPI
 	producer         *event.Producer
 	tracer           trace.Tracer
+	ipnCallbackURL   string
 }
 
 // NewPaymentService creates a new payment service
@@ -39,6 +40,7 @@ func NewPaymentService(
 	user client.UserAPI,
 	producer *event.Producer,
 	tracer trace.Tracer,
+	ipnCallbackURL string,
 ) *PaymentService {
 	return &PaymentService{
 		paymentRepo:      paymentRepo,
@@ -50,6 +52,7 @@ func NewPaymentService(
 		user:             user,
 		producer:         producer,
 		tracer:           tracer,
+		ipnCallbackURL:   ipnCallbackURL,
 	}
 }
 
@@ -249,10 +252,9 @@ func (s *PaymentService) getFiatAmount(ctx context.Context, amount decimal.Decim
 	return amount.Mul(*rate), nil
 }
 
-// getIPNCallbackURL returns the webhook callback URL
+// getIPNCallbackURL returns the webhook callback URL configured via env/config
 func (s *PaymentService) getIPNCallbackURL() string {
-	// TODO: Get from config
-	return "https://api.platform.com/api/v1/payments/webhooks/nowpayments"
+	return s.ipnCallbackURL
 }
 
 // toResponse converts a payment to response

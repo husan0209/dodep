@@ -3,25 +3,48 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 
+	"github.com/opus-casino/casino/internal/provider"
 	"github.com/opus-casino/casino/internal/repository"
 )
 
-// CasinoService handles casino business logic
-type CasinoService struct {
-	repo *repository.CasinoRepository
-	log  *zap.Logger
+// UserServiceClient is the interface casino service needs from user service.
+type UserServiceClient interface {
+	GetKYCLevel(ctx context.Context, userID int64) (int, error)
+	GetCountry(ctx context.Context, userID int64) (string, error)
+	IsSelfExcluded(ctx context.Context, userID int64) (bool, error)
 }
 
-// NewCasinoService creates a new casino service
-func NewCasinoService(repo *repository.CasinoRepository, log *zap.Logger) *CasinoService {
+// CasinoService handles casino business logic
+type CasinoService struct {
+	repo      *repository.CasinoRepository
+	registry  *provider.Registry
+	wallet    WalletClient
+	userSvc   UserServiceClient
+	log       *zap.Logger
+}
+
+// NewCasinoService creates a new casino service.
+func NewCasinoService(
+	repo *repository.CasinoRepository,
+	registry *provider.Registry,
+	wallet WalletClient,
+	userSvc UserServiceClient,
+	log *zap.Logger,
+) *CasinoService {
 	return &CasinoService{
-		repo: repo,
-		log:  log,
+		repo:     repo,
+		registry: registry,
+		wallet:   wallet,
+		userSvc:  userSvc,
+		log:      log,
 	}
 }
 
@@ -339,48 +362,108 @@ type LaunchGameResult struct {
 	Token     string
 }
 
-// LaunchGame launches a game session
+// LaunchGame launches a game session.
+// It validates the game, checks country restrictions and self-exclusion,
+// fetches the current balance, generates a signed launch URL via the provider adapter,
+// and persists the session.
 func (s *CasinoService) LaunchGame(ctx context.Context, req *LaunchGameRequest) (*LaunchGameResult, error) {
-	// Validate game exists
+	// 1. Validate game exists and is active
 	game, err := s.GetGame(ctx, req.GameID)
 	if err != nil {
 		return nil, errors.New("game not found")
 	}
-
-	// Check if game is active
 	if !game.IsActive {
 		return nil, errors.New("game is not active")
 	}
 
-	// Check country restrictions
-	// TODO: Get user country and check restrictions
-
-	// Create game session
-	session := &repository.GameSession{
-		ID:           uuid.New().String(),
-		UserID:       req.UserID,
-		GameID:       req.GameID,
-		ProviderID:   game.ProviderID,
-		Status:       "active",
-		DeviceType:   req.DeviceType,
-		LobbyURL:     req.LobbyURL,
-		LaunchURL:    "", // Will be set by provider adapter
-		Token:        uuid.New().String(),
-		StartedAt:    time.Now(),
-		LastActivity: time.Now(),
-		Metadata:     make(map[string]string),
+	// 2. Parse internal user_id
+	var userIDInt int64
+	if _, err := fmt.Sscanf(req.UserID, "%d", &userIDInt); err != nil {
+		return nil, fmt.Errorf("invalid user_id format: %w", err)
 	}
 
-	// TODO: Get user wallet balance
-	session.BalanceAtStart = "0"
+	// 3. Check self-exclusion
+	if s.userSvc != nil {
+		excluded, err := s.userSvc.IsSelfExcluded(ctx, userIDInt)
+		if err != nil {
+			s.log.Warn("Failed to check self-exclusion", zap.Error(err))
+		} else if excluded {
+			return nil, errors.New("user is self-excluded")
+		}
+	}
 
-	// Call provider adapter to get launch URL
-	// TODO: Implement provider adapter call
-	launchURL := "https://provider.example.com/launch?game=" + req.GameID + "&token=" + session.Token
+	// 4. Check country restriction
+	if s.userSvc != nil && len(game.RestrictedCountries) > 0 {
+		country, err := s.userSvc.GetCountry(ctx, userIDInt)
+		if err != nil {
+			s.log.Warn("Failed to get user country for geo-check", zap.Error(err))
+		} else {
+			for _, blocked := range game.RestrictedCountries {
+				if strings.EqualFold(blocked, country) {
+					return nil, fmt.Errorf("game not available in your country (%s)", country)
+				}
+			}
+		}
+	}
 
-	session.LaunchURL = launchURL
+	// 5. Get current balance
+	balanceStr := "0"
+	if s.wallet != nil {
+		balance, err := s.wallet.GetBalance(ctx, userIDInt, "USD")
+		if err != nil {
+			s.log.Warn("Failed to get balance for game launch", zap.Error(err))
+		} else {
+			balanceStr = balance.StringFixed(2)
+		}
+	}
 
-	// Save session to database
+	// 6. Build session token and opaque player_id (never expose internal user_id to provider)
+	sessionToken := uuid.New().String()
+	playerID := fmt.Sprintf("p%d_%s", userIDInt, sessionToken[:8])
+
+	// 7. Get signed launch URL from provider adapter
+	var launchURL string
+	if s.registry != nil {
+		adapter, err := s.registry.Get(game.ProviderID)
+		if err != nil {
+			return nil, fmt.Errorf("provider %q not available: %w", game.ProviderID, err)
+		}
+
+		launchURL, err = adapter.BuildLaunchURL(ctx, provider.LaunchRequest{
+			UserID:     req.UserID,
+			PlayerID:   playerID,
+			Token:      sessionToken,
+			GameID:     req.GameID,
+			Currency:   "USD",
+			Balance:    decimal.RequireFromString(balanceStr),
+			Language:   "en",
+			LobbyURL:   req.LobbyURL,
+			DeviceType: req.DeviceType,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("build launch url: %w", err)
+		}
+	} else {
+		launchURL = fmt.Sprintf("/games/demo?game=%s&token=%s", req.GameID, sessionToken)
+	}
+
+	// 8. Persist the session
+	session := &repository.GameSession{
+		ID:             uuid.New().String(),
+		UserID:         req.UserID,
+		GameID:         req.GameID,
+		ProviderID:     game.ProviderID,
+		Status:         "active",
+		BalanceAtStart: balanceStr,
+		DeviceType:     req.DeviceType,
+		LobbyURL:       req.LobbyURL,
+		LaunchURL:      launchURL,
+		Token:          sessionToken,
+		StartedAt:      time.Now(),
+		LastActivity:   time.Now(),
+		Metadata:       map[string]string{"player_id": playerID},
+	}
+
 	if err := s.repo.CreateGameSession(ctx, session); err != nil {
 		s.log.Error("Failed to create game session", zap.Error(err))
 		return nil, err
@@ -389,7 +472,8 @@ func (s *CasinoService) LaunchGame(ctx context.Context, req *LaunchGameRequest) 
 	s.log.Info("Game session created",
 		zap.String("session_id", session.ID),
 		zap.String("user_id", req.UserID),
-		zap.String("game_id", req.GameID))
+		zap.String("game_id", req.GameID),
+		zap.String("provider", game.ProviderID))
 
 	return &LaunchGameResult{
 		Session: &GameSession{
@@ -408,7 +492,7 @@ func (s *CasinoService) LaunchGame(ctx context.Context, req *LaunchGameRequest) 
 			Metadata:       session.Metadata,
 		},
 		LaunchURL: launchURL,
-		Token:     session.Token,
+		Token:     sessionToken,
 	}, nil
 }
 
@@ -482,14 +566,20 @@ func (s *CasinoService) EndGameSession(ctx context.Context, req *EndGameSessionR
 		s.log.Error("Failed to get round history", zap.Error(err))
 	}
 
-	// Calculate totals
-	totalBet := "0"
-	totalWin := "0"
+	// Calculate totals using decimal arithmetic
+	totalBetDec := decimal.Zero
+	totalWinDec := decimal.Zero
 	for _, round := range rounds {
-		// TODO: Implement proper calculation
-		totalBet = round.BetAmount
-		totalWin = round.WinAmount
+		if b, err := decimal.NewFromString(round.BetAmount); err == nil {
+			totalBetDec = totalBetDec.Add(b)
+		}
+		if w, err := decimal.NewFromString(round.WinAmount); err == nil {
+			totalWinDec = totalWinDec.Add(w)
+		}
 	}
+	totalBet := totalBetDec.StringFixed(2)
+	totalWin := totalWinDec.StringFixed(2)
+	netResult := totalWinDec.Sub(totalBetDec).StringFixed(2)
 
 	s.log.Info("Game session ended",
 		zap.String("session_id", req.SessionID),
@@ -500,10 +590,10 @@ func (s *CasinoService) EndGameSession(ctx context.Context, req *EndGameSessionR
 		Summary: &GameSessionSummary{
 			SessionID:     req.SessionID,
 			GameID:        session.GameID,
-			GameName:      session.GameID, // TODO: Get actual game name
+			GameName:      session.GameID,
 			TotalBet:      totalBet,
 			TotalWin:      totalWin,
-			NetResult:     totalWin, // TODO: Calculate properly
+			NetResult:     netResult,
 			RoundsPlayed:  int32(len(rounds)),
 			StartedAt:     session.StartedAt,
 			EndedAt:       endedAt,

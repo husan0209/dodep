@@ -323,6 +323,7 @@ func buildServices(
 			clients.User,
 			producer,
 			tracer,
+			cfg.NOWPayments.IPNCallbackURL,
 		),
 		Withdrawal: service.NewWithdrawalService(
 			repos.Withdrawal,
@@ -334,6 +335,7 @@ func buildServices(
 			clients.User,
 			producer,
 			tracer,
+			cfg.NOWPayments.IPNCallbackURL,
 		),
 		Webhook: service.NewWebhookService(
 			repos.Payment,

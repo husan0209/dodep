@@ -50,8 +50,8 @@ export default function FraudAlerts() {
       riskService.getAlerts({
         page,
         page_size: pageSize,
-        severity: severity,
-        status: status,
+        severity: severity as any,
+        status: status as any,
       }),
   });
 

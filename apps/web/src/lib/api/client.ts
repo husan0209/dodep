@@ -1,6 +1,17 @@
 import { useAuthStore } from "@/stores/auth-store";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+const DEFAULT_API_BASE = "http://localhost:8080";
+const DEFAULT_AUTH_API_BASE = "http://localhost:8083";
+
+type PublicEnv = Record<string, string | undefined>;
+
+export function resolveApiBaseUrl(env: PublicEnv = process.env): string {
+  return env.NEXT_PUBLIC_API_URL || DEFAULT_API_BASE;
+}
+
+export function resolveAuthApiBaseUrl(env: PublicEnv = process.env): string {
+  return env.NEXT_PUBLIC_AUTH_API_URL || env.NEXT_PUBLIC_API_URL || DEFAULT_AUTH_API_BASE;
+}
 
 export interface ApiResponse<T> {
   data: T;
@@ -16,6 +27,49 @@ export interface ApiError {
   message: string;
   details?: Record<string, unknown>;
   request_id: string;
+}
+
+function normalizeApiError(raw: unknown, fallbackMessage: string): ApiError {
+  if (raw && typeof raw === "object") {
+    const payload = raw as Record<string, unknown>;
+    const nestedError =
+      payload.error && typeof payload.error === "object"
+        ? (payload.error as Record<string, unknown>)
+        : null;
+    const legacyError = typeof payload.error === "string" ? payload.error : null;
+    const message =
+      typeof nestedError?.message === "string"
+        ? nestedError.message
+        : typeof payload.message === "string"
+        ? payload.message
+        : legacyError ?? fallbackMessage;
+
+    return {
+      code:
+        typeof nestedError?.code === "string"
+          ? nestedError.code
+          : typeof payload.code === "string"
+          ? payload.code
+          : "UNKNOWN_ERROR",
+      message,
+      details:
+        nestedError?.details && typeof nestedError.details === "object"
+          ? (nestedError.details as Record<string, unknown>)
+          : payload.details && typeof payload.details === "object"
+          ? (payload.details as Record<string, unknown>)
+          : undefined,
+      request_id:
+        typeof payload.request_id === "string"
+          ? payload.request_id
+          : "unknown",
+    };
+  }
+
+  return {
+    code: "UNKNOWN_ERROR",
+    message: fallbackMessage,
+    request_id: "unknown",
+  };
 }
 
 export class ApiClientError extends Error {
@@ -63,23 +117,46 @@ class ApiClient {
     let token = accessToken;
 
     const makeRequest = async (t: string | null): Promise<T> => {
-      const response = await fetch(url.toString(), {
-        method,
-        headers: {
-          "Content-Type": "application/json",
-          ...(t ? { Authorization: `Bearer ${t}` } : {}),
-          "X-Request-ID": crypto.randomUUID(),
-          ...options.headers,
-        },
-        body: options.body ? JSON.stringify(options.body) : undefined,
-      });
+      const requestId = crypto.randomUUID();
+      const startedAt = Date.now();
+      let response: Response;
+      try {
+        response = await fetch(url.toString(), {
+          method,
+          headers: {
+            "Content-Type": "application/json",
+            ...(t ? { Authorization: `Bearer ${t}` } : {}),
+            "X-Request-ID": requestId,
+            ...options.headers,
+          },
+          body: options.body ? JSON.stringify(options.body) : undefined,
+        });
+      } catch (error) {
+        const message =
+          `Network error while calling ${method} ${url.toString()}. ` +
+          "Backend is unreachable or refused the connection.";
+        console.error("[api] network_error", {
+          requestId,
+          method,
+          url: url.toString(),
+          elapsedMs: Date.now() - startedAt,
+          error,
+        });
+        throw new ApiClientError(0, {
+          code: "NETWORK_CONNECTION_REFUSED",
+          message,
+          details: {
+            method,
+            url: url.toString(),
+            elapsed_ms: Date.now() - startedAt,
+          },
+          request_id: requestId,
+        });
+      }
       
       if (!response.ok) {
-        const error = await response.json().catch(() => ({
-          code: "UNKNOWN_ERROR",
-          message: response.statusText,
-          request_id: "unknown",
-        }));
+        const payload = await response.json().catch(() => null);
+        const error = normalizeApiError(payload, response.statusText);
         throw new ApiClientError(response.status, error);
       }
       
@@ -126,4 +203,9 @@ class ApiClient {
   }
 }
 
-export const api = new ApiClient(API_BASE);
+export function createApiClient(baseUrl: string) {
+  return new ApiClient(baseUrl);
+}
+
+export const api = createApiClient(resolveApiBaseUrl());
+export const authApiClient = createApiClient(resolveAuthApiBaseUrl());

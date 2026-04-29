@@ -131,10 +131,10 @@ export default function AffiliateFraudFlags() {
           />
         </Space>
         <DataTable
-          data={data?.data || []}
+          data={(data?.data || []) as unknown as FraudFlag[]}
           columns={columns}
           loading={isLoading}
-          total={data?.pagination?.total || 0}
+          total={(data?.pagination?.total || 0) as number}
           page={page}
           pageSize={pageSize}
           onPageChange={(p) => setPage(p)}

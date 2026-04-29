@@ -82,6 +82,8 @@ nowpayments:
 
   ipn_secret: ""  # Set via PAYMENT_NOWPAYMENTS_IPN_SECRET env var
 
+  ipn_callback_url: ""  # Set via PAYMENT_NOWPAYMENTS_IPN_CALLBACK_URL env var (e.g. https://casino.example.com/api/v1/payments/webhooks/nowpayments)
+
   timeout: 30s
 
   retry:
@@ -143,4 +145,7 @@ tracing:
 auth:
 
   ed25519_public_key: ""  # Set via PAYMENT_AUTH_ED25519_PUBLIC_KEY env var
+
+# Tracing disabled by default in dev (Jaeger not always running)
+# Override via PAYMENT_TRACING_ENABLED=true
 

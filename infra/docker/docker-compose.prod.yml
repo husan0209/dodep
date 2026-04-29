@@ -1,0 +1,784 @@
+# Docker Compose — Production (single-VPS deployment)
+# Usage: docker compose -f infra/docker/docker-compose.prod.yml --env-file .env.production up -d
+version: "3.9"
+
+x-go-service: &go-service-defaults
+  restart: unless-stopped
+  env_file: ../../.env.production
+  networks:
+    - backend
+  logging:
+    driver: "json-file"
+    options:
+      max-size: "50m"
+      max-file: "5"
+
+x-rust-service: &rust-service-defaults
+  restart: unless-stopped
+  env_file: ../../.env.production
+  networks:
+    - backend
+  logging:
+    driver: "json-file"
+    options:
+      max-size: "50m"
+      max-file: "5"
+
+services:
+  # ================================================================
+  # DATA LAYER
+  # ================================================================
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: opus-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-opus_casino}
+      POSTGRES_USER: ${POSTGRES_USER:-opus_app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../../libs/migrations/postgresql:/docker-entrypoint-initdb.d:ro
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-opus_app} -d ${POSTGRES_DB:-opus_casino}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "3"
+
+  dragonfly:
+    image: docker.dragonflydb.io/dragonflydb/dragonfly:v1.13.0
+    container_name: opus-dragonfly
+    restart: unless-stopped
+    ulimits:
+      memlock: -1
+    command: >
+      --logtostderr
+      --cache_mode=true
+      --maxmemory=4gb
+      --requirepass=${REDIS_PASSWORD}
+      --hz=100
+    volumes:
+      - dragonfly_data:/data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.3-alpine
+    container_name: opus-clickhouse
+    restart: unless-stopped
+    environment:
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-opus_casino}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - ../../libs/migrations/clickhouse:/docker-entrypoint-initdb.d:ro
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8123/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v23.3.18
+    container_name: opus-redpanda
+    restart: unless-stopped
+    command:
+      - redpanda start
+      - --smp 2
+      - --memory 2G
+      - --reserve-memory 0M
+      - --overprovisioned
+      - --node-id 0
+      - --kafka-addr PLAINTEXT://0.0.0.0:29092,OUTSIDE://0.0.0.0:9092
+      - --advertise-kafka-addr PLAINTEXT://redpanda:29092,OUTSIDE://redpanda:9092
+    volumes:
+      - redpanda_data:/var/lib/redpanda/data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "rpk", "cluster", "health"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  minio:
+    image: minio/minio:RELEASE.2024-03-15T01-07-19Z
+    container_name: opus-minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY}
+    volumes:
+      - minio_data:/data
+    networks:
+      - backend
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  # ================================================================
+  # OBSERVABILITY
+  # ================================================================
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.56
+    container_name: opus-jaeger
+    restart: unless-stopped
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+      SPAN_STORAGE_TYPE: memory
+    networks:
+      - backend
+      - monitoring
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:16686/"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  prometheus:
+    image: prom/prometheus:v2.51.2
+    container_name: opus-prometheus
+    restart: unless-stopped
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=30d"
+      - "--web.enable-lifecycle"
+    networks:
+      - monitoring
+      - backend
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/healthy"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  grafana:
+    image: grafana/grafana:10.4.2
+    container_name: opus-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      GF_SERVER_DOMAIN: ${GRAFANA_DOMAIN:-grafana.localhost}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    networks:
+      - monitoring
+    depends_on:
+      - prometheus
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  # ================================================================
+  # RUST SERVICES (critical path)
+  # ================================================================
+
+  wallet-core:
+    <<: *rust-service-defaults
+    container_name: opus-wallet-core
+    image: opus-casino/wallet-core:${IMAGE_TAG:-latest}
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.rust
+      args:
+        SERVICE: wallet-core
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      GRPC_PORT: 50053
+      HTTP_PORT: 8081
+      KAFKA_BROKERS: ${KAFKA_BROKERS}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
+      RUST_LOG: info
+    depends_on:
+      postgres:
+        condition: service_healthy
+      dragonfly:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8081/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  betting-engine:
+    <<: *rust-service-defaults
+    container_name: opus-betting-engine
+    image: opus-casino/betting-engine:${IMAGE_TAG:-latest}
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.rust
+      args:
+        SERVICE: betting-engine
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      GRPC_PORT: 50054
+      HTTP_PORT: 8080
+      KAFKA_BROKERS: ${KAFKA_BROKERS}
+      SPORTRADAR_API_KEY: ${SPORTRADAR_API_KEY}
+      SPORTRADAR_LIVE_ODDS_WS: ${SPORTRADAR_LIVE_ODDS_WS}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
+      RUST_LOG: info
+    depends_on:
+      postgres:
+        condition: service_healthy
+      dragonfly:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  websocket-gateway:
+    <<: *rust-service-defaults
+    container_name: opus-websocket-gateway
+    image: opus-casino/websocket-gateway:${IMAGE_TAG:-latest}
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.rust
+      args:
+        SERVICE: websocket-gateway
+    environment:
+      REDIS_URL: ${REDIS_URL}
+      GRPC_PORT: 50062
+      HTTP_PORT: 8082
+      BETTING_ENGINE_ADDR: betting-engine:50054
+      KAFKA_BROKERS: ${KAFKA_BROKERS}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
+      RUST_LOG: info
+    depends_on:
+      betting-engine:
+        condition: service_healthy
+      dragonfly:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8082/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  # ================================================================
+  # GO SERVICES (business logic)
+  # ================================================================
+
+  auth:
+    <<: *go-service-defaults
+    container_name: opus-auth
+    image: opus-casino/auth:${IMAGE_TAG:-latest}
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.go
+      args:
+        SERVICE: auth
+    environment:
+      PORT: 8083
+      GRPC_PORT: 50051
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      JWT_ED25519_PRIVATE_KEY: ${JWT_ED25519_PRIVATE_KEY}
+      JWT_ED25519_PUBLIC_KEY: ${JWT_ED25519_PUBLIC_KEY}
+      JWT_ACCESS_EXPIRY: ${JWT_ACCESS_EXPIRY:-900}
+      JWT_REFRESH_EXPIRY: ${JWT_REFRESH_EXPIRY:-604800}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL}
+      APP_BASE_URL: ${APP_BASE_URL}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
+    depends_on:
+      postgres:
+        condition: service_healthy
+      dragonfly:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8083/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  user:
+    <<: *go-service-defaults
+    container_name: opus-user
+    image: opus-casino/user:${IMAGE_TAG:-latest}
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.go
+      args:
+        SERVICE: user
+    environment:
+      PORT: 8085
+      GRPC_PORT: 50052
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      AUTH_GRPC_ADDR: auth:50051
+      SUMSUB_API_KEY: ${SUMSUB_API_KEY}
+      SUMSUB_APP_TOKEN: ${SUMSUB_APP_TOKEN}
+      SUMSUB_SECRET_KEY: ${SUMSUB_SECRET_KEY}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      GEO_BLOCKED_COUNTRIES: ${GEO_BLOCKED_COUNTRIES}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
+    depends_on:
+      postgres:
+        condition: service_healthy
+      auth:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8085/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  payment:
+    <<: *go-service-defaults
+    container_name: opus-payment
+    image: opus-casino/payment:${IMAGE_TAG:-latest}
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.go
+      args:
+        SERVICE: payment
+        CMD_PATH: cmd/server
+    environment:
+      PAYMENT_SERVER_PORT: 8084
+      PAYMENT_DATABASE_HOST: postgres
+      PAYMENT_DATABASE_PORT: 5432
+      PAYMENT_DATABASE_USER: ${POSTGRES_USER}
+      PAYMENT_DATABASE_PASSWORD: ${POSTGRES_PASSWORD}
+      PAYMENT_DATABASE_DATABASE: ${POSTGRES_DB}
+      PAYMENT_DATABASE_SSL_MODE: ${POSTGRES_SSL_MODE:-disable}
+      PAYMENT_REDIS_HOST: dragonfly
+      PAYMENT_REDIS_PORT: 6379
+      PAYMENT_REDIS_PASSWORD: ${REDIS_PASSWORD}
+      PAYMENT_KAFKA_BROKERS: redpanda:9092
+      PAYMENT_NOWPAYMENTS_BASE_URL: ${PAYMENT_NOWPAYMENTS_BASE_URL}
+      PAYMENT_NOWPAYMENTS_API_KEY: ${PAYMENT_NOWPAYMENTS_API_KEY}
+      PAYMENT_NOWPAYMENTS_IPN_SECRET: ${PAYMENT_NOWPAYMENTS_IPN_SECRET}
+      PAYMENT_NOWPAYMENTS_IPN_CALLBACK_URL: ${PAYMENT_NOWPAYMENTS_IPN_CALLBACK_URL}
+      PAYMENT_WALLET_ADDRESS: wallet-core:50053
+      PAYMENT_USER_ADDRESS: user:50052
+      PAYMENT_AUTH_ED25519_PUBLIC_KEY: ${JWT_ED25519_PUBLIC_KEY}
+      PAYMENT_TRACING_ENDPOINT: jaeger:4317
+      PAYMENT_TRACING_ENABLED: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      dragonfly:
+        condition: service_healthy
+      wallet-core:
+        condition: service_healthy
+      user:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8084/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  casino:
+    <<: *go-service-defaults
+    container_name: opus-casino
+    image: opus-casino/casino:${IMAGE_TAG:-latest}
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.go
+      args:
+        SERVICE: casino
+    environment:
+      PORT: 8086
+      GRPC_PORT: 50057
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      WALLET_GRPC_ADDR: wallet-core:50053
+      USER_GRPC_ADDR: user:50052
+      KAFKA_BROKERS: ${KAFKA_BROKERS}
+      PRAGMATIC_ENABLED: ${PRAGMATIC_ENABLED:-false}
+      PRAGMATIC_AGENT_ID: ${PRAGMATIC_AGENT_ID}
+      PRAGMATIC_SECRET_KEY: ${PRAGMATIC_SECRET_KEY}
+      PRAGMATIC_API_URL: ${PRAGMATIC_API_URL}
+      PGSOFT_ENABLED: ${PGSOFT_ENABLED:-false}
+      PGSOFT_OPERATOR_TOKEN: ${PGSOFT_OPERATOR_TOKEN}
+      PGSOFT_SECRET_KEY: ${PGSOFT_SECRET_KEY}
+      PGSOFT_API_URL: ${PGSOFT_API_URL}
+      AMATIC_ENABLED: ${AMATIC_ENABLED:-false}
+      AMATIC_OPERATOR_ID: ${AMATIC_OPERATOR_ID}
+      AMATIC_API_PASSWORD: ${AMATIC_API_PASSWORD}
+      AMATIC_SECRET_KEY: ${AMATIC_SECRET_KEY}
+      AMATIC_API_URL: ${AMATIC_API_URL}
+      AMUSNET_ENABLED: ${AMUSNET_ENABLED:-false}
+      AMUSNET_OPERATOR_ID: ${AMUSNET_OPERATOR_ID}
+      AMUSNET_SECRET_KEY: ${AMUSNET_SECRET_KEY}
+      AMUSNET_API_URL: ${AMUSNET_API_URL}
+      GEO_BLOCKED_COUNTRIES: ${GEO_BLOCKED_COUNTRIES}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
+    depends_on:
+      postgres:
+        condition: service_healthy
+      dragonfly:
+        condition: service_healthy
+      wallet-core:
+        condition: service_healthy
+      user:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8086/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  bonus:
+    <<: *go-service-defaults
+    container_name: opus-bonus
+    image: opus-casino/bonus:${IMAGE_TAG:-latest}
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.go
+      args:
+        SERVICE: bonus
+    environment:
+      PORT: 8088
+      GRPC_PORT: 50056
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      WALLET_GRPC_ADDR: wallet-core:50053
+      KAFKA_BROKERS: ${KAFKA_BROKERS}
+      WELCOME_BONUS_PERCENTAGE: ${WELCOME_BONUS_PERCENTAGE:-100}
+      WELCOME_BONUS_MAX_AMOUNT: ${WELCOME_BONUS_MAX_AMOUNT:-200}
+      WELCOME_BONUS_WAGERING_REQUIREMENT: ${WELCOME_BONUS_WAGERING_REQUIREMENT:-30}
+      WELCOME_BONUS_EXPIRY_DAYS: ${WELCOME_BONUS_EXPIRY_DAYS:-30}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
+    depends_on:
+      postgres:
+        condition: service_healthy
+      wallet-core:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8088/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  notification:
+    <<: *go-service-defaults
+    container_name: opus-notification
+    image: opus-casino/notification:${IMAGE_TAG:-latest}
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.go
+      args:
+        SERVICE: notification
+    environment:
+      PORT: 8087
+      GRPC_PORT: 50058
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      KAFKA_BROKERS: ${KAFKA_BROKERS}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME}
+      APP_BASE_URL: ${APP_BASE_URL}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8087/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  kyc:
+    <<: *go-service-defaults
+    container_name: opus-kyc
+    image: opus-casino/kyc:${IMAGE_TAG:-latest}
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.go
+      args:
+        SERVICE: kyc
+    environment:
+      PORT: 8089
+      GRPC_PORT: 50059
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      SUMSUB_API_KEY: ${SUMSUB_API_KEY}
+      SUMSUB_APP_TOKEN: ${SUMSUB_APP_TOKEN}
+      SUMSUB_SECRET_KEY: ${SUMSUB_SECRET_KEY}
+      SUMSUB_API_URL: ${SUMSUB_API_URL}
+      KAFKA_BROKERS: ${KAFKA_BROKERS}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8089/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  admin-bff:
+    <<: *go-service-defaults
+    container_name: opus-admin-bff
+    image: opus-casino/admin-bff:${IMAGE_TAG:-latest}
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.go
+      args:
+        SERVICE: admin-bff
+    environment:
+      PORT: 8091
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      AUTH_GRPC_ADDR: auth:50051
+      USER_GRPC_ADDR: user:50052
+      WALLET_GRPC_ADDR: wallet-core:50053
+      PAYMENT_GRPC_ADDR: payment:50055
+      CASINO_GRPC_ADDR: casino:50057
+      ADMIN_BFF_AUTH_ED25519_PUBLIC_KEY: ${JWT_ED25519_PUBLIC_KEY}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
+    depends_on:
+      - auth
+      - user
+      - payment
+      - casino
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8091/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  # ================================================================
+  # FRONTEND
+  # ================================================================
+
+  web:
+    container_name: opus-web
+    image: opus-casino/web:${IMAGE_TAG:-latest}
+    build:
+      context: ../../apps/web
+      dockerfile: ../../infra/docker/Dockerfile.web
+      args:
+        NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:-/api}
+        NEXT_PUBLIC_WS_URL: wss://${APP_DOMAIN}/ws
+        NEXT_PUBLIC_SENTRY_DSN: ${SENTRY_DSN_FRONTEND}
+        NEXT_PUBLIC_APP_ENV: ${APP_ENV:-production}
+    restart: unless-stopped
+    networks:
+      - frontend
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  admin:
+    container_name: opus-admin
+    image: opus-casino/admin:${IMAGE_TAG:-latest}
+    build:
+      context: ../../apps/admin
+      dockerfile: ../../infra/docker/Dockerfile.admin
+      args:
+        VITE_API_URL: ${PUBLIC_API_URL:-/api}
+        VITE_APP_ENV: ${APP_ENV:-production}
+    restart: unless-stopped
+    networks:
+      - frontend
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:80/"]
+      interval: 20s
+      timeout: 5s
+      retries: 10
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # ================================================================
+  # NGINX (API Gateway + SSL termination + static files)
+  # ================================================================
+
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: opus-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - nginx_certs:/etc/nginx/certs
+      - nginx_logs:/var/log/nginx
+    networks:
+      - frontend
+      - backend
+    depends_on:
+      - web
+      - admin
+      - auth
+      - payment
+      - casino
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "10"
+
+  # ================================================================
+  # BACKUP CRON
+  # ================================================================
+
+  backup:
+    image: postgres:16-alpine
+    container_name: opus-backup
+    restart: unless-stopped
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_HOST: postgres
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_DB: ${POSTGRES_DB}
+      S3_ENDPOINT: ${S3_ENDPOINT}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      BACKUP_S3_BUCKET: ${BACKUP_S3_BUCKET:-opus-casino-backups}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-7}
+    volumes:
+      - ../../tools/backup:/scripts:ro
+      - backup_tmp:/tmp/backups
+    networks:
+      - backend
+    entrypoint: ["/bin/sh", "/scripts/postgres-backup.sh", "--cron"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+# ================================================================
+# VOLUMES
+# ================================================================
+volumes:
+  postgres_data:
+    driver: local
+  dragonfly_data:
+    driver: local
+  clickhouse_data:
+    driver: local
+  redpanda_data:
+    driver: local
+  minio_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+  nginx_certs:
+    driver: local
+  nginx_logs:
+    driver: local
+  backup_tmp:
+    driver: local
+
+# ================================================================
+# NETWORKS
+# ================================================================
+networks:
+  backend:
+    driver: bridge
+    internal: true
+  frontend:
+    driver: bridge
+  monitoring:
+    driver: bridge
+    internal: true

@@ -1,6 +1,6 @@
 import apiClient from "./api";
 import type { ApiResponse, PaginatedResponse } from "@/types/api";
-import type { Game, GameSession, Provider } from "@/types/casino";
+import type { Game, GameSession, Provider, CasinoBetSession, CasinoBetSearchParams } from "@/types/casino";
 
 export const casinoService = {
   async getGames(params?: {
@@ -67,5 +67,24 @@ export const casinoService = {
       params,
     });
     return response.data.data;
+  },
+
+  async getRtpConfig(): Promise<unknown> {
+    const response = await apiClient.get("/admin/casino/rtp-config");
+    return response.data.data;
+  },
+
+  async updateRtp(gameId: string, targetRtp: number): Promise<void> {
+    await apiClient.put(`/admin/casino/games/${gameId}/rtp`, { target_rtp: targetRtp });
+  },
+
+  async getCasinoBets(
+    params: CasinoBetSearchParams,
+  ): Promise<PaginatedResponse<CasinoBetSession>> {
+    const response = await apiClient.get<PaginatedResponse<CasinoBetSession>>(
+      "/admin/casino/bets",
+      { params },
+    );
+    return response.data;
   },
 };

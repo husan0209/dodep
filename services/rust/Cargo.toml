@@ -51,6 +51,10 @@ dotenvy = "0.15"
 rand = "0.8"
 bytes = "1.7"
 
+# JWT (Ed25519 / EdDSA)
+jwt-simple = "0.12"
+base64 = "0.22"
+
 # Metrics
 metrics = "0.22"
 

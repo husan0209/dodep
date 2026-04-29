@@ -2,15 +2,16 @@ package handlers
 
 import (
 	"context"
+	"fmt"
 
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	pb "github.com/opus-casino/proto/gen/go/notification/v1"
 	"github.com/opus-casino/notification/internal/service"
 	commonv1 "github.com/opus-casino/proto/gen/go/common/v1"
+	pb "github.com/opus-casino/proto/gen/go/notification/v1"
 )
 
 // NotificationGRPCHandler handles gRPC requests for Notification Service
@@ -29,12 +30,12 @@ func NewNotificationGRPCHandler(service *service.NotificationService) *Notificat
 
 // SendNotification sends a notification to user
 func (h *NotificationGRPCHandler) SendNotification(ctx context.Context, req *pb.SendNotificationRequest) (*pb.SendNotificationResponse, error) {
-	if req.UserId == nil || req.UserId.Value == 0 {
+	if req.UserId == nil || req.UserId.Value == "" {
 		return nil, status.Error(codes.InvalidArgument, "user_id is required")
 	}
 
 	serviceReq := &service.SendNotificationRequest{
-		UserID:      uint64(req.UserId.Value),
+		UserID:      func() uint64 { var v uint64; fmt.Sscanf(req.UserId.Value, "%d", &v); return v }(),
 		Channel:     req.Channel.String(),
 		Type:        req.Type.String(),
 		Subject:     req.Subject,
@@ -55,8 +56,7 @@ func (h *NotificationGRPCHandler) SendNotification(ctx context.Context, req *pb.
 		h.log.Error("SendNotification failed", zap.Error(err))
 		return &pb.SendNotificationResponse{
 			Error: &commonv1.ErrorDetails{
-				Code:    "SEND_FAILED",
-				Message: err.Error(),
+				ErrorMessage: err.Error(),
 			},
 		}, nil
 	}
@@ -64,8 +64,7 @@ func (h *NotificationGRPCHandler) SendNotification(ctx context.Context, req *pb.
 	var errorDetails *commonv1.ErrorDetails
 	if result.Error != nil {
 		errorDetails = &commonv1.ErrorDetails{
-			Code:    "SEND_FAILED",
-			Message: result.Error.Error(),
+			ErrorMessage: result.Error.Error(),
 		}
 	}
 
@@ -79,7 +78,7 @@ func (h *NotificationGRPCHandler) SendNotification(ctx context.Context, req *pb.
 func (h *NotificationGRPCHandler) SendBulkNotification(ctx context.Context, req *pb.SendBulkNotificationRequest) (*pb.SendBulkNotificationResponse, error) {
 	userIDs := make([]uint64, len(req.UserIds))
 	for i, id := range req.UserIds {
-		userIDs[i] = uint64(id.Value)
+		userIDs[i] = func() uint64 { var v uint64; fmt.Sscanf(id.Value, "%d", &v); return v }()
 	}
 
 	var userSegment *string
@@ -127,14 +126,18 @@ func (h *NotificationGRPCHandler) GetNotification(ctx context.Context, req *pb.G
 
 // GetUserNotifications returns user's notifications
 func (h *NotificationGRPCHandler) GetUserNotifications(ctx context.Context, req *pb.GetUserNotificationsRequest) (*pb.GetUserNotificationsResponse, error) {
-	if req.UserId == nil || req.UserId.Value == 0 {
+	if req.UserId == nil || req.UserId.Value == "" {
 		return nil, status.Error(codes.InvalidArgument, "user_id is required")
 	}
 
+	var pageSize int32 = 20
+	if req.Pagination != nil && req.Pagination.PageSize > 0 {
+		pageSize = req.Pagination.PageSize
+	}
 	serviceReq := &service.GetUserNotificationsRequest{
-		UserID:   uint64(req.UserId.Value),
-		Limit:    req.Pagination.Limit,
-		Offset:   req.Pagination.Offset,
+		UserID: func() uint64 { var v uint64; fmt.Sscanf(req.UserId.Value, "%d", &v); return v }(),
+		Limit:  pageSize,
+		Offset: 0,
 	}
 
 	if req.Type != nil {
@@ -164,35 +167,29 @@ func (h *NotificationGRPCHandler) GetUserNotifications(ctx context.Context, req 
 
 	return &pb.GetUserNotificationsResponse{
 		Notifications: notifications,
-		Pagination: &commonv1.PageResponse{
-			Total:  result.TotalCount,
-			Limit:  req.Pagination.Limit,
-			Offset: req.Pagination.Offset,
-		},
+		Pagination: &commonv1.PageResponse{TotalCount: &result.TotalCount},
 		UnreadCount: result.UnreadCount,
 	}, nil
 }
 
 // MarkAsRead marks notification as read
 func (h *NotificationGRPCHandler) MarkAsRead(ctx context.Context, req *pb.MarkAsReadRequest) (*pb.MarkAsReadResponse, error) {
-	if req.UserId == nil || req.UserId.Value == 0 {
+	if req.UserId == nil || req.UserId.Value == "" {
 		return &pb.MarkAsReadResponse{
 			Success: false,
 			Error: &commonv1.ErrorDetails{
-				Code:    "INVALID_ARGUMENT",
-				Message: "user_id is required",
+				ErrorMessage: "user_id is required",
 			},
 		}, nil
 	}
 
-	err := h.service.MarkAsRead(ctx, req.NotificationId, uint64(req.UserId.Value))
+	err := h.service.MarkAsRead(ctx, req.NotificationId, func() uint64 { var v uint64; fmt.Sscanf(req.UserId.Value, "%d", &v); return v }())
 	if err != nil {
 		h.log.Error("MarkAsRead failed", zap.Error(err))
 		return &pb.MarkAsReadResponse{
 			Success: false,
 			Error: &commonv1.ErrorDetails{
-				Code:    "MARK_READ_FAILED",
-				Message: err.Error(),
+				ErrorMessage: err.Error(),
 			},
 		}, nil
 	}
@@ -204,7 +201,7 @@ func (h *NotificationGRPCHandler) MarkAsRead(ctx context.Context, req *pb.MarkAs
 
 // MarkAllAsRead marks all user notifications as read
 func (h *NotificationGRPCHandler) MarkAllAsRead(ctx context.Context, req *pb.MarkAllAsReadRequest) (*pb.MarkAllAsReadResponse, error) {
-	if req.UserId == nil || req.UserId.Value == 0 {
+	if req.UserId == nil || req.UserId.Value == "" {
 		return &pb.MarkAllAsReadResponse{
 			MarkedCount: 0,
 		}, nil
@@ -216,7 +213,7 @@ func (h *NotificationGRPCHandler) MarkAllAsRead(ctx context.Context, req *pb.Mar
 		typeFilter = &typeStr
 	}
 
-	count, err := h.service.MarkAllAsRead(ctx, uint64(req.UserId.Value), typeFilter)
+	count, err := h.service.MarkAllAsRead(ctx, func() uint64 { var v uint64; fmt.Sscanf(req.UserId.Value, "%d", &v); return v }(), typeFilter)
 	if err != nil {
 		h.log.Error("MarkAllAsRead failed", zap.Error(err))
 		return &pb.MarkAllAsReadResponse{
@@ -231,24 +228,22 @@ func (h *NotificationGRPCHandler) MarkAllAsRead(ctx context.Context, req *pb.Mar
 
 // DeleteNotification deletes a notification
 func (h *NotificationGRPCHandler) DeleteNotification(ctx context.Context, req *pb.DeleteNotificationRequest) (*pb.DeleteNotificationResponse, error) {
-	if req.UserId == nil || req.UserId.Value == 0 {
+	if req.UserId == nil || req.UserId.Value == "" {
 		return &pb.DeleteNotificationResponse{
 			Success: false,
 			Error: &commonv1.ErrorDetails{
-				Code:    "INVALID_ARGUMENT",
-				Message: "user_id is required",
+				ErrorMessage: "user_id is required",
 			},
 		}, nil
 	}
 
-	err := h.service.DeleteNotification(ctx, req.NotificationId, uint64(req.UserId.Value))
+	err := h.service.DeleteNotification(ctx, req.NotificationId, func() uint64 { var v uint64; fmt.Sscanf(req.UserId.Value, "%d", &v); return v }())
 	if err != nil {
 		h.log.Error("DeleteNotification failed", zap.Error(err))
 		return &pb.DeleteNotificationResponse{
 			Success: false,
 			Error: &commonv1.ErrorDetails{
-				Code:    "DELETE_FAILED",
-				Message: err.Error(),
+				ErrorMessage: err.Error(),
 			},
 		}, nil
 	}
@@ -260,11 +255,11 @@ func (h *NotificationGRPCHandler) DeleteNotification(ctx context.Context, req *p
 
 // GetNotificationSettings returns user's notification settings
 func (h *NotificationGRPCHandler) GetNotificationSettings(ctx context.Context, req *pb.GetNotificationSettingsRequest) (*pb.GetNotificationSettingsResponse, error) {
-	if req.UserId == nil || req.UserId.Value == 0 {
+	if req.UserId == nil || req.UserId.Value == "" {
 		return nil, status.Error(codes.InvalidArgument, "user_id is required")
 	}
 
-	settings, err := h.service.GetNotificationSettings(ctx, uint64(req.UserId.Value))
+	settings, err := h.service.GetNotificationSettings(ctx, func() uint64 { var v uint64; fmt.Sscanf(req.UserId.Value, "%d", &v); return v }())
 	if err != nil {
 		h.log.Error("GetNotificationSettings failed", zap.Error(err))
 		return nil, status.Error(codes.Internal, "failed to get notification settings")
@@ -277,12 +272,12 @@ func (h *NotificationGRPCHandler) GetNotificationSettings(ctx context.Context, r
 
 // UpdateNotificationSettings updates user's notification settings
 func (h *NotificationGRPCHandler) UpdateNotificationSettings(ctx context.Context, req *pb.UpdateNotificationSettingsRequest) (*pb.UpdateNotificationSettingsResponse, error) {
-	if req.UserId == nil || req.UserId.Value == 0 {
+	if req.UserId == nil || req.UserId.Value == "" {
 		return nil, status.Error(codes.InvalidArgument, "user_id is required")
 	}
 
 	serviceReq := &service.UpdateNotificationSettingsRequest{
-		UserID:       uint64(req.UserId.Value),
+		UserID:       func() uint64 { var v uint64; fmt.Sscanf(req.UserId.Value, "%d", &v); return v }(),
 		EmailEnabled: req.EmailEnabled,
 		SMSEnabled:   req.SmsEnabled,
 		PushEnabled:  req.PushEnabled,
@@ -304,10 +299,7 @@ func (h *NotificationGRPCHandler) UpdateNotificationSettings(ctx context.Context
 	if err != nil {
 		h.log.Error("UpdateNotificationSettings failed", zap.Error(err))
 		return &pb.UpdateNotificationSettingsResponse{
-			Error: &commonv1.ErrorDetails{
-				Code:    "UPDATE_FAILED",
-				Message: err.Error(),
-			},
+			Error: &commonv1.ErrorDetails{ErrorMessage: err.Error()},
 		}, nil
 	}
 
@@ -321,7 +313,7 @@ func (h *NotificationGRPCHandler) UpdateNotificationSettings(ctx context.Context
 func toProtoNotification(notif *service.Notification) *pb.Notification {
 	return &pb.Notification{
 		Id:         notif.ID,
-		UserId:     &commonv1.UserId{Value: int64(notif.UserID)},
+		UserId:     &commonv1.UserId{Value: fmt.Sprintf("%d", notif.UserID)},
 		Channel:    pb.NotificationChannel(pb.NotificationChannel_value[notif.Channel]),
 		Type:       pb.NotificationType(pb.NotificationType_value[notif.Type]),
 		Priority:   pb.NotificationPriority(pb.NotificationPriority_value[notif.Priority]),
@@ -340,9 +332,9 @@ func toProtoNotification(notif *service.Notification) *pb.Notification {
 }
 
 func toProtoNotificationSettings(settings *service.NotificationSettings) *pb.NotificationSettings {
-	typePrefs := make(map[pb.NotificationType]*pb.ChannelPreferences)
+	typePrefs := make(map[string]*pb.ChannelPreferences)
 	for typeStr, pref := range settings.TypePreferences {
-		typePrefs[pb.NotificationType(pb.NotificationType_value[typeStr])] = &pb.ChannelPreferences{
+		typePrefs[typeStr] = &pb.ChannelPreferences{
 			EmailEnabled: pref.EmailEnabled,
 			SmsEnabled:   pref.SMSEnabled,
 			PushEnabled:  pref.PushEnabled,
@@ -351,12 +343,12 @@ func toProtoNotificationSettings(settings *service.NotificationSettings) *pb.Not
 	}
 
 	return &pb.NotificationSettings{
-		UserId:         &commonv1.UserId{Value: int64(settings.UserID)},
-		EmailEnabled:   settings.EmailEnabled,
-		SmsEnabled:     settings.SMSEnabled,
-		PushEnabled:    settings.PushEnabled,
-		InAppEnabled:   settings.InAppEnabled,
+		UserId:          &commonv1.UserId{Value: fmt.Sprintf("%d", settings.UserID)},
+		EmailEnabled:    settings.EmailEnabled,
+		SmsEnabled:      settings.SMSEnabled,
+		PushEnabled:     settings.PushEnabled,
+		InAppEnabled:    settings.InAppEnabled,
 		TypePreferences: typePrefs,
-		UpdatedAt:      timestamppb.New(settings.UpdatedAt),
+		UpdatedAt:       timestamppb.New(settings.UpdatedAt),
 	}
 }

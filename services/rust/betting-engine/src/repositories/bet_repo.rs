@@ -25,7 +25,7 @@ impl BetRepository {
     ) -> Result<Bet, sqlx::Error> {
         let mut tx = self.pool.begin().await?;
 
-        let row = sqlx::query_as!(
+        let maybe_row = sqlx::query_as!(
             BetRow,
             r#"
             INSERT INTO bets (
@@ -58,8 +58,36 @@ impl BetRepository {
             params.ip_address,
             params.device_fingerprint,
         )
-        .fetch_one(&mut *tx)
+        .fetch_optional(&mut *tx)
         .await?;
+
+        let row = match maybe_row {
+            Some(r) => r,
+            None => {
+                // Conflict occurred — fetch the existing bet by idempotency_key
+                let existing = sqlx::query_as!(
+                    BetRow,
+                    r#"
+                    SELECT
+                        id, user_id,
+                        bet_type as "bet_type: BetType",
+                        status as "status: BetStatus",
+                        stake, potential_win, actual_win,
+                        odds, currency_code,
+                        sport_id, event_id, idempotency_key,
+                        ip_address, device_fingerprint,
+                        placed_at, settled_at
+                    FROM bets
+                    WHERE idempotency_key = $1 AND user_id = $2
+                    "#,
+                    params.idempotency_key,
+                    params.user_id.0,
+                )
+                .fetch_one(&mut *tx)
+                .await?;
+                existing
+            }
+        };
 
         for sel in &params.selections {
             sqlx::query!(

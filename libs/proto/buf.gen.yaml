@@ -19,44 +19,26 @@ plugins:
     out: ../../gen/go
     opt:
       - paths=source_relative
-    strategy: all
-  
+
   # Go - gRPC
   - remote: buf.build/grpc/go
     out: ../../gen/go
     opt:
       - paths=source_relative
-    strategy: all
   
-  # Rust - prost (requires local plugin: protoc-gen-prost)
-  - local: protoc-gen-prost
-    out: ../../gen/rust
-    opt:
-      - extern_path=.google.protobuf::prost_wkt_types
-    strategy: all
+  # Rust - prost (requires: cargo install protoc-gen-prost protoc-gen-tonic)
+  # Uncomment after installing the plugins:
+  # - local: protoc-gen-prost
+  #   out: ../../gen/rust
+  #   opt:
+  #     - extern_path=.google.protobuf::prost_wkt_types
+  #   strategy: all
+  # - local: protoc-gen-tonic
+  #   out: ../../gen/rust
+  #   opt:
+  #     - no_client
+  #   strategy: all
   
-  # Rust - tonic (requires local plugin: protoc-gen-tonic)
-  - local: protoc-gen-tonic
-    out: ../../gen/rust
-    opt:
-      - no_client
-    strategy: all
-  
-  # TypeScript - protobuf-ts
-  - remote: buf.build/timostamm/protobuf-ts
+  # TypeScript / JavaScript
+  - remote: buf.build/protocolbuffers/js
     out: ../../gen/typescript
-    opt:
-      - paths=source_relative
-      - long_type_string
-      - add_pb_suffix
-    strategy: all
-
-# Hooks for post-generation processing
-hooks:
-  - name: format-rust
-    run: cargo fmt --manifest-path ../../gen/rust/Cargo.toml
-    container:
-      image: rust:1.75
-      volumes:
-        - ../../gen/rust:/workspace
-    if: rust

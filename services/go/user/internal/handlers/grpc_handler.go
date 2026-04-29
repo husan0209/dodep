@@ -2,18 +2,29 @@ package handlers
 
 import (
 	"context"
+	"fmt"
+	"strconv"
 
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	pb "github.com/opus-casino/proto/gen/go/user/v1"
 	commonv1 "github.com/opus-casino/proto/gen/go/common/v1"
+	pb "github.com/opus-casino/proto/gen/go/user/v1"
 
 	"github.com/opus-casino/user/internal/domain"
 	"github.com/opus-casino/user/internal/service"
 )
+
+// parseUID converts a string user ID to int64.
+func parseUID(s string) int64 {
+	v, _ := strconv.ParseInt(s, 10, 64)
+	return v
+}
+
+// ptr returns a pointer to the given int64 value (for optional PageResponse.TotalCount).
+func ptr(v int64) *int64 { return &v }
 
 type UserGRPCHandler struct {
 	pb.UnimplementedUserServiceServer
@@ -26,7 +37,7 @@ func NewUserGRPCHandler(svc *service.UserService, log *zap.Logger) *UserGRPCHand
 }
 
 func (h *UserGRPCHandler) GetUser(ctx context.Context, req *pb.GetUserRequest) (*pb.GetUserResponse, error) {
-	user, err := h.service.GetUser(ctx, req.UserId.Value)
+	user, err := h.service.GetUser(ctx, parseUID(req.UserId.Value))
 	if err != nil {
 		return nil, status.Error(codes.NotFound, "user not found")
 	}
@@ -37,14 +48,14 @@ func (h *UserGRPCHandler) GetUserByEmail(ctx context.Context, req *pb.GetUserByE
 	user, err := h.service.GetUserByEmail(ctx, req.Email)
 	if err != nil {
 		return &pb.GetUserByEmailResponse{
-			Error: &commonv1.ErrorDetails{Code: "USER_NOT_FOUND", Message: err.Error()},
+			Error: &commonv1.ErrorDetails{ ErrorMessage: err.Error()},
 		}, nil
 	}
 	return &pb.GetUserByEmailResponse{User: toProtoUser(user)}, nil
 }
 
 func (h *UserGRPCHandler) UpdateUser(ctx context.Context, req *pb.UpdateUserRequest) (*pb.UpdateUserResponse, error) {
-	updateReq := &domain.UpdateUserRequest{UserID: req.UserId.Value}
+	updateReq := &domain.UpdateUserRequest{UserID: parseUID(req.UserId.Value)}
 	if req.Username != nil { updateReq.Username = req.Username }
 	if req.FirstName != nil { updateReq.FirstName = req.FirstName }
 	if req.LastName != nil { updateReq.LastName = req.LastName }
@@ -59,24 +70,24 @@ func (h *UserGRPCHandler) UpdateUser(ctx context.Context, req *pb.UpdateUserRequ
 	user, err := h.service.UpdateUser(ctx, updateReq)
 	if err != nil {
 		return &pb.UpdateUserResponse{
-			Error: &commonv1.ErrorDetails{Code: "UPDATE_FAILED", Message: err.Error()},
+			Error: &commonv1.ErrorDetails{ ErrorMessage: err.Error()},
 		}, nil
 	}
 	return &pb.UpdateUserResponse{User: toProtoUser(user)}, nil
 }
 
 func (h *UserGRPCHandler) DeleteUser(ctx context.Context, req *pb.DeleteUserRequest) (*pb.DeleteUserResponse, error) {
-	if err := h.service.DeleteUser(ctx, req.UserId.Value, req.Reason); err != nil {
+	if err := h.service.DeleteUser(ctx, parseUID(req.UserId.Value), req.Reason); err != nil {
 		return &pb.DeleteUserResponse{
 			Success: false,
-			Error:   &commonv1.ErrorDetails{Code: "DELETE_FAILED", Message: err.Error()},
+			Error:   &commonv1.ErrorDetails{ ErrorMessage: err.Error()},
 		}, nil
 	}
 	return &pb.DeleteUserResponse{Success: true}, nil
 }
 
 func (h *UserGRPCHandler) GetPreferences(ctx context.Context, req *pb.GetPreferencesRequest) (*pb.GetPreferencesResponse, error) {
-	pref, err := h.service.GetPreferences(ctx, req.UserId.Value)
+	pref, err := h.service.GetPreferences(ctx, parseUID(req.UserId.Value))
 	if err != nil {
 		return nil, status.Error(codes.Internal, "failed to get preferences")
 	}
@@ -84,7 +95,7 @@ func (h *UserGRPCHandler) GetPreferences(ctx context.Context, req *pb.GetPrefere
 }
 
 func (h *UserGRPCHandler) UpdatePreferences(ctx context.Context, req *pb.UpdatePreferencesRequest) (*pb.UpdatePreferencesResponse, error) {
-	pref := &domain.UserPreferences{UserID: req.UserId.Value}
+	pref := &domain.UserPreferences{UserID: parseUID(req.UserId.Value)}
 	if req.Language != nil { pref.Language = *req.Language }
 	if req.Timezone != nil { pref.Timezone = *req.Timezone }
 	if req.CurrencyDisplay != nil { pref.CurrencyDisplay = *req.CurrencyDisplay }
@@ -99,14 +110,14 @@ func (h *UserGRPCHandler) UpdatePreferences(ctx context.Context, req *pb.UpdateP
 	updated, err := h.service.UpdatePreferences(ctx, pref)
 	if err != nil {
 		return &pb.UpdatePreferencesResponse{
-			Error: &commonv1.ErrorDetails{Code: "UPDATE_FAILED", Message: err.Error()},
+			Error: &commonv1.ErrorDetails{ ErrorMessage: err.Error()},
 		}, nil
 	}
 	return &pb.UpdatePreferencesResponse{Preferences: toProtoPreferences(updated)}, nil
 }
 
 func (h *UserGRPCHandler) GetLimits(ctx context.Context, req *pb.GetLimitsRequest) (*pb.GetLimitsResponse, error) {
-	limits, err := h.service.GetLimits(ctx, req.UserId.Value)
+	limits, err := h.service.GetLimits(ctx, parseUID(req.UserId.Value))
 	if err != nil {
 		return nil, status.Error(codes.Internal, "failed to get limits")
 	}
@@ -114,17 +125,17 @@ func (h *UserGRPCHandler) GetLimits(ctx context.Context, req *pb.GetLimitsReques
 }
 
 func (h *UserGRPCHandler) SetLimits(ctx context.Context, req *pb.SetLimitsRequest) (*pb.SetLimitsResponse, error) {
-	setReq := &domain.SetLimitsRequest{UserID: req.UserId.Value}
+	setReq := &domain.SetLimitsRequest{UserID: parseUID(req.UserId.Value)}
 	if req.DailyDepositLimit != nil {
-		v := req.DailyDepositLimit.Amount.Value
+		v := req.DailyDepositLimit.GetAmount().GetAmount()
 		setReq.DailyDepositLimit = &v
 	}
 	if req.MonthlyDepositLimit != nil {
-		v := req.MonthlyDepositLimit.Amount.Value
+		v := req.MonthlyDepositLimit.GetAmount().GetAmount()
 		setReq.MonthlyDepositLimit = &v
 	}
 	if req.DailyLossLimit != nil {
-		v := req.DailyLossLimit.Amount.Value
+		v := req.DailyLossLimit.GetAmount().GetAmount()
 		setReq.DailyLossLimit = &v
 	}
 	if req.SessionTimeLimit != nil {
@@ -142,7 +153,7 @@ func (h *UserGRPCHandler) SetLimits(ctx context.Context, req *pb.SetLimitsReques
 	limits, err := h.service.SetLimits(ctx, setReq)
 	if err != nil {
 		return &pb.SetLimitsResponse{
-			Error: &commonv1.ErrorDetails{Code: "SET_LIMITS_FAILED", Message: err.Error()},
+			Error: &commonv1.ErrorDetails{ ErrorMessage: err.Error()},
 		}, nil
 	}
 	return &pb.SetLimitsResponse{Limits: toProtoLimits(limits)}, nil
@@ -152,11 +163,10 @@ func (h *UserGRPCHandler) GetActivity(ctx context.Context, req *pb.GetActivityRe
 	limit := 20
 	offset := 0
 	if req.Pagination != nil {
-		limit = int(req.Pagination.Limit)
-		offset = int(req.Pagination.Offset)
+		limit = int(req.Pagination.PageSize)
 	}
 
-	activities, total, err := h.service.GetActivity(ctx, req.UserId.Value, limit, offset)
+	activities, total, err := h.service.GetActivity(ctx, parseUID(req.UserId.Value), limit, offset)
 	if err != nil {
 		return nil, status.Error(codes.Internal, "failed to get activity")
 	}
@@ -172,13 +182,13 @@ func (h *UserGRPCHandler) GetActivity(ctx context.Context, req *pb.GetActivityRe
 
 	return &pb.GetActivityResponse{
 		Activities: pbActivities,
-		Pagination: &commonv1.PageResponse{Total: int64(total), Limit: int32(limit), Offset: int32(offset)},
+		Pagination: &commonv1.PageResponse{TotalCount: ptr(int64(total))},
 	}, nil
 }
 
 func toProtoUser(user *domain.User) *pb.User {
 	return &pb.User{
-		Id:          &commonv1.UserId{Value: user.ID},
+		Id:          &commonv1.UserId{Value: fmt.Sprintf("%d", user.ID)},
 		Email:       user.Email,
 		Username:    user.Username,
 		Country:     user.CountryCode,
@@ -192,7 +202,7 @@ func toProtoUser(user *domain.User) *pb.User {
 
 func toProtoPreferences(pref *domain.UserPreferences) *pb.UserPreferences {
 	return &pb.UserPreferences{
-		UserId:                      &commonv1.UserId{Value: pref.UserID},
+		UserId:                      &commonv1.UserId{Value: fmt.Sprintf("%d", pref.UserID)},
 		Language:                    pref.Language,
 		Timezone:                    pref.Timezone,
 		CurrencyDisplay:             pref.CurrencyDisplay,
@@ -209,7 +219,7 @@ func toProtoPreferences(pref *domain.UserPreferences) *pb.UserPreferences {
 
 func toProtoLimits(limits *domain.UserLimits) *pb.UserLimits {
 	result := &pb.UserLimits{
-		UserId:    &commonv1.UserId{Value: limits.UserID},
+		UserId:    &commonv1.UserId{Value: fmt.Sprintf("%d", limits.UserID)},
 		UpdatedAt: timestamppb.New(limits.UpdatedAt),
 	}
 	if limits.SessionTimeLimit != nil {
@@ -220,3 +230,5 @@ func toProtoLimits(limits *domain.UserLimits) *pb.UserLimits {
 	}
 	return result
 }
+
+

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -243,11 +244,16 @@ func (r *NotificationRepository) GetUnreadCountFromCache(ctx context.Context, us
 	}
 
 	key := r.GetUserUnreadKey(userID)
-	val, err := r.redis.Get(ctx, key).Int32()
+	valStr, err := r.redis.Get(ctx, key).Result()
 	if err == redis.Nil {
 		return 0, nil
 	}
-	return val, err
+	if err != nil {
+		return 0, err
+	}
+	var val int32
+	_, scanErr := fmt.Sscanf(valStr, "%d", &val)
+	return val, scanErr
 }
 
 // SetUnreadCount sets unread count in Redis

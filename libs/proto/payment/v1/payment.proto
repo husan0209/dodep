@@ -56,7 +56,7 @@ service PaymentService {
 message GetPaymentMethodsRequest {
   common.v1.UserId user_id = 1;
   optional PaymentMethodType type = 2;
-  optional TransactionType transaction_type = 3;  // deposit or withdrawal
+  optional common.v1.TransactionType transaction_type = 3;  // deposit or withdrawal
 }
 
 message GetPaymentMethodsResponse {

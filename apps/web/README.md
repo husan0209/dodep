@@ -205,6 +205,7 @@ import { OddsButton } from "@/components/shared/odds-button";
 ```bash
 # .env.local
 NEXT_PUBLIC_API_URL=http://localhost:8080
+NEXT_PUBLIC_AUTH_API_URL=http://localhost:8083
 NEXT_PUBLIC_WS_URL=ws://localhost:8080
 NEXT_PUBLIC_APP_ENV=development
 ```

@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@stores/auth-store'
 import { trackEvent } from '@lib/telemetry'
+import { authApi } from '@lib/api/auth'
 
 export default function RegisterPage() {
   const router = useRouter()
@@ -19,6 +20,10 @@ export default function RegisterPage() {
   })
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+
+  const handleGoogleRegister = () => {
+    window.location.href = authApi.getGoogleStartUrl()
+  }
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const value = e.target.value;
@@ -44,6 +49,9 @@ export default function RegisterPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (isLoading) {
+      return
+    }
     setError('')
 
     if (formData.password !== formData.confirmPassword) {
@@ -65,9 +73,10 @@ export default function RegisterPage() {
         currencyCode: formData.currencyCode,
       })
       await register(cleanEmail, formData.password, formData.username.trim(), formData.countryCode, formData.currencyCode)
-      router.push('/sportsbook')
+      
+      router.replace('/sportsbook')
     } catch (err: any) {
-      if (err?.error?.code === 'USER_ALREADY_EXISTS') {
+      if (err?.error?.code === 'USER_ALREADY_EXISTS' || err?.error?.code === 'AUTH_USER_ALREADY_EXISTS') {
         setError('Пользователь с таким email уже существует. Войдите или используйте другой email.')
       } else if (err?.error?.message) {
         setError(err.error.message)
@@ -249,6 +258,14 @@ export default function RegisterPage() {
             className="btn-primary w-full py-3.5 text-lg mt-6"
           >
             {isLoading ? 'Регистрация...' : 'Создать аккаунт'}
+          </button>
+
+          <button
+            type="button"
+            onClick={handleGoogleRegister}
+            className="w-full py-3.5 text-lg rounded-xl border border-white/20 text-white hover:bg-white/10 transition-colors"
+          >
+            Continue with Google
           </button>
         </form>
       </div>

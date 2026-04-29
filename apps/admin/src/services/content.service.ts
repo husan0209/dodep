@@ -92,4 +92,38 @@ export const contentService = {
     );
     return response.data.data;
   },
+
+  async getTemplates(params?: { search?: string; channel?: string }): Promise<unknown[]> {
+    const response = await apiClient.get<ApiResponse<unknown[]>>('/admin/content/templates', { params });
+    return response.data.data;
+  },
+
+  async createTemplate(data: unknown): Promise<unknown> {
+    const response = await apiClient.post<ApiResponse<unknown>>('/admin/content/templates', data);
+    return response.data.data;
+  },
+
+  async updateTemplate(templateId: string, data: unknown): Promise<unknown> {
+    const response = await apiClient.put<ApiResponse<unknown>>(`/admin/content/templates/${templateId}`, data);
+    return response.data.data;
+  },
+
+  async getCampaigns(params?: { status?: string; search?: string }): Promise<Promotion[]> {
+    const response = await apiClient.get<ApiResponse<Promotion[]>>("/admin/content/campaigns", { params });
+    return response.data.data;
+  },
+
+  async createCampaign(data: Partial<Promotion>): Promise<Promotion> {
+    const response = await apiClient.post<ApiResponse<Promotion>>("/admin/content/campaigns", data);
+    return response.data.data;
+  },
+
+  async updateCampaign(campaignId: string, data: Partial<Promotion>): Promise<Promotion> {
+    const response = await apiClient.put<ApiResponse<Promotion>>(`/admin/content/campaigns/${campaignId}`, data);
+    return response.data.data;
+  },
+
+  async launchCampaign(campaignId: string): Promise<void> {
+    await apiClient.post(`/admin/content/campaigns/${campaignId}/launch`);
+  },
 };

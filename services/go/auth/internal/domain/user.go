@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"errors"
 	"time"
 )
 
@@ -14,6 +15,19 @@ const (
 	UserStatusSelfExcluded UserStatus = "self_excluded"
 	UserStatusSuspended   UserStatus = "suspended"
 	UserStatusClosed      UserStatus = "closed"
+)
+
+var (
+	ErrValidation          = errors.New("validation failed")
+	ErrUserAlreadyExists   = errors.New("user already exists")
+	ErrInvalidCredentials  = errors.New("invalid credentials")
+	ErrAccountLocked       = errors.New("account locked")
+	ErrUserNotFound        = errors.New("user not found")
+	ErrInvalidToken        = errors.New("invalid token")
+	ErrInvalidRefreshToken = errors.New("invalid refresh token")
+	ErrForbidden           = errors.New("forbidden")
+	ErrDependencyUnavailable = errors.New("dependency unavailable")
+	ErrInternal            = errors.New("internal error")
 )
 
 // User represents a user account
@@ -43,15 +57,16 @@ type RegisterRequest struct {
 	Email        string `json:"email" validate:"required,email"`
 	Password     string `json:"password" validate:"required,min=8"`
 	Username     string `json:"username" validate:"required,min=3,max=30"`
-	CountryCode  string `json:"country_code" json:"countryCode" validate:"required,len=2"`
-	CurrencyCode string `json:"currency_code" json:"currencyCode" validate:"required,len=3"`
-	DeviceID     string `json:"device_id" json:"deviceId"`
-	IPAddress    string `json:"ip_address" json:"ipAddress"`
+	CountryCode  string `json:"country_code" validate:"required,len=2"`
+	CurrencyCode string `json:"currency_code" validate:"required,len=3"`
+	DeviceID     string `json:"device_id"`
+	IPAddress    string `json:"ip_address"`
 }
 
 // LoginRequest is the domain model for user login
 type LoginRequest struct {
-	Email       string  `json:"email" validate:"required,email"`
+	Identifier  string  `json:"identifier"`
+	Email       string  `json:"email"`
 	Password    string  `json:"password" validate:"required"`
 	DeviceID    string  `json:"device_id"`
 	IPAddress   string  `json:"ip_address"`

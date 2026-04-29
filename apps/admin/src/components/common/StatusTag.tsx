@@ -10,7 +10,7 @@ import type {
   BONUS_TYPES,
 } from "@/utils/constants";
 
-type StatusConfig = { label: string; color: string };
+export type StatusConfig = { label: string; color: string };
 
 interface StatusTagProps {
   status: string;

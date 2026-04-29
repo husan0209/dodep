@@ -45,8 +45,8 @@ service AuthService {
   // ChangePassword changes user password
   rpc ChangePassword(ChangePasswordRequest) returns (ChangePasswordResponse);
 
-  // ResetPasswordRequest initiates password reset flow
-  rpc ResetPasswordRequest(ResetPasswordRequestRequest) returns (ResetPasswordRequestResponse);
+  // InitiatePasswordReset initiates password reset flow (sends email)
+  rpc InitiatePasswordReset(InitiatePasswordResetRequest) returns (InitiatePasswordResetResponse);
 
   // ResetPassword completes password reset with token
   rpc ResetPassword(ResetPasswordRequest) returns (ResetPasswordResponse);
@@ -186,12 +186,12 @@ message ChangePasswordResponse {
   common.v1.ErrorDetails error = 2;
 }
 
-message ResetPasswordRequestRequest {
+message InitiatePasswordResetRequest {
   string email = 1;
   string ip_address = 2;
 }
 
-message ResetPasswordRequestResponse {
+message InitiatePasswordResetResponse {
   bool success = 1;  // Always true to prevent email enumeration
   common.v1.ErrorDetails error = 2;
 }

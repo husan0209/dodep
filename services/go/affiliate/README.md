@@ -99,7 +99,7 @@ Notable contract decisions:
 
 The schema is defined in:
 
-- `migrations/001_create_affiliate_tables.up.sql`
+- `libs/migrations/postgresql/021_affiliates.sql` (centralised)
 
 Main tables:
 

@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# Opus Casino — pre-commit hook
+# Runs gitleaks on staged files to block accidental secret commits.
+#
+# To activate (opt-in, one-time):
+#   git config core.hooksPath .githooks
+#
+# Requires: gitleaks v8+ on PATH. Install:
+#   brew install gitleaks                                     # macOS
+#   scoop install gitleaks                                    # Windows (scoop)
+#   curl -sSfL https://raw.githubusercontent.com/gitleaks/gitleaks/master/install.sh | sh -s -- -b /usr/local/bin  # Linux
+#
+# To skip (emergency only):
+#   git commit --no-verify
+
+set -e
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+# 1. Skip if gitleaks not installed (warn but don't block — opt-in tool)
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo -e "${YELLOW}[pre-commit] gitleaks not installed — skipping secret scan.${NC}"
+  echo -e "${YELLOW}            See docs/security/pre-commit-setup.md to install.${NC}"
+  exit 0
+fi
+
+# 2. Run gitleaks on staged changes only
+echo -e "${GREEN}[pre-commit] Running gitleaks on staged changes...${NC}"
+if ! gitleaks protect --staged --redact --verbose; then
+  echo ""
+  echo -e "${RED}[pre-commit] ❌ Potential secret detected in staged changes.${NC}"
+  echo -e "${RED}            Review the output above. If false positive, add to .gitleaks.toml allowlist.${NC}"
+  echo -e "${RED}            To bypass (NOT RECOMMENDED): git commit --no-verify${NC}"
+  exit 1
+fi
+
+echo -e "${GREEN}[pre-commit] ✅ No secrets detected.${NC}"
+exit 0

@@ -43,8 +43,8 @@ export default function CampaignList() {
       bonusesService.getCampaigns({
         page,
         page_size: pageSize,
-        type: type,
-        status: status,
+        type: type as any,
+        status: status as any,
       }),
   });
 

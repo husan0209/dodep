@@ -5,4 +5,5 @@ export * from "./casino";
 export * from "./bonus";
 export * from "./risk";
 export * from "./admin";
+export * from "./content";
 export * from "./api";

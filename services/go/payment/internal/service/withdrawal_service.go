@@ -25,6 +25,7 @@ type WithdrawalService struct {
 	user             client.UserAPI
 	producer         *event.Producer
 	tracer           trace.Tracer
+	ipnCallbackURL   string
 }
 
 // NewWithdrawalService creates a new withdrawal service
@@ -38,6 +39,7 @@ func NewWithdrawalService(
 	user client.UserAPI,
 	producer *event.Producer,
 	tracer trace.Tracer,
+	ipnCallbackURL string,
 ) *WithdrawalService {
 	return &WithdrawalService{
 		withdrawalRepo:   withdrawalRepo,
@@ -49,6 +51,7 @@ func NewWithdrawalService(
 		user:             user,
 		producer:         producer,
 		tracer:           tracer,
+		ipnCallbackURL:   ipnCallbackURL,
 	}
 }
 
@@ -281,9 +284,9 @@ func (s *WithdrawalService) getFiatAmount(ctx context.Context, amount decimal.De
 	return amount.Mul(*rate), nil
 }
 
-// getIPNCallbackURL returns the webhook callback URL
+// getIPNCallbackURL returns the webhook callback URL configured via env/config
 func (s *WithdrawalService) getIPNCallbackURL() string {
-	return "https://api.platform.com/api/v1/payments/webhooks/nowpayments"
+	return s.ipnCallbackURL
 }
 
 // toResponse converts a withdrawal to response

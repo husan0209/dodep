@@ -109,14 +109,14 @@ Wallet Core реализует `WalletCoreService` из `wallet/v1/wallet.proto`
 
 ### Миграции
 
-Миграции находятся в `migrations/` и применяются автоматически при запуске.
+Миграции централизованы в `libs/migrations/postgresql/015_wallet_core.sql` и применяются автоматически при запуске.
 
 ```bash
-# Применить миграции
-sqlx migrate run
+# Применить миграции (sqlx)
+sqlx migrate run --source ../../../libs/migrations/postgresql
 
-# Создать новую миграцию
-sqlx migrate add <name>
+# Создать новую миграцию (централизованно)
+sqlx migrate add <name> --source ../../../libs/migrations/postgresql
 ```
 
 ## 📊 Метрики

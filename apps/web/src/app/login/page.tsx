@@ -5,11 +5,12 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@stores/auth-store'
 import { trackEvent } from '@lib/telemetry'
+import { authApi } from '@lib/api/auth'
 
 export default function LoginPage() {
   const router = useRouter()
   const { login } = useAuthStore()
-  const [email, setEmail] = useState('')
+  const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -20,14 +21,13 @@ export default function LoginPage() {
     setIsLoading(true)
 
     try {
-      // Ensure email has no whitespace
-      const cleanEmail = email.replace(/\s/g, '')
-      trackEvent('auth_login_submitted', { emailDomain: cleanEmail.split('@')[1] || 'unknown' })
-      await login(cleanEmail, password)
-      router.push('/sportsbook')
+      const cleanIdentifier = identifier.replace(/\s/g, '')
+      trackEvent('auth_login_submitted', { identifierType: cleanIdentifier.includes('@') ? 'email' : 'username' })
+      await login(cleanIdentifier, password)
+      router.replace('/sportsbook')
     } catch (err: any) {
       // Show specific error message
-      if (err?.error?.code === 'INVALID_CREDENTIALS') {
+      if (err?.error?.code === 'AUTH_INVALID_CREDENTIALS') {
         setError('Неверный email или пароль')
       } else if (err?.error?.message) {
         setError(err.error.message)
@@ -37,6 +37,10 @@ export default function LoginPage() {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const handleGoogleLogin = () => {
+    window.location.href = authApi.getGoogleStartUrl()
   }
 
   return (
@@ -70,19 +74,19 @@ export default function LoginPage() {
           <div className="space-y-5">
             <div>
               <label htmlFor="email" className="block text-sm font-semibold text-gray-300 mb-1 pl-1">
-                Email
+                Email или Username
               </label>
               <input
-                id="email"
-                name="email"
-                type="email"
-                autoComplete="email"
+                id="identifier"
+                name="identifier"
+                type="text"
+                autoComplete="username"
                 required
                 suppressHydrationWarning
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                value={identifier}
+                onChange={(e) => setIdentifier(e.target.value)}
                 className="input-field"
-                placeholder="you@example.com"
+                placeholder="you@example.com или your_username"
               />
             </div>
 
@@ -135,6 +139,14 @@ export default function LoginPage() {
             className="btn-primary w-full py-3 text-lg disabled:opacity-50 mt-4"
           >
             {isLoading ? 'Выполняем вход...' : 'Войти'}
+          </button>
+
+          <button
+            type="button"
+            onClick={handleGoogleLogin}
+            className="w-full py-3 text-lg rounded-xl border border-white/20 text-white hover:bg-white/10 transition-colors"
+          >
+            Continue with Google
           </button>
         </form>
       </div>

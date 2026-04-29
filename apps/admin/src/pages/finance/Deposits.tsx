@@ -39,7 +39,7 @@ export default function Deposits() {
     {
       title: "Amount",
       dataIndex: "amount",
-      render: (v: string, r: Record<string, unknown>) => (
+      render: (v: string, r: any) => (
         <MoneyDisplay amount={v} currency={r.currency_code as string} />
       ),
     },

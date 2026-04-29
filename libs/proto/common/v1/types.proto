@@ -145,9 +145,3 @@ message Currency {
   int32 decimals = 3; // Number of decimal places
 }
 
-// Error details for gRPC error responses
-message ErrorDetails {
-  string error_code = 1;
-  string error_message = 2;
-  map<string, string> metadata = 3;
-}

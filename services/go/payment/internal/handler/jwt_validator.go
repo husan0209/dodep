@@ -11,10 +11,15 @@ import (
 
 // JWTClaims represents JWT claims
 type JWTClaims struct {
-	Sub   int64  `json:"sub"`   // User ID
-	Email string `json:"email"` // User email
-	Exp   int64  `json:"exp"`   // Expiration time
-	Iat   int64  `json:"iat"`   // Issued at
+	// Auth service issues string identifiers (Postgres bigint encoded as string).
+	// Keep these aligned with `services/go/auth/internal/crypto/jwt.go`.
+	UserID    string `json:"user_id"`
+	SessionID string `json:"session_id"`
+	TokenType string `json:"token_type"`
+	Email     string `json:"email,omitempty"`
+	Exp       int64  `json:"exp"` // Expiration time
+	Iat       int64  `json:"iat"` // Issued at
+	Iss       string `json:"iss,omitempty"`
 }
 
 // JWTValidator validates JWT tokens using Ed25519
@@ -83,6 +88,13 @@ func (v *JWTValidator) ValidateToken(tokenString string) (*JWTClaims, error) {
 	var claims JWTClaims
 	if err := json.Unmarshal(payload, &claims); err != nil {
 		return nil, fmt.Errorf("parse claims: %w", err)
+	}
+
+	if claims.TokenType != "" && claims.TokenType != "access" {
+		return nil, fmt.Errorf("invalid token_type")
+	}
+	if claims.UserID == "" {
+		return nil, fmt.Errorf("missing user_id")
 	}
 
 	// Check expiration

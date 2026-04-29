@@ -81,3 +81,21 @@ docker-compose.override.yml
 
 nul
 apps/web/nul
+
+# Temporary files (DO NOT commit)
+tmp_*.json
+tmp_*.sql
+tmp_*.yaml
+tmp_*.txt
+*.bak
+
+# Go build artifacts
+*.exe
+*.test
+*.test.exe
+**/integration.test.exe
+
+# Local environment overrides
+.env.local
+.env.production
+.env.development.local

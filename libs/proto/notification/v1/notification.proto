@@ -10,6 +10,7 @@ option java_multiple_files = true;
 option java_package = "com.opuscasino.proto.notification.v1";
 
 import "common/v1/types.proto";
+import "common/v1/pagination.proto";
 import "common/v1/error.proto";
 import "google/protobuf/timestamp.proto";
 
@@ -158,7 +159,7 @@ message UpdateNotificationSettingsRequest {
   optional bool sms_enabled = 3;
   optional bool push_enabled = 4;
   optional bool in_app_enabled = 5;
-  map<NotificationType, ChannelPreferences> type_preferences = 6;
+  map<string, ChannelPreferences> type_preferences = 6;  // key = NotificationType name
 }
 
 message UpdateNotificationSettingsResponse {
@@ -193,7 +194,7 @@ message NotificationSettings {
   bool sms_enabled = 3;
   bool push_enabled = 4;
   bool in_app_enabled = 5;
-  map<NotificationType, ChannelPreferences> type_preferences = 6;
+  map<string, ChannelPreferences> type_preferences = 6;  // key = NotificationType name
   google.protobuf.Timestamp updated_at = 7;
 }
 

@@ -18,9 +18,9 @@ pub async fn create_db_pool(config: &DatabaseConfig) -> Result<DbPool, sqlx::Err
         .await
 }
 
-/// Run database migrations
+/// Run database migrations (centralised in libs/migrations/postgresql).
 pub async fn run_migrations(pool: &DbPool) -> Result<(), sqlx::Error> {
-    sqlx::migrate!("./migrations")
+    sqlx::migrate!("../../../libs/migrations/postgresql")
         .run(pool)
         .await
 }

@@ -56,13 +56,13 @@ docker-build:
 docker-run:
 	docker run -p 8080:8080 --env-file .env $(DOCKER_IMAGE):latest
 
-# Database migrations up
+# Database migrations up (centralised in libs/migrations/postgresql)
 migrate-up:
-	migrate -path migrations -database "postgres://postgres:postgres@localhost:5432/payment_service?sslmode=disable" up
+	migrate -path ../../../libs/migrations/postgresql -database "postgres://postgres:postgres@localhost:5432/payment_service?sslmode=disable" up
 
 # Database migrations down
 migrate-down:
-	migrate -path migrations -database "postgres://postgres:postgres@localhost:5432/payment_service?sslmode=disable" down
+	migrate -path ../../../libs/migrations/postgresql -database "postgres://postgres:postgres@localhost:5432/payment_service?sslmode=disable" down
 
 # Generate mocks
 mocks:

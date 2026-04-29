@@ -14,7 +14,7 @@ use uuid::Uuid;
 use super::{WalletType, TransactionType, TransactionStatus, LedgerEntryType, AccountType};
 
 /// Wallet aggregate root
-#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Wallet {
     pub id: Uuid,
     pub user_id: Uuid,
@@ -88,7 +88,7 @@ impl Balance {
 }
 
 /// Transaction entity
-#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Transaction {
     pub id: Uuid,
     pub user_id: Uuid,
@@ -163,7 +163,7 @@ impl Transaction {
 }
 
 /// Fund lock for pending operations
-#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FundLock {
     pub id: Uuid,
     pub wallet_id: Uuid,
@@ -209,7 +209,7 @@ impl FundLock {
 /// - One DEBIT (money leaves account)
 /// - One CREDIT (money enters account)
 /// SUM(all debits) = SUM(all credits) — ALWAYS
-#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LedgerEntry {
     pub id: Uuid,
     pub transaction_id: Uuid,
@@ -350,7 +350,7 @@ impl LedgerPair {
 }
 
 /// Outbox event for reliable event publishing
-#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OutboxEvent {
     pub id: i64,
     pub topic: String,

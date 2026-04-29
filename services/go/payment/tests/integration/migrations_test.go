@@ -60,26 +60,12 @@ func TestMigrations_UpAndDown(t *testing.T) {
 	defer sqlDB.Close()
 
 	t.Run("run all up migrations", func(t *testing.T) {
-		// Read and execute migration 001
-		migration001Up, err := os.ReadFile("../../migrations/001_create_payments.up.sql")
-		require.NoError(t, err, "Failed to read migration 001 up")
+		// Phase 0.9: centralized migrations in libs/migrations/postgresql
+		migrationUp, err := os.ReadFile("../../../libs/migrations/postgresql/014_payments_core.sql")
+		require.NoError(t, err, "Failed to read centralized migration up")
 
-		err = db.Exec(string(migration001Up)).Error
-		require.NoError(t, err, "Failed to execute migration 001 up")
-
-		// Read and execute migration 002
-		migration002Up, err := os.ReadFile("../../migrations/002_create_withdrawals.up.sql")
-		require.NoError(t, err, "Failed to read migration 002 up")
-
-		err = db.Exec(string(migration002Up)).Error
-		require.NoError(t, err, "Failed to execute migration 002 up")
-
-		// Read and execute migration 003
-		migration003Up, err := os.ReadFile("../../migrations/003_create_audit_logs.up.sql")
-		require.NoError(t, err, "Failed to read migration 003 up")
-
-		err = db.Exec(string(migration003Up)).Error
-		require.NoError(t, err, "Failed to execute migration 003 up")
+		err = db.Exec(string(migrationUp)).Error
+		require.NoError(t, err, "Failed to execute centralized migration up")
 	})
 
 	t.Run("verify tables exist", func(t *testing.T) {
@@ -107,17 +93,17 @@ func TestMigrations_UpAndDown(t *testing.T) {
 		require.NoError(t, err)
 		assert.True(t, withdrawalsExists, "withdrawals table should exist")
 
-		// Check payment_audit_logs table exists
+		// payment_audit_logs is managed by GORM AutoMigrate, not raw SQL migration
 		var auditLogsExists bool
 		err = sqlDB.QueryRow(`
 			SELECT EXISTS (
-				SELECT FROM information_schema.tables 
-				WHERE table_schema = 'public' 
+				SELECT FROM information_schema.tables
+				WHERE table_schema = 'public'
 				AND table_name = 'payment_audit_logs'
 			)
 		`).Scan(&auditLogsExists)
 		require.NoError(t, err)
-		assert.True(t, auditLogsExists, "payment_audit_logs table should exist")
+		assert.False(t, auditLogsExists, "payment_audit_logs table should NOT exist yet (GORM AutoMigrate separate)")
 	})
 
 	t.Run("verify enums exist with correct values", func(t *testing.T) {
@@ -234,27 +220,7 @@ func TestMigrations_UpAndDown(t *testing.T) {
 			assert.True(t, exists, fmt.Sprintf("index %s should exist on withdrawals table", idxName))
 		}
 
-		// Check audit_logs indexes
-		auditLogsIndexes := []string{
-			"idx_audit_logs_user_id",
-			"idx_audit_logs_operation_type",
-			"idx_audit_logs_reference",
-			"idx_audit_logs_trace_id",
-			"idx_audit_logs_created_at",
-			"idx_audit_logs_errors",
-		}
-
-		for _, idxName := range auditLogsIndexes {
-			var exists bool
-			err := sqlDB.QueryRow(`
-				SELECT EXISTS (
-					SELECT 1 FROM pg_indexes 
-					WHERE indexname = $1
-				)
-			`, idxName).Scan(&exists)
-			require.NoError(t, err)
-			assert.True(t, exists, fmt.Sprintf("index %s should exist on payment_audit_logs table", idxName))
-		}
+		// Audit log indexes are not created by centralized raw migration (GORM handles them)
 	})
 
 	t.Run("verify triggers exist", func(t *testing.T) {
@@ -323,26 +289,12 @@ func TestMigrations_UpAndDown(t *testing.T) {
 	})
 
 	t.Run("run all down migrations (rollback)", func(t *testing.T) {
-		// Read and execute migration 003 down
-		migration003Down, err := os.ReadFile("../../migrations/003_create_audit_logs.down.sql")
-		require.NoError(t, err, "Failed to read migration 003 down")
+		// Phase 0.9: single centralized down migration
+		migrationDown, err := os.ReadFile("../../../libs/migrations/postgresql/014_payments_core.down.sql")
+		require.NoError(t, err, "Failed to read centralized migration down")
 
-		err = db.Exec(string(migration003Down)).Error
-		require.NoError(t, err, "Failed to execute migration 003 down")
-
-		// Read and execute migration 002 down
-		migration002Down, err := os.ReadFile("../../migrations/002_create_withdrawals.down.sql")
-		require.NoError(t, err, "Failed to read migration 002 down")
-
-		err = db.Exec(string(migration002Down)).Error
-		require.NoError(t, err, "Failed to execute migration 002 down")
-
-		// Read and execute migration 001 down
-		migration001Down, err := os.ReadFile("../../migrations/001_create_payments.down.sql")
-		require.NoError(t, err, "Failed to read migration 001 down")
-
-		err = db.Exec(string(migration001Down)).Error
-		require.NoError(t, err, "Failed to execute migration 001 down")
+		err = db.Exec(string(migrationDown)).Error
+		require.NoError(t, err, "Failed to execute centralized migration down")
 	})
 
 	t.Run("verify tables dropped after rollback", func(t *testing.T) {
@@ -370,12 +322,12 @@ func TestMigrations_UpAndDown(t *testing.T) {
 		require.NoError(t, err)
 		assert.False(t, withdrawalsExists, "withdrawals table should not exist after rollback")
 
-		// Check payment_audit_logs table does not exist
+		// payment_audit_logs was never created by raw migration
 		var auditLogsExists bool
 		err = sqlDB.QueryRow(`
 			SELECT EXISTS (
-				SELECT FROM information_schema.tables 
-				WHERE table_schema = 'public' 
+				SELECT FROM information_schema.tables
+				WHERE table_schema = 'public'
 				AND table_name = 'payment_audit_logs'
 			)
 		`).Scan(&auditLogsExists)
@@ -446,19 +398,18 @@ func TestMigrations_IdempotentDown(t *testing.T) {
 	require.NoError(t, err, "Failed to get underlying sql.DB")
 	defer sqlDB.Close()
 
-	// Run up migrations first
-	migration001Up, err := os.ReadFile("../../migrations/001_create_payments.up.sql")
+	// Phase 0.9: centralized migration
+	migrationUp, err := os.ReadFile("../../../libs/migrations/postgresql/014_payments_core.sql")
 	require.NoError(t, err)
-	require.NoError(t, db.Exec(string(migration001Up)).Error)
+	require.NoError(t, db.Exec(string(migrationUp)).Error)
 
-	// Run down migration twice - should not error
-	migration001Down, err := os.ReadFile("../../migrations/001_create_payments.down.sql")
+	migrationDown, err := os.ReadFile("../../../libs/migrations/postgresql/014_payments_core.down.sql")
 	require.NoError(t, err)
 
-	err = db.Exec(string(migration001Down)).Error
+	err = db.Exec(string(migrationDown)).Error
 	require.NoError(t, err, "First down migration should succeed")
 
-	err = db.Exec(string(migration001Down)).Error
+	err = db.Exec(string(migrationDown)).Error
 	require.NoError(t, err, "Second down migration should succeed (idempotent)")
 }
 
@@ -500,17 +451,17 @@ func TestMigrations_CanReApply(t *testing.T) {
 	require.NoError(t, err, "Failed to get underlying sql.DB")
 	defer sqlDB.Close()
 
-	// First cycle: up then down
-	migration001Up, err := os.ReadFile("../../migrations/001_create_payments.up.sql")
+	// Phase 0.9: centralized single-file migration cycle
+	migrationUp, err := os.ReadFile("../../../libs/migrations/postgresql/014_payments_core.sql")
 	require.NoError(t, err)
-	require.NoError(t, db.Exec(string(migration001Up)).Error, "First up migration should succeed")
+	require.NoError(t, db.Exec(string(migrationUp)).Error, "First up migration should succeed")
 
-	migration001Down, err := os.ReadFile("../../migrations/001_create_payments.down.sql")
+	migrationDown, err := os.ReadFile("../../../libs/migrations/postgresql/014_payments_core.down.sql")
 	require.NoError(t, err)
-	require.NoError(t, db.Exec(string(migration001Down)).Error, "First down migration should succeed")
+	require.NoError(t, db.Exec(string(migrationDown)).Error, "First down migration should succeed")
 
 	// Second cycle: up again
-	err = db.Exec(string(migration001Up)).Error
+	err = db.Exec(string(migrationUp)).Error
 	require.NoError(t, err, "Second up migration should succeed")
 
 	// Verify table exists

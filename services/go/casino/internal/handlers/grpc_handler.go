@@ -2,20 +2,21 @@ package handlers
 
 import (
 	"context"
+	"fmt"
 
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	pb "github.com/opus-casino/casino/internal/proto/casino/v1"
 	"github.com/opus-casino/casino/internal/service"
+	casinov1 "github.com/opus-casino/proto/gen/go/casino/v1"
 	commonv1 "github.com/opus-casino/proto/gen/go/common/v1"
 )
 
 // CasinoGRPCHandler handles gRPC requests for Casino Service
 type CasinoGRPCHandler struct {
-	pb.UnimplementedCasinoServiceServer
+	casinov1.UnimplementedCasinoServiceServer
 	service *service.CasinoService
 	log     *zap.Logger
 }
@@ -28,10 +29,14 @@ func NewCasinoGRPCHandler(service *service.CasinoService) *CasinoGRPCHandler {
 }
 
 // GetGames returns available casino games
-func (h *CasinoGRPCHandler) GetGames(ctx context.Context, req *pb.GetGamesRequest) (*pb.GetGamesResponse, error) {
+func (h *CasinoGRPCHandler) GetGames(ctx context.Context, req *casinov1.GetGamesRequest) (*casinov1.GetGamesResponse, error) {
+	pageSize := int32(50)
+	if req.Pagination != nil && req.Pagination.PageSize > 0 {
+		pageSize = req.Pagination.PageSize
+	}
 	opts := service.GetGamesOptions{
-		Limit:  req.Pagination.Limit,
-		Offset: req.Pagination.Offset,
+		Limit:  pageSize,
+		Offset: 0,
 		Search: req.Search,
 	}
 
@@ -52,42 +57,38 @@ func (h *CasinoGRPCHandler) GetGames(ctx context.Context, req *pb.GetGamesReques
 		return nil, status.Error(codes.Internal, "failed to get games")
 	}
 
-	games := make([]*pb.Game, len(result.Games))
+	games := make([]*casinov1.Game, len(result.Games))
 	for i, game := range result.Games {
 		games[i] = toProtoGame(&game)
 	}
 
-	return &pb.GetGamesResponse{
-		Games: games,
-		Pagination: &commonv1.PageResponse{
-			Total: result.TotalCount,
-			Limit: req.Pagination.Limit,
-			Offset: req.Pagination.Offset,
-		},
+	return &casinov1.GetGamesResponse{
+		Games:      games,
+		Pagination: &commonv1.PageResponse{TotalCount: &result.TotalCount},
 	}, nil
 }
 
 // GetGame returns game details
-func (h *CasinoGRPCHandler) GetGame(ctx context.Context, req *pb.GetGameRequest) (*pb.GetGameResponse, error) {
+func (h *CasinoGRPCHandler) GetGame(ctx context.Context, req *casinov1.GetGameRequest) (*casinov1.GetGameResponse, error) {
 	game, err := h.service.GetGame(ctx, req.GameId)
 	if err != nil {
 		h.log.Error("GetGame failed", zap.String("game_id", req.GameId), zap.Error(err))
 		return nil, status.Error(codes.NotFound, "game not found")
 	}
 
-	return &pb.GetGameResponse{
+	return &casinov1.GetGameResponse{
 		Game: toProtoGame(game),
 	}, nil
 }
 
 // LaunchGame launches a game session
-func (h *CasinoGRPCHandler) LaunchGame(ctx context.Context, req *pb.LaunchGameRequest) (*pb.LaunchGameResponse, error) {
-	if req.UserId == nil || req.UserId.Value == 0 {
+func (h *CasinoGRPCHandler) LaunchGame(ctx context.Context, req *casinov1.LaunchGameRequest) (*casinov1.LaunchGameResponse, error) {
+	if req.UserId == nil || req.UserId.Value == "" {
 		return nil, status.Error(codes.InvalidArgument, "user_id is required")
 	}
 
 	serviceReq := &service.LaunchGameRequest{
-		UserID:     uint64(req.UserId.Value),
+		UserID:     fmt.Sprintf("%s", req.UserId.GetValue()),
 		GameID:     req.GameId,
 		DeviceType: req.DeviceType,
 		LobbyURL:   req.LobbyUrl,
@@ -96,15 +97,14 @@ func (h *CasinoGRPCHandler) LaunchGame(ctx context.Context, req *pb.LaunchGameRe
 	result, err := h.service.LaunchGame(ctx, serviceReq)
 	if err != nil {
 		h.log.Error("LaunchGame failed", zap.Error(err))
-		return &pb.LaunchGameResponse{
+		return &casinov1.LaunchGameResponse{
 			Error: &commonv1.ErrorDetails{
-				Code:    "LAUNCH_FAILED",
-				Message: err.Error(),
+				ErrorMessage: err.Error(),
 			},
 		}, nil
 	}
 
-	return &pb.LaunchGameResponse{
+	return &casinov1.LaunchGameResponse{
 		Session:   toProtoGameSession(result.Session),
 		LaunchUrl: result.LaunchURL,
 		Token:     result.Token,
@@ -112,20 +112,20 @@ func (h *CasinoGRPCHandler) LaunchGame(ctx context.Context, req *pb.LaunchGameRe
 }
 
 // GetGameSession returns game session details
-func (h *CasinoGRPCHandler) GetGameSession(ctx context.Context, req *pb.GetGameSessionRequest) (*pb.GetGameSessionResponse, error) {
+func (h *CasinoGRPCHandler) GetGameSession(ctx context.Context, req *casinov1.GetGameSessionRequest) (*casinov1.GetGameSessionResponse, error) {
 	session, err := h.service.GetGameSession(ctx, req.SessionId)
 	if err != nil {
 		h.log.Error("GetGameSession failed", zap.String("session_id", req.SessionId), zap.Error(err))
 		return nil, status.Error(codes.NotFound, "session not found")
 	}
 
-	return &pb.GetGameSessionResponse{
+	return &casinov1.GetGameSessionResponse{
 		Session: toProtoGameSession(session),
 	}, nil
 }
 
 // EndGameSession ends a game session
-func (h *CasinoGRPCHandler) EndGameSession(ctx context.Context, req *pb.EndGameSessionRequest) (*pb.EndGameSessionResponse, error) {
+func (h *CasinoGRPCHandler) EndGameSession(ctx context.Context, req *casinov1.EndGameSessionRequest) (*casinov1.EndGameSessionResponse, error) {
 	serviceReq := &service.EndGameSessionRequest{
 		SessionID: req.SessionId,
 	}
@@ -133,27 +133,30 @@ func (h *CasinoGRPCHandler) EndGameSession(ctx context.Context, req *pb.EndGameS
 	result, err := h.service.EndGameSession(ctx, serviceReq)
 	if err != nil {
 		h.log.Error("EndGameSession failed", zap.String("session_id", req.SessionId), zap.Error(err))
-		return &pb.EndGameSessionResponse{
+		return &casinov1.EndGameSessionResponse{
 			Success: false,
 			Error: &commonv1.ErrorDetails{
-				Code:    "END_SESSION_FAILED",
-				Message: err.Error(),
+				ErrorMessage: err.Error(),
 			},
 		}, nil
 	}
 
-	return &pb.EndGameSessionResponse{
+	return &casinov1.EndGameSessionResponse{
 		Success: result.Success,
 		Summary: toProtoGameSessionSummary(result.Summary),
 	}, nil
 }
 
 // GetGameHistory returns user's game history
-func (h *CasinoGRPCHandler) GetGameHistory(ctx context.Context, req *pb.GetGameHistoryRequest) (*pb.GetGameHistoryResponse, error) {
+func (h *CasinoGRPCHandler) GetGameHistory(ctx context.Context, req *casinov1.GetGameHistoryRequest) (*casinov1.GetGameHistoryResponse, error) {
+	pageSize := int32(20)
+	if req.Pagination != nil && req.Pagination.PageSize > 0 {
+		pageSize = req.Pagination.PageSize
+	}
 	opts := service.GetGameHistoryOptions{
-		UserID: req.UserId.Value,
-		Limit:  req.Pagination.Limit,
-		Offset: req.Pagination.Offset,
+		UserID: req.UserId.GetValue(),
+		Limit:  pageSize,
+		Offset: 0,
 	}
 
 	if req.GameId != nil {
@@ -172,7 +175,7 @@ func (h *CasinoGRPCHandler) GetGameHistory(ctx context.Context, req *pb.GetGameH
 		return nil, status.Error(codes.Internal, "failed to get game history")
 	}
 
-	sessions := make([]*pb.GameSessionSummary, len(result.Sessions))
+	sessions := make([]*casinov1.GameSessionSummary, len(result.Sessions))
 	for i, session := range result.Sessions {
 		sessions[i] = toProtoGameSessionSummary(&service.GameSessionSummary{
 			SessionID:     session.ID,
@@ -185,41 +188,37 @@ func (h *CasinoGRPCHandler) GetGameHistory(ctx context.Context, req *pb.GetGameH
 		})
 	}
 
-	return &pb.GetGameHistoryResponse{
-		Sessions: sessions,
-		Pagination: &commonv1.PageResponse{
-			Total:  result.TotalCount,
-			Limit:  req.Pagination.Limit,
-			Offset: req.Pagination.Offset,
-		},
+	return &casinov1.GetGameHistoryResponse{
+		Sessions:   sessions,
+		Pagination: &commonv1.PageResponse{TotalCount: &result.TotalCount},
 	}, nil
 }
 
 // GetRoundHistory returns round history for a game session
-func (h *CasinoGRPCHandler) GetRoundHistory(ctx context.Context, req *pb.GetRoundHistoryRequest) (*pb.GetRoundHistoryResponse, error) {
-	rounds, total, err := h.service.GetRoundHistory(ctx, req.SessionId, req.Pagination.Limit, req.Pagination.Offset)
+func (h *CasinoGRPCHandler) GetRoundHistory(ctx context.Context, req *casinov1.GetRoundHistoryRequest) (*casinov1.GetRoundHistoryResponse, error) {
+	var pageSize int32 = 100
+	if req.Pagination != nil && req.Pagination.PageSize > 0 {
+		pageSize = req.Pagination.PageSize
+	}
+	rounds, total, err := h.service.GetRoundHistory(ctx, req.SessionId, pageSize, 0)
 	if err != nil {
 		h.log.Error("GetRoundHistory failed", zap.String("session_id", req.SessionId), zap.Error(err))
 		return nil, status.Error(codes.Internal, "failed to get round history")
 	}
 
-	pbRounds := make([]*pb.GameRound, len(rounds))
+	pbRounds := make([]*casinov1.GameRound, len(rounds))
 	for i, round := range rounds {
 		pbRounds[i] = toProtoGameRound(&round)
 	}
 
-	return &pb.GetRoundHistoryResponse{
-		Rounds: pbRounds,
-		Pagination: &commonv1.PageResponse{
-			Total:  total,
-			Limit:  req.Pagination.Limit,
-			Offset: req.Pagination.Offset,
-		},
+	return &casinov1.GetRoundHistoryResponse{
+		Rounds:     pbRounds,
+		Pagination: &commonv1.PageResponse{TotalCount: &total},
 	}, nil
 }
 
 // GetProviders returns game providers
-func (h *CasinoGRPCHandler) GetProviders(ctx context.Context, req *pb.GetProvidersRequest) (*pb.GetProvidersResponse, error) {
+func (h *CasinoGRPCHandler) GetProviders(ctx context.Context, req *casinov1.GetProvidersRequest) (*casinov1.GetProvidersResponse, error) {
 	var isActive *bool
 	if req.IsActive != nil {
 		isActive = req.IsActive
@@ -231,73 +230,68 @@ func (h *CasinoGRPCHandler) GetProviders(ctx context.Context, req *pb.GetProvide
 		return nil, status.Error(codes.Internal, "failed to get providers")
 	}
 
-	pbProviders := make([]*pb.Provider, len(providers))
+	pbProviders := make([]*casinov1.Provider, len(providers))
 	for i, provider := range providers {
 		pbProviders[i] = toProtoProvider(&provider)
 	}
 
-	return &pb.GetProvidersResponse{
+	return &casinov1.GetProvidersResponse{
 		Providers: pbProviders,
 	}, nil
 }
 
 // GetProvider returns provider details
-func (h *CasinoGRPCHandler) GetProvider(ctx context.Context, req *pb.GetProviderRequest) (*pb.GetProviderResponse, error) {
+func (h *CasinoGRPCHandler) GetProvider(ctx context.Context, req *casinov1.GetProviderRequest) (*casinov1.GetProviderResponse, error) {
 	provider, err := h.service.GetProvider(ctx, req.ProviderId)
 	if err != nil {
 		h.log.Error("GetProvider failed", zap.String("provider_id", req.ProviderId), zap.Error(err))
 		return nil, status.Error(codes.NotFound, "provider not found")
 	}
 
-	return &pb.GetProviderResponse{
+	return &casinov1.GetProviderResponse{
 		Provider: toProtoProvider(provider),
 	}, nil
 }
 
 // ============ Helper functions ============
 
-func toProtoGame(game *service.Game) *pb.Game {
-	return &pb.Game{
+func toProtoGame(game *service.Game) *casinov1.Game {
+	catVal := casinov1.GameCategory(casinov1.GameCategory_value[game.Category])
+	return &casinov1.Game{
 		Id:                  game.ID,
 		Name:                game.Name,
 		ProviderId:          game.ProviderID,
 		ProviderName:        game.ProviderName,
-		Category:            pb.GameCategory(pb.GameCategory_value[game.Category]),
+		Category:            catVal,
 		Tags:                game.Tags,
 		Description:         game.Description,
 		ImageUrl:            game.ImageURL,
 		ThumbnailUrl:        game.ThumbnailURL,
 		SupportedCurrencies: game.SupportedCurrencies,
-		BetRange: &pb.MoneyRange{
-			Min: &commonv1.Money{Value: game.MinBet},
-			Max: &commonv1.Money{Value: game.MaxBet},
+		BetRange: &casinov1.MoneyRange{
+			Min: &commonv1.Money{Amount: game.MinBet, Currency: "USD"},
+			Max: &commonv1.Money{Amount: game.MaxBet, Currency: "USD"},
 		},
-		Features: &pb.GameFeatures{
-			HasFreeSpins:   game.Features.HasFreeSpins,
-			HasBonusBuy:    game.Features.HasBonusBuy,
-			HasJackpot:     game.Features.HasJackpot,
-			HasMultiplayer: game.Features.HasMultiplayer,
-			HasLiveDealer:  game.Features.HasLiveDealer,
-			BonusFeatures:  game.Features.BonusFeatures,
+		Features: &casinov1.GameFeatures{
+			HasFreeSpins: game.Features.HasFreeSpins,
+			HasBonusBuy:  game.Features.HasBonusBuy,
+			HasJackpot:   game.Features.HasJackpot,
 		},
-		Stats: &pb.GameStats{
-			Rtp:         game.RTP,
-			Volatility:  game.Volatility,
-			TotalPlays:  0,
-			TotalPaid:   nil,
-			BiggestWin:  nil,
+		Stats: &casinov1.GameStats{
+			Rtp:        game.RTP,
+			Volatility: game.Volatility,
 		},
-		IsActive:           game.IsActive,
-		IsDemoAvailable:    game.IsDemoAvailable,
+		IsActive:            game.IsActive,
+		IsDemoAvailable:     game.IsDemoAvailable,
 		RestrictedCountries: game.RestrictedCountries,
-		PopularityScore:    game.PopularityScore,
-		ReleasedAt:         timestamppb.New(game.ReleasedAt),
-		Metadata:           game.Metadata,
+		PopularityScore:     game.PopularityScore,
+		ReleasedAt:          timestamppb.New(game.ReleasedAt),
+		Metadata:            game.Metadata,
 	}
 }
 
-func toProtoProvider(provider *service.Provider) *pb.Provider {
-	return &pb.Provider{
+func toProtoProvider(provider *service.Provider) *casinov1.Provider {
+	return &casinov1.Provider{
 		Id:                  provider.ID,
 		Name:                provider.Name,
 		LogoUrl:             provider.LogoURL,
@@ -310,52 +304,51 @@ func toProtoProvider(provider *service.Provider) *pb.Provider {
 	}
 }
 
-func toProtoGameSession(session *service.GameSession) *pb.GameSession {
-	return &pb.GameSession{
-		Id:         session.ID,
-		UserId:     &commonv1.UserId{Value: int64(session.UserID)},
-		GameId:     session.GameID,
-		ProviderId: session.ProviderID,
-		Status:     pb.GameSessionStatus(pb.GameSessionStatus_value[session.Status]),
-		BalanceAtStart: &commonv1.Money{Value: session.BalanceAtStart},
-		StartedAt:  timestamppb.New(session.StartedAt),
-		LastActivity: timestamppb.New(session.LastActivity),
-		EndedAt:    nil,
-		DeviceType: session.DeviceType,
-		LobbyUrl:   session.LobbyURL,
-		LaunchUrl:  session.LaunchURL,
-		Token:      session.Token,
-		Metadata:   session.Metadata,
+func toProtoGameSession(session *service.GameSession) *casinov1.GameSession {
+	return &casinov1.GameSession{
+		Id:             session.ID,
+		UserId:         &commonv1.UserId{Value: session.UserID},
+		GameId:         session.GameID,
+		ProviderId:     session.ProviderID,
+		Status:         casinov1.GameSessionStatus(casinov1.GameSessionStatus_value[session.Status]),
+		BalanceAtStart: &commonv1.Money{Amount: session.BalanceAtStart, Currency: "USD"},
+		StartedAt:      timestamppb.New(session.StartedAt),
+		LastActivity:   timestamppb.New(session.LastActivity),
+		DeviceType:     session.DeviceType,
+		LobbyUrl:       session.LobbyURL,
+		LaunchUrl:      session.LaunchURL,
+		Token:          session.Token,
+		Metadata:       session.Metadata,
 	}
 }
 
-func toProtoGameSessionSummary(summary *service.GameSessionSummary) *pb.GameSessionSummary {
-	return &pb.GameSessionSummary{
-		SessionId:    summary.SessionID,
-		GameId:       summary.GameID,
-		GameName:     summary.GameName,
-		TotalBet:     &commonv1.Money{Value: summary.TotalBet},
-		TotalWin:     &commonv1.Money{Value: summary.TotalWin},
-		NetResult:    &commonv1.Money{Value: summary.NetResult},
-		RoundsPlayed: summary.RoundsPlayed,
-		StartedAt:    timestamppb.New(summary.StartedAt),
-		EndedAt:      timestamppb.New(summary.EndedAt),
+func toProtoGameSessionSummary(summary *service.GameSessionSummary) *casinov1.GameSessionSummary {
+	return &casinov1.GameSessionSummary{
+		SessionId:       summary.SessionID,
+		GameId:          summary.GameID,
+		GameName:        summary.GameName,
+		TotalBet:        &commonv1.Money{Amount: summary.TotalBet, Currency: "USD"},
+		TotalWin:        &commonv1.Money{Amount: summary.TotalWin, Currency: "USD"},
+		NetResult:       &commonv1.Money{Amount: summary.NetResult, Currency: "USD"},
+		RoundsPlayed:    summary.RoundsPlayed,
+		StartedAt:       timestamppb.New(summary.StartedAt),
+		EndedAt:         timestamppb.New(summary.EndedAt),
 		DurationSeconds: summary.DurationSecs,
 	}
 }
 
-func toProtoGameRound(round *service.GameRound) *pb.GameRound {
-	return &pb.GameRound{
-		Id:         round.ID,
-		SessionId:  round.SessionID,
-		RoundId:    round.RoundID,
-		BetAmount:  &commonv1.Money{Value: round.BetAmount},
-		WinAmount:  &commonv1.Money{Value: round.WinAmount},
-		NetResult:  &commonv1.Money{Value: round.NetResult},
-		Status:     pb.GameRoundStatus(pb.GameRoundStatus_value[round.Status]),
-		StartedAt:  timestamppb.New(round.StartedAt),
-		EndedAt:    timestamppb.New(round.EndedAt),
-		GameState:  round.GameState,
-		Metadata:   round.Metadata,
+func toProtoGameRound(round *service.GameRound) *casinov1.GameRound {
+	return &casinov1.GameRound{
+		Id:        round.ID,
+		SessionId: round.SessionID,
+		RoundId:   round.RoundID,
+		BetAmount: &commonv1.Money{Amount: round.BetAmount, Currency: "USD"},
+		WinAmount: &commonv1.Money{Amount: round.WinAmount, Currency: "USD"},
+		NetResult: &commonv1.Money{Amount: round.NetResult, Currency: "USD"},
+		Status:    casinov1.GameRoundStatus(casinov1.GameRoundStatus_value[round.Status]),
+		StartedAt: timestamppb.New(round.StartedAt),
+		EndedAt:   timestamppb.New(round.EndedAt),
+		GameState: round.GameState,
+		Metadata:  round.Metadata,
 	}
 }

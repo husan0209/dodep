@@ -21,7 +21,7 @@ CREATE TABLE bets (
     event_id        BIGINT,
     market_id       BIGINT,
     selection_id    BIGINT,
-    idempotency_key UUID UNIQUE NOT NULL,
+    idempotency_key UUID NOT NULL,
     ip_address      INET,
     device_fingerprint VARCHAR(64),
     placed_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -112,6 +112,21 @@ CREATE INDEX idx_bets_idempotency ON bets (idempotency_key);
 
 -- BRIN for time-series
 CREATE INDEX idx_bets_placed_brin ON bets USING BRIN (placed_at);
+
+-- ============================================================
+-- IDEMPOTENCY SAFETY NET (global unique constraint workaround
+-- for partitioned bets table where PG < 15 does not allow
+-- UNIQUE without partition key)
+-- ============================================================
+
+CREATE TABLE bet_idempotency_keys (
+    idempotency_key UUID PRIMARY KEY,
+    bet_id          BIGINT NOT NULL,
+    user_id         BIGINT NOT NULL,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_idempotency_keys_bet ON bet_idempotency_keys (bet_id);
 
 -- ============================================================
 -- BET SELECTIONS (accumulator/system bet legs)

@@ -1,4 +1,5 @@
 import apiClient from "./api";
+import { useAuthStore } from "@/stores/authStore";
 import type { LoginRequest, LoginResponse, ApiResponse } from "@/types/api";
 
 export const authService = {
@@ -11,7 +12,11 @@ export const authService = {
   },
 
   async logout(): Promise<void> {
-    await apiClient.post("/admin/auth/logout");
+    try {
+      await apiClient.post("/admin/auth/logout");
+    } finally {
+      useAuthStore.getState().clearAuth();
+    }
   },
 
   async me(): Promise<LoginResponse["admin"]> {

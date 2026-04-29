@@ -26,7 +26,7 @@ tonic = "0.10"
 prost = "0.12"
 
 # Redis/Dragonfly for pub/sub
-redis = { version = "0.24", features = ["tokio-comp", "connection-manager", "pubsub"] }
+redis = { version = "0.24", features = ["tokio-comp", "connection-manager"] }
 
 # Message broker
 rdkafka = { version = "0.36", features = ["tokio"] }
@@ -51,6 +51,9 @@ dashmap = "5.5"
 
 [dev-dependencies]
 tokio-test = "0.4"
+
+[build-dependencies]
+tonic-build = "0.10"
 
 [[bin]]
 name = "websocket-gateway"

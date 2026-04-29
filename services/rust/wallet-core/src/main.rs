@@ -14,6 +14,7 @@ mod api;
 mod config;
 mod domain;
 mod infrastructure;
+mod service;
 mod telemetry;
 
 use anyhow::Result;

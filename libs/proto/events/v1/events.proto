@@ -263,8 +263,8 @@ message CasinoGameEndedEvent {
   common.v1.Money total_win = 7;
   common.v1.Money net_result = 8;
   int64 rounds_played = 9;
-  google.protobuf.Timestamp started_at = 9;
-  google.protobuf.Timestamp ended_at = 10;
+  google.protobuf.Timestamp started_at = 10;
+  google.protobuf.Timestamp ended_at = 11;
 }
 
 // ============ BONUS EVENTS ============

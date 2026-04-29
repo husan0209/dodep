@@ -48,3 +48,22 @@ export interface BetSearchParams {
   page?: number;
   page_size?: number;
 }
+
+export interface SportEvent {
+  id: string;
+  sport: string;
+  league?: string;
+  home_team: string;
+  away_team: string;
+  starts_at: string;
+  status: string;
+  live: boolean;
+}
+
+export interface EventSearchParams {
+  sport_id?: number;
+  status?: string;
+  search?: string;
+  page?: number;
+  page_size?: number;
+}

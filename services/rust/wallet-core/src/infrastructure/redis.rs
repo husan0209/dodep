@@ -1,6 +1,7 @@
 //! Redis client for caching and distributed locks
 
-use redis::{Client, ConnectionManager, RedisError};
+use redis::{Client, RedisError};
+use redis::aio::ConnectionManager;
 
 use crate::config::RedisConfig;
 

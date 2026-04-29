@@ -173,6 +173,9 @@ impl WalletService {
             Some(idempotency_key.to_string()),
         );
         
+        // Mark transaction as completed for sync flow before saving
+        transaction.complete();
+        
         // Insert transaction
         self.insert_transaction_internal(&mut tx, &transaction).await?;
         
@@ -240,9 +243,6 @@ impl WalletService {
         // Commit transaction
         tx.commit().await
             .map_err(|e| WalletError::DatabaseError(e.to_string()))?;
-        
-        // Mark transaction as completed
-        transaction.complete();
         
         // =====================================================================
         // STEP 8: Cache idempotency result (after successful commit)
@@ -316,6 +316,9 @@ impl WalletService {
             Some(idempotency_key.to_string()),
         );
         
+        // Mark transaction as completed for sync flow before saving
+        transaction.complete();
+        
         self.insert_transaction_internal(&mut tx, &transaction).await?;
         
         // Update wallet balance
@@ -380,8 +383,6 @@ impl WalletService {
         tx.commit().await
             .map_err(|e| WalletError::DatabaseError(e.to_string()))?;
         
-        transaction.complete();
-        
         // Cache idempotency
         self.idempotency.set(idempotency_key, transaction.id).await?;
         
@@ -390,6 +391,121 @@ impl WalletService {
         Ok(transaction)
     }
     
+    pub async fn lock(
+        &self,
+        user_id: Uuid,
+        wallet_type: WalletType,
+        amount: Decimal,
+        reference_id: Uuid,
+        idempotency_key: Option<String>,
+    ) -> Result<FundLock, WalletError> {
+        let mut tx = self.wallet_repo.pool.begin().await
+            .map_err(|e| WalletError::DatabaseError(e.to_string()))?;
+        
+        let wallet = self.wallet_repo
+            .get_by_user_and_type_internal(user_id, wallet_type, &mut tx)
+            .await?
+            .ok_or(WalletError::NotFound { user_id })?;
+            
+        if !wallet.has_available_balance(amount) {
+            return Err(WalletError::InsufficientAvailableBalance {
+                required: amount,
+                available: wallet.balance_available,
+            });
+        }
+        
+        let new_available = wallet.balance_available - amount;
+        let new_locked = wallet.balance_locked + amount;
+        
+        self.update_wallet_balance_internal(&mut tx, wallet.id, new_available, new_locked, wallet.balance_bonus, wallet.version).await?;
+        
+        let lock = FundLock::new(wallet.id, user_id, amount, reference_id, "lock".to_string());
+        
+        sqlx::query!(
+            r#"INSERT INTO fund_locks (id, wallet_id, user_id, amount, reference_id, reference_type, is_active) VALUES ($1, $2, $3, $4, $5, $6, $7)"#,
+            lock.id, lock.wallet_id, lock.user_id, lock.amount as _, lock.reference_id, &lock.reference_type, lock.is_active,
+        ).execute(&mut *tx).await.map_err(|e| WalletError::DatabaseError(e.to_string()))?;
+        
+        tx.commit().await.map_err(|e| WalletError::DatabaseError(e.to_string()))?;
+        Ok(lock)
+    }
+    
+    pub async fn unlock(
+        &self,
+        user_id: Uuid,
+        reference_id: Uuid,
+    ) -> Result<(), WalletError> {
+        let mut tx = self.wallet_repo.pool.begin().await
+            .map_err(|e| WalletError::DatabaseError(e.to_string()))?;
+            
+        let lock = sqlx::query_as!(
+            FundLock,
+            r#"SELECT id, wallet_id, user_id, amount as "Decimal: rust_decimal::Decimal", reference_id, reference_type, is_active, created_at, released_at FROM fund_locks WHERE reference_id = $1 AND is_active = true FOR UPDATE"#,
+            reference_id
+        ).fetch_optional(&mut *tx).await.map_err(|e| WalletError::DatabaseError(e.to_string()))?
+        .ok_or(WalletError::LockReferenceNotFound(reference_id.to_string()))?;
+        
+        let wallet = sqlx::query_as!(Wallet, r#"SELECT id, user_id, wallet_type as "WalletType: _", currency, balance_available as "Decimal: rust_decimal::Decimal", balance_locked as "Decimal: rust_decimal::Decimal", balance_bonus as "Decimal: rust_decimal::Decimal", version, is_active, created_at, updated_at FROM wallets WHERE id = $1 FOR UPDATE"#, lock.wallet_id)
+            .fetch_optional(&mut *tx).await.map_err(|e| WalletError::DatabaseError(e.to_string()))?.ok_or(WalletError::NotFound { user_id })?;
+
+        let new_available = wallet.balance_available + lock.amount;
+        let new_locked = wallet.balance_locked - lock.amount;
+        
+        self.update_wallet_balance_internal(&mut tx, wallet.id, new_available, new_locked, wallet.balance_bonus, wallet.version).await?;
+        
+        sqlx::query!("UPDATE fund_locks SET is_active = false, released_at = NOW() WHERE id = $1", lock.id)
+            .execute(&mut *tx).await.map_err(|e| WalletError::DatabaseError(e.to_string()))?;
+            
+        tx.commit().await.map_err(|e| WalletError::DatabaseError(e.to_string()))?;
+        Ok(())
+    }
+    
+    pub async fn transfer(
+        &self,
+        user_id: Uuid,
+        from_wallet_type: WalletType,
+        to_wallet_type: WalletType,
+        amount: Decimal,
+        currency: &str,
+        reference_id: Uuid,
+        idempotency_key: Option<String>,
+    ) -> Result<(Transaction, Transaction), WalletError> {
+        let mut tx = self.wallet_repo.pool.begin().await.map_err(|e| WalletError::DatabaseError(e.to_string()))?;
+        
+        let from_wallet = self.wallet_repo.get_by_user_and_type_internal(user_id, from_wallet_type, &mut tx).await?.ok_or(WalletError::NotFound { user_id })?;
+        let to_wallet = self.get_or_create_wallet_internal(user_id, to_wallet_type, currency, &mut tx).await?;
+        
+        if !from_wallet.has_available_balance(amount) {
+            return Err(WalletError::InsufficientAvailableBalance { required: amount, available: from_wallet.balance_available });
+        }
+        
+        let new_from_available = from_wallet.balance_available - amount;
+        self.update_wallet_balance_internal(&mut tx, from_wallet.id, new_from_available, from_wallet.balance_locked, from_wallet.balance_bonus, from_wallet.version).await?;
+        
+        let new_to_available = to_wallet.balance_available + amount;
+        self.update_wallet_balance_internal(&mut tx, to_wallet.id, new_to_available, to_wallet.balance_locked, to_wallet.balance_bonus, to_wallet.version).await?;
+        
+        let mut debit_txn = Transaction::new(user_id, from_wallet.id, from_wallet_type, TransactionType::TransferOut, amount, currency.to_string(), Some(reference_id), Some("transfer".to_string()), idempotency_key.clone());
+        debit_txn.complete();
+        self.insert_transaction_internal(&mut tx, &debit_txn).await?;
+        
+        let mut credit_txn = Transaction::new(user_id, to_wallet.id, to_wallet_type, TransactionType::TransferIn, amount, currency.to_string(), Some(reference_id), Some("transfer".to_string()), idempotency_key);
+        credit_txn.complete();
+        self.insert_transaction_internal(&mut tx, &credit_txn).await?;
+        
+        tx.commit().await.map_err(|e| WalletError::DatabaseError(e.to_string()))?;
+        Ok((debit_txn, credit_txn))
+    }
+    
+    pub async fn get_transactions(&self, user_id: Uuid, limit: i64, offset: i64) -> Result<Vec<Transaction>, WalletError> {
+        let transactions = sqlx::query_as!(
+            Transaction,
+            r#"SELECT id, user_id, wallet_id, wallet_type as "WalletType: _", transaction_type as "TransactionType: _", amount as "Decimal: rust_decimal::Decimal", currency, status as "TransactionStatus: _", reference_id, reference_type, idempotency_key, description, metadata as "serde_json::Value: _", created_at, updated_at, completed_at FROM transactions WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3"#,
+            user_id, limit, offset
+        ).fetch_all(&self.wallet_repo.pool).await.map_err(|e| WalletError::DatabaseError(e.to_string()))?;
+        Ok(transactions)
+    }
+
     // =====================================================================
     // INTERNAL HELPER METHODS
     // =====================================================================

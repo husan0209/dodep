@@ -11,6 +11,7 @@ option java_package = "com.opuscasino.proto.user.v1";
 
 import "common/v1/types.proto";
 import "common/v1/money.proto";
+import "common/v1/pagination.proto";
 import "common/v1/error.proto";
 import "google/protobuf/timestamp.proto";
 

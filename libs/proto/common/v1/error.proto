@@ -8,6 +8,9 @@ option go_package = "github.com/opus-casino/proto/gen/go/common/v1";
 option java_multiple_files = true;
 option java_package = "com.opuscasino.proto.common.v1";
 
+import "google/protobuf/timestamp.proto";
+import "common/v1/types.proto";
+
 // ErrorCode represents application-specific error codes
 enum ErrorCode {
   ERROR_CODE_UNSPECIFIED = 0;

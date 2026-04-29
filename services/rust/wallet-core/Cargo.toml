@@ -18,9 +18,10 @@ tower-http = { version = "0.5", features = ["trace", "cors", "request-id"] }
 # gRPC
 tonic = "0.10"
 prost = "0.12"
+prost-types = "0.12"
 
 # Database
-sqlx = { version = "0.7", features = ["runtime-tokio", "postgres", "uuid", "chrono", "decimal"] }
+sqlx = { version = "0.7", features = ["runtime-tokio", "postgres", "uuid", "chrono", "rust_decimal"] }
 
 # Cache
 redis = { version = "0.24", features = ["tokio-comp", "connection-manager"] }
@@ -61,11 +62,10 @@ metrics = "0.22"
 metrics-exporter-prometheus = "0.13"
 
 # Shared libraries
-opus-shared = { path = "../../libs/shared/rust" }
+opus-shared = { path = "../../../libs/shared/rust", features = ["tokio"] }
 
 # Generated proto code
-wallet-proto = { path = "../../libs/proto/gen/rust/wallet" }
-common-proto = { path = "../../libs/proto/gen/rust/common" }
+# (Removed, we will use tonic::include_proto!)
 
 [dev-dependencies]
 tokio = { version = "1.35", features = ["full", "test-util"] }
@@ -77,6 +77,7 @@ fake = { version = "2.9", features = ["derive"] }
 
 [build-dependencies]
 tonic-build = "0.10"
+protoc-bin-vendored = "3.0.0"
 
 [[bin]]
 name = "wallet-core"

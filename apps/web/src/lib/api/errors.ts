@@ -6,6 +6,9 @@ const errorMessages: Record<string, string> = {
   AUTH_TOKEN_EXPIRED: "Сессия истекла",
   AUTH_ACCOUNT_LOCKED: "Аккаунт заблокирован",
   AUTH_ACCOUNT_SUSPENDED: "Аккаунт приостановлен",
+  USER_ALREADY_EXISTS: "Пользователь с таким email уже существует",
+  AUTH_OAUTH_INVALID_CALLBACK: "Ошибка авторизации Google",
+  AUTH_OAUTH_USER_FETCH_FAILED: "Не удалось загрузить профиль после Google входа",
 
   // Wallet errors
   WALLET_INSUFFICIENT_BALANCE: "Недостаточно средств",

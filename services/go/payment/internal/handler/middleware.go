@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -81,8 +82,19 @@ func AuthMiddleware() fiber.Handler {
 		}
 
 		// Set user info in context
-		c.Locals("user_id", claims.Sub)
-		c.Locals("user_email", claims.Email)
+		userID, err := strconv.ParseInt(claims.UserID, 10, 64)
+		if err != nil {
+			return c.Status(401).JSON(ErrorResponse{
+				Error: ErrorDetail{
+					Code:    4012,
+					Message: "invalid token",
+				},
+			})
+		}
+		c.Locals("user_id", userID)
+		if claims.Email != "" {
+			c.Locals("user_email", claims.Email)
+		}
 
 		return c.Next()
 	}
