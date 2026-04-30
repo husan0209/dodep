@@ -1,0 +1,101 @@
+# Betting Engine - Staging Environment Values
+# Staging окружение - ближе к production
+
+replicaCount: 2
+
+image:
+  tag: "staging"
+
+# Resources для staging
+resources:
+  limits:
+    cpu: 2000m
+    memory: 2Gi
+  requests:
+    cpu: 500m
+    memory: 512Mi
+
+# Autoscaling для staging
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 75
+  targetMemoryUtilizationPercentage: 80
+
+# Staging environment variables
+env:
+  - name: RUST_LOG
+    value: "info"
+  - name: RUST_BACKTRACE
+    value: "1"
+  - name: APP_ENV
+    value: "staging"
+  - name: DATABASE_URL
+    valueFrom:
+      secretKeyRef:
+        name: betting-engine-secrets-staging
+        key: database-url
+  - name: REDIS_URL
+    valueFrom:
+      secretKeyRef:
+        name: betting-engine-secrets-staging
+        key: redis-url
+  - name: KAFKA_BROKERS
+    value: "redpanda.data.svc.cluster.local:9092"
+
+# PDB для staging
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# Network policy для staging
+networkPolicy:
+  enabled: true
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: istio-system
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: data
+      ports:
+        - protocol: TCP
+          port: 5432
+        - protocol: TCP
+          port: 6379
+
+# Service monitor для staging
+serviceMonitor:
+  enabled: true
+  interval: 30s
+  scrapeTimeout: 10s
+  path: /metrics
+  port: metrics
+
+# Ingress для staging
+ingress:
+  enabled: true
+  className: "alb"
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/healthcheck-path: /health
+  hosts:
+    - host: staging-api.opus.casino
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: opus-casino-staging-tls
+      hosts:
+        - staging-api.opus.casino

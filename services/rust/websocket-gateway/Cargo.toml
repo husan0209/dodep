@@ -1,0 +1,60 @@
+[package]
+name = "websocket-gateway"
+version = "0.1.0"
+edition = "2021"
+description = "Real-time WebSocket gateway for Opus Casino platform"
+
+[dependencies]
+# Async runtime
+tokio = { version = "1.35", features = ["full", "rt-multi-thread", "io-uring"] }
+
+# Web framework
+axum = { version = "0.7", features = ["macros", "ws"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["trace", "cors", "compression-gzip"] }
+
+# WebSocket
+tokio-tungstenite = "0.21"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+rkyv = { version = "0.7", features = ["validation"] }
+
+# gRPC client
+tonic = "0.10"
+prost = "0.12"
+
+# Redis/Dragonfly for pub/sub
+redis = { version = "0.24", features = ["tokio-comp", "connection-manager"] }
+
+# Message broker
+rdkafka = { version = "0.36", features = ["tokio"] }
+
+# Logging & tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# Error handling
+thiserror = "1.0"
+anyhow = "1.0"
+
+# Utils
+uuid = { version = "1.6", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+
+# Rate limiting
+governor = "0.6"
+
+# Connection management
+dashmap = "5.5"
+
+[dev-dependencies]
+tokio-test = "0.4"
+
+[build-dependencies]
+tonic-build = "0.10"
+
+[[bin]]
+name = "websocket-gateway"
+path = "src/main.rs"

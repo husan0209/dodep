@@ -1,0 +1,80 @@
+// Pagination and filtering types for Opus Casino platform
+
+syntax = "proto3";
+
+package common.v1;
+
+option go_package = "github.com/opus-casino/proto/gen/go/common/v1";
+option java_multiple_files = true;
+option java_package = "com.opuscasino.proto.common.v1";
+
+import "google/protobuf/timestamp.proto";
+
+// Cursor-based pagination request
+message PageRequest {
+  // Maximum items to return (1-100, default 20)
+  int32 page_size = 1;
+  // Cursor from previous response (empty for first page)
+  string cursor = 2;
+  // Sort field
+  string sort_by = 3;
+  // Sort order (default: ascending)
+  bool descending = 4;
+}
+
+// Cursor-based pagination response
+message PageResponse {
+  // Cursor for next page (empty if no more pages)
+  string next_cursor = 1;
+  // Cursor for previous page (empty if on first page)
+  string prev_cursor = 2;
+  // Whether there are more items after this page
+  bool has_more = 3;
+  // Total count (optional, may be expensive to calculate)
+  optional int64 total_count = 4;
+  // Current page number (1-based, optional)
+  optional int32 current_page = 5;
+  // Total pages (optional)
+  optional int32 total_pages = 6;
+}
+
+// Offset-based pagination (for simple use cases)
+message OffsetRequest {
+  // Number of items to skip (default: 0)
+  int32 offset = 1;
+  // Maximum items to return (1-100, default 20)
+  int32 limit = 2;
+}
+
+// Offset-based pagination response
+message OffsetResponse {
+  // Current offset
+  int32 offset = 1;
+  // Requested limit
+  int32 limit = 2;
+  // Total count
+  int64 total_count = 3;
+  // Whether there are more items
+  bool has_more = 4;
+}
+
+// Date range filter
+message DateRange {
+  // Start timestamp (inclusive)
+  optional google.protobuf.Timestamp from = 1;
+  // End timestamp (inclusive)
+  optional google.protobuf.Timestamp to = 2;
+}
+
+// Amount range filter
+message AmountRange {
+  // Minimum amount (inclusive)
+  optional string min = 1;
+  // Maximum amount (inclusive)
+  optional string max = 2;
+}
+
+// Status filter (supports multiple statuses)
+message StatusFilter {
+  repeated string statuses = 1;
+}

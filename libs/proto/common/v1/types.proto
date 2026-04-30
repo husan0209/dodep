@@ -1,0 +1,147 @@
+// Common types for Opus Casino platform
+// These types are shared across all services
+
+syntax = "proto3";
+
+package common.v1;
+
+option go_package = "github.com/opus-casino/proto/gen/go/common/v1";
+option java_multiple_files = true;
+option java_package = "com.opuscasino.proto.common.v1";
+
+import "google/protobuf/timestamp.proto";
+
+// UserId represents a unique user identifier (UUID v4)
+message UserId {
+  string value = 1;
+}
+
+// BetId represents a unique bet identifier (UUID v4)
+message BetId {
+  string value = 1;
+}
+
+// TransactionId represents a unique transaction identifier (UUID v4)
+message TransactionId {
+  string value = 1;
+}
+
+// GameId represents a unique game identifier (UUID v4)
+message GameId {
+  string value = 1;
+}
+
+// SessionId represents a unique session identifier (UUID v4)
+message SessionId {
+  string value = 1;
+}
+
+// EventId represents a unique event identifier (UUID v4)
+message EventId {
+  string value = 1;
+}
+
+// Money represents a monetary amount with currency.
+// Amount is stored as string to avoid floating point precision issues.
+// Examples: "100.00", "0.50", "1234.56"
+message Money {
+  // Amount as decimal string (e.g., "100.00")
+  string amount = 1;
+  // ISO 4217 currency code (e.g., "USD", "EUR", "RUB")
+  string currency = 2;
+}
+
+// PaginationRequest for cursor-based pagination
+message PaginationRequest {
+  // Maximum items to return (1-100, default 20)
+  int32 page_size = 1;
+  // Cursor from previous response (empty for first page)
+  string cursor = 2;
+}
+
+// PaginationResponse for cursor-based pagination
+message PaginationResponse {
+  // Cursor for next page (empty if no more pages)
+  string next_cursor = 1;
+  // Whether there are more items
+  bool has_more = 2;
+  // Total count (optional, may be expensive to calculate)
+  optional int64 total_count = 3;
+}
+
+// BetType represents the type of bet
+enum BetType {
+  BET_TYPE_UNSPECIFIED = 0;
+  BET_TYPE_SPORTS = 1;      // Sports betting
+  BET_TYPE_LIVE = 2;        // Live/in-play betting
+  BET_TYPE_CASINO = 3;      // Casino games
+  BET_TYPE_LOTTERY = 4;     // Lottery
+  BET_TYPE_VIRTUAL = 5;     // Virtual sports
+}
+
+// BetStatus represents the current state of a bet
+enum BetStatus {
+  BET_STATUS_UNSPECIFIED = 0;
+  BET_STATUS_PENDING = 1;   // Awaiting acceptance
+  BET_STATUS_ACCEPTED = 2;  // Accepted by the system
+  BET_STATUS_SETTLED = 3;   // Settled (won/lost)
+  BET_STATUS_CANCELLED = 4; // Cancelled (void)
+  BET_STATUS_REJECTED = 5;  // Rejected by the system
+}
+
+// WalletType represents different wallet types per user
+enum WalletType {
+  WALLET_TYPE_UNSPECIFIED = 0;
+  WALLET_TYPE_MAIN = 1;         // Main wallet (real money)
+  WALLET_TYPE_BONUS = 2;        // Bonus wallet (bonus funds)
+  WALLET_TYPE_FREE_SPINS = 3;   // Free spins wallet
+  WALLET_TYPE_CASHBACK = 4;     // Cashback wallet
+}
+
+// TransactionType represents the type of transaction
+enum TransactionType {
+  TRANSACTION_TYPE_UNSPECIFIED = 0;
+  TRANSACTION_TYPE_DEPOSIT = 1;
+  TRANSACTION_TYPE_WITHDRAWAL = 2;
+  TRANSACTION_TYPE_BET_PLACE = 3;
+  TRANSACTION_TYPE_BET_WIN = 4;
+  TRANSACTION_TYPE_BET_REFUND = 5;
+  TRANSACTION_TYPE_BONUS_CREDIT = 6;
+  TRANSACTION_TYPE_BONUS_DEBIT = 7;
+  TRANSACTION_TYPE_TRANSFER = 8;
+  TRANSACTION_TYPE_ADJUSTMENT = 9;
+}
+
+// TransactionStatus represents the status of a transaction
+enum TransactionStatus {
+  TRANSACTION_STATUS_UNSPECIFIED = 0;
+  TRANSACTION_STATUS_PENDING = 1;
+  TRANSACTION_STATUS_PROCESSING = 2;
+  TRANSACTION_STATUS_COMPLETED = 3;
+  TRANSACTION_STATUS_FAILED = 4;
+  TRANSACTION_STATUS_CANCELLED = 5;
+}
+
+// DeviceType represents the type of device used
+enum DeviceType {
+  DEVICE_TYPE_UNSPECIFIED = 0;
+  DEVICE_TYPE_WEB = 1;
+  DEVICE_TYPE_MOBILE_WEB = 2;
+  DEVICE_TYPE_IOS = 3;
+  DEVICE_TYPE_ANDROID = 4;
+  DEVICE_TYPE_DESKTOP = 5;
+}
+
+// Country code (ISO 3166-1 alpha-2)
+message Country {
+  string code = 1;  // e.g., "US", "GB", "DE"
+  string name = 2;  // e.g., "United States", "United Kingdom", "Germany"
+}
+
+// Currency code (ISO 4217)
+message Currency {
+  string code = 1;   // e.g., "USD", "EUR", "RUB"
+  string symbol = 2; // e.g., "$", "€", "₽"
+  int32 decimals = 3; // Number of decimal places
+}
+

@@ -1,0 +1,280 @@
+# Vector Logging Configuration
+# Log collection and forwarding to ClickHouse
+
+---
+# Vector ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vector-config
+  namespace: monitoring
+data:
+  vector.toml: |
+    # Vector Configuration for Opus Casino
+    
+    # Data directory for persistence
+    data_dir = "/vector-data"
+    
+    # Log level
+    log_level = "info"
+    
+    # =============================================================================
+    # Sources
+    # =============================================================================
+    
+    # Collect logs from Kubernetes pods
+    [sources.k8s_logs]
+      type = "kubernetes_logs"
+      auto_partial_merge = true
+      pod_annotation_fields.variant = "variant"
+      pod_annotation_fields.container = "container"
+      
+    # Collect node logs
+    [sources.node_logs]
+      type = "file"
+      include = ["/var/log/*.log"]
+      ignore_older = 86400
+      
+    # Collect Kubernetes events
+    [sources.k8s_events]
+      type = "kubernetes_logs"
+      kind = "event"
+      
+    # =============================================================================
+    # Transforms
+    # =============================================================================
+    
+    # Parse JSON logs
+    [transforms.parse_json]
+      type = "remap"
+      inputs = ["k8s_logs"]
+      source = '''
+      .message = parse_json!(.message) ?? .message
+      '''
+      
+    # Add Kubernetes metadata
+    [transforms.add_k8s_metadata]
+      type = "remap"
+      inputs = ["parse_json"]
+      source = '''
+      .kubernetes.namespace = .kubernetes.pod.namespace
+      .kubernetes.pod = .kubernetes.pod.name
+      .kubernetes.container = .kubernetes.container.name
+      del(.kubernetes.pod.name)
+      del(.kubernetes.container.name)
+      '''
+      
+    # Filter by log level
+    [transforms.filter_errors]
+      type = "filter"
+      inputs = ["add_k8s_metadata"]
+      condition = '.level == "error" or .level == "ERROR" or .level == "fatal" or .level == "FATAL"'
+      
+    # Filter warnings
+    [transforms.filter_warnings]
+      type = "filter"
+      inputs = ["add_k8s_metadata"]
+      condition = '.level == "warn" or .level == "WARN" or .level == "warning" or .level == "WARNING"'
+      
+    # =============================================================================
+    # Sinks
+    # =============================================================================
+    
+    # Send all logs to ClickHouse
+    [sinks.clickhouse_all]
+      type = "clickhouse"
+      inputs = ["add_k8s_metadata"]
+      endpoint = "http://clickhouse.data.svc.cluster.local:8123"
+      database = "opus_casino"
+      table = "logs_all"
+      compression = "zstd"
+      skip_unknown_fields = true
+      
+    # Send errors to separate table for alerting
+    [sinks.clickhouse_errors]
+      type = "clickhouse"
+      inputs = ["filter_errors"]
+      endpoint = "http://clickhouse.data.svc.cluster.local:8123"
+      database = "opus_casino"
+      table = "logs_errors"
+      compression = "zstd"
+      
+    # Send to Loki for ad-hoc queries
+    [sinks.loki]
+      type = "loki"
+      inputs = ["add_k8s_metadata"]
+      endpoint = "http://loki.monitoring.svc.cluster.local:3100"
+      encoding.codec = "json"
+      labels.namespace = "{{ kubernetes.namespace }}"
+      labels.pod = "{{ kubernetes.pod }}"
+      labels.container = "{{ kubernetes.container }}"
+      
+    # Send errors to PagerDuty for critical alerts
+    [sinks.pagerduty]
+      type = "pagerduty"
+      inputs = ["filter_errors"]
+      api_key = "${PAGERDUTY_API_KEY}"
+      message = "Error in {{ kubernetes.namespace }}/{{ kubernetes.pod }}: {{ message }}"
+
+---
+# Vector DaemonSet
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: vector
+  namespace: monitoring
+  labels:
+    app: vector
+spec:
+  selector:
+    matchLabels:
+      app: vector
+  template:
+    metadata:
+      labels:
+        app: vector
+    spec:
+      serviceAccountName: vector
+      terminationGracePeriodSeconds: 60
+      tolerations:
+        - key: node-role.kubernetes.io/master
+          effect: NoSchedule
+        - key: node-role.kubernetes.io/control-plane
+          effect: NoSchedule
+      containers:
+        - name: vector
+          image: timberio/vector:0.35.0-distroless-libc
+          args:
+            - --config-dir
+            - /etc/vector/
+          env:
+            - name: PAGERDUTY_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: vector-secrets
+                  key: pagerduty-api-key
+          ports:
+            - name: api
+              containerPort: 8686
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: api
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: api
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          volumeMounts:
+            - name: config
+              mountPath: /etc/vector/
+            - name: var-log
+              mountPath: /var/log
+            - name: var-lib
+              mountPath: /var/lib
+            - name: procfs
+              mountPath: /proc
+            - name: varrun
+              mountPath: /var/run
+            - name: podlogs
+              mountPath: /var/log/pods
+              readOnly: true
+            - name: vector-data
+              mountPath: /vector-data
+      volumes:
+        - name: config
+          configMap:
+            name: vector-config
+        - name: var-log
+          hostPath:
+            path: /var/log
+        - name: var-lib
+          hostPath:
+            path: /var/lib
+        - name: procfs
+          hostPath:
+            path: /proc
+        - name: varrun
+          hostPath:
+            path: /var/run
+        - name: podlogs
+          hostPath:
+            path: /var/log/pods
+        - name: vector-data
+          hostPath:
+            path: /var/lib/vector
+            type: DirectoryOrCreate
+
+---
+# Vector ServiceAccount
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vector
+  namespace: monitoring
+
+---
+# Vector ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: vector
+rules:
+  - apiGroups: [""]
+    resources:
+      - namespaces
+      - nodes
+      - pods
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources:
+      - events
+    verbs: ["list", "watch"]
+  - nonResourceURLs: ["/metrics", "/healthz"]
+    verbs: ["get"]
+
+---
+# Vector ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: vector
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: vector
+subjects:
+  - kind: ServiceAccount
+    name: vector
+    namespace: monitoring
+
+---
+# Vector ServiceMonitor for Prometheus
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: vector
+  namespace: monitoring
+  labels:
+    app: vector
+spec:
+  selector:
+    matchLabels:
+      app: vector
+  namespaceSelector:
+    matchNames:
+      - monitoring
+  endpoints:
+    - port: api
+      path: /metrics
+      interval: 30s

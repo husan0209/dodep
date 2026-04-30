@@ -1,0 +1,82 @@
+# Argo Rollouts configuration for canary deployments
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: betting-engine
+  namespace: opus-casino
+spec:
+  replicas: 3
+  strategy:
+    canary:
+      steps:
+      - setWeight: 10
+      - pause: {duration: 5m}
+      - setWeight: 25
+      - pause: {duration: 10m}
+      - setWeight: 50
+      - pause: {duration: 15m}
+      - setWeight: 75
+      - pause: {duration: 15m}
+      - setWeight: 100
+      analysis:
+        templates:
+        - templateName: betting-engine-analysis
+        startingStep: 1
+        args:
+        - name: service-name
+          value: betting-engine
+  selector:
+    matchLabels:
+      app: betting-engine
+  template:
+    metadata:
+      labels:
+        app: betting-engine
+    spec:
+      containers:
+      - name: betting-engine
+        image: ghcr.io/opus-casino/betting-engine:latest
+        ports:
+        - name: http
+          containerPort: 8080
+        - name: grpc
+          containerPort: 50051
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "256Mi"
+          limits:
+            cpu: "2000m"
+            memory: "512Mi"
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: betting-engine-analysis
+  namespace: opus-casino
+spec:
+  args:
+  - name: service-name
+  metrics:
+  - name: error-rate
+    interval: 1m
+    successCondition: result[0] < 0.01
+    failureLimit: 3
+    provider:
+      prometheus:
+        address: http://victoria-metrics.opus-casino.svc.cluster.local:8428
+        query: |
+          sum(rate(http_requests_total{service="{{args.service-name}}",status=~"5.."}[1m])) 
+          / 
+          sum(rate(http_requests_total{service="{{args.service-name}}"}[1m]))
+  - name: latency-p99
+    interval: 1m
+    successCondition: result[0] < 0.05
+    failureLimit: 3
+    provider:
+      prometheus:
+        address: http://victoria-metrics.opus-casino.svc.cluster.local:8428
+        query: |
+          histogram_quantile(0.99, 
+            sum(rate(http_request_duration_seconds_bucket{service="{{args.service-name}}"}[1m])) by (le)
+          )

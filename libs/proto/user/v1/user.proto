@@ -1,0 +1,283 @@
+// User Service - gRPC service definition
+// Manages user profiles, preferences, and limits
+
+syntax = "proto3";
+
+package user.v1;
+
+option go_package = "github.com/opus-casino/proto/gen/go/user/v1";
+option java_multiple_files = true;
+option java_package = "com.opuscasino.proto.user.v1";
+
+import "common/v1/types.proto";
+import "common/v1/money.proto";
+import "common/v1/pagination.proto";
+import "common/v1/error.proto";
+import "google/protobuf/timestamp.proto";
+
+// UserService manages user profile operations
+service UserService {
+  // GetUser returns user profile by ID
+  rpc GetUser(GetUserRequest) returns (GetUserResponse);
+
+  // GetUserByEmail returns user profile by email
+  rpc GetUserByEmail(GetUserByEmailRequest) returns (GetUserByEmailResponse);
+
+  // UpdateUser updates user profile
+  rpc UpdateUser(UpdateUserRequest) returns (UpdateUserResponse);
+
+  // DeleteUser soft-deletes a user account
+  rpc DeleteUser(DeleteUserRequest) returns (DeleteUserResponse);
+
+  // GetPreferences returns user preferences
+  rpc GetPreferences(GetPreferencesRequest) returns (GetPreferencesResponse);
+
+  // UpdatePreferences updates user preferences
+  rpc UpdatePreferences(UpdatePreferencesRequest) returns (UpdatePreferencesResponse);
+
+  // GetLimits returns user betting/deposit limits
+  rpc GetLimits(GetLimitsRequest) returns (GetLimitsResponse);
+
+  // SetLimits sets user betting/deposit limits
+  rpc SetLimits(SetLimitsRequest) returns (SetLimitsResponse);
+
+  // GetActivity returns user activity history
+  rpc GetActivity(GetActivityRequest) returns (GetActivityResponse);
+}
+
+// ============ Get User ============
+
+message GetUserRequest {
+  common.v1.UserId user_id = 1;
+}
+
+message GetUserResponse {
+  User user = 1;
+}
+
+message GetUserByEmailRequest {
+  string email = 1;
+}
+
+message GetUserByEmailResponse {
+  User user = 1;
+  common.v1.ErrorDetails error = 2;
+}
+
+// ============ Update User ============
+
+message UpdateUserRequest {
+  common.v1.UserId user_id = 1;
+  optional string username = 2;
+  optional string first_name = 3;
+  optional string last_name = 4;
+  optional string phone = 5;
+  optional string date_of_birth = 6;  // ISO 8601 date
+  optional string address = 7;
+  optional string city = 8;
+  optional string postal_code = 9;
+  optional string language = 10;      // ISO 639-1
+  optional string timezone = 11;
+}
+
+message UpdateUserResponse {
+  User user = 1;
+  common.v1.ErrorDetails error = 2;
+}
+
+// ============ Delete User ============
+
+message DeleteUserRequest {
+  common.v1.UserId user_id = 1;
+  string reason = 2;
+}
+
+message DeleteUserResponse {
+  bool success = 1;
+  common.v1.ErrorDetails error = 2;
+}
+
+// ============ Preferences ============
+
+message GetPreferencesRequest {
+  common.v1.UserId user_id = 1;
+}
+
+message GetPreferencesResponse {
+  UserPreferences preferences = 1;
+}
+
+message UpdatePreferencesRequest {
+  common.v1.UserId user_id = 1;
+  optional string language = 2;
+  optional string timezone = 3;
+  optional string currency_display = 4;
+  optional bool marketing_emails = 5;
+  optional bool sms_notifications = 6;
+  optional bool push_notifications = 7;
+  optional bool reality_check = 8;
+  optional int32 reality_check_interval_minutes = 9;
+  optional bool auto_play = 10;
+  optional string sound_preference = 11;
+}
+
+message UpdatePreferencesResponse {
+  UserPreferences preferences = 1;
+  common.v1.ErrorDetails error = 2;
+}
+
+// ============ Limits ============
+
+message GetLimitsRequest {
+  common.v1.UserId user_id = 1;
+}
+
+message GetLimitsResponse {
+  UserLimits limits = 1;
+}
+
+message SetLimitsRequest {
+  common.v1.UserId user_id = 1;
+  optional MoneyLimit daily_deposit_limit = 2;
+  optional MoneyLimit weekly_deposit_limit = 3;
+  optional MoneyLimit monthly_deposit_limit = 4;
+  optional MoneyLimit daily_bet_limit = 5;
+  optional MoneyLimit weekly_bet_limit = 6;
+  optional MoneyLimit monthly_bet_limit = 7;
+  optional MoneyLimit daily_loss_limit = 8;
+  optional MoneyLimit weekly_loss_limit = 9;
+  optional MoneyLimit monthly_loss_limit = 10;
+  optional TimeLimit session_time_limit = 11;
+  optional bool self_exclusion = 12;
+  optional google.protobuf.Timestamp self_exclusion_until = 13;
+}
+
+message SetLimitsResponse {
+  UserLimits limits = 1;
+  common.v1.ErrorDetails error = 2;
+}
+
+// ============ Activity ============
+
+message GetActivityRequest {
+  common.v1.UserId user_id = 1;
+  optional ActivityType activity_type = 2;
+  optional common.v1.DateRange date_range = 3;
+  common.v1.PageRequest pagination = 4;
+}
+
+message GetActivityResponse {
+  repeated ActivityEntry activities = 1;
+  common.v1.PageResponse pagination = 2;
+}
+
+// ============ Domain Models ============
+
+message User {
+  common.v1.UserId id = 1;
+  string email = 2;
+  string username = 3;
+  string first_name = 4;
+  string last_name = 5;
+  string phone = 6;
+  string date_of_birth = 7;
+  string country = 8;
+  string currency = 9;
+  UserStatus status = 10;
+  KycLevel kyc_level = 11;
+  google.protobuf.Timestamp created_at = 12;
+  google.protobuf.Timestamp updated_at = 13;
+  optional google.protobuf.Timestamp last_login = 14;
+  optional string referral_code = 15;
+  optional string referred_by = 16;
+  map<string, string> metadata = 17;
+}
+
+message UserPreferences {
+  common.v1.UserId user_id = 1;
+  string language = 2;
+  string timezone = 3;
+  string currency_display = 4;
+  bool marketing_emails = 5;
+  bool sms_notifications = 6;
+  bool push_notifications = 7;
+  bool reality_check = 8;
+  int32 reality_check_interval_minutes = 9;
+  bool auto_play = 10;
+  string sound_preference = 11;
+  google.protobuf.Timestamp updated_at = 12;
+}
+
+message UserLimits {
+  common.v1.UserId user_id = 1;
+  MoneyLimit daily_deposit_limit = 2;
+  MoneyLimit weekly_deposit_limit = 3;
+  MoneyLimit monthly_deposit_limit = 4;
+  MoneyLimit daily_bet_limit = 5;
+  MoneyLimit weekly_bet_limit = 6;
+  MoneyLimit monthly_bet_limit = 7;
+  MoneyLimit daily_loss_limit = 8;
+  MoneyLimit weekly_loss_limit = 9;
+  MoneyLimit monthly_loss_limit = 10;
+  TimeLimit session_time_limit = 11;
+  bool self_exclusion = 12;
+  optional google.protobuf.Timestamp self_exclusion_until = 13;
+  google.protobuf.Timestamp updated_at = 14;
+}
+
+message MoneyLimit {
+  common.v1.Money amount = 1;
+  bool is_active = 2;
+  google.protobuf.Timestamp set_at = 3;
+  optional google.protobuf.Timestamp cooldown_until = 4;  // Cooldown for limit decreases
+}
+
+message TimeLimit {
+  int32 minutes = 1;
+  bool is_active = 2;
+  google.protobuf.Timestamp set_at = 3;
+}
+
+message ActivityEntry {
+  string id = 1;
+  common.v1.UserId user_id = 2;
+  ActivityType activity_type = 3;
+  string description = 4;
+  map<string, string> metadata = 5;
+  string ip_address = 6;
+  string device_id = 7;
+  google.protobuf.Timestamp timestamp = 8;
+}
+
+enum UserStatus {
+  USER_STATUS_UNSPECIFIED = 0;
+  USER_STATUS_ACTIVE = 1;
+  USER_STATUS_INACTIVE = 2;
+  USER_STATUS_SUSPENDED = 3;
+  USER_STATUS_SELF_EXCLUDED = 4;
+  USER_STATUS_DELETED = 5;
+}
+
+enum KycLevel {
+  KYC_LEVEL_UNSPECIFIED = 0;
+  KYC_LEVEL_NONE = 1;
+  KYC_LEVEL_BASIC = 2;     // Email + phone verified
+  KYC_LEVEL_VERIFIED = 3;  // ID verified
+  KYC_LEVEL_ENHANCED = 4;  // ID + address verified
+}
+
+enum ActivityType {
+  ACTIVITY_TYPE_UNSPECIFIED = 0;
+  ACTIVITY_TYPE_LOGIN = 1;
+  ACTIVITY_TYPE_LOGOUT = 2;
+  ACTIVITY_TYPE_PASSWORD_CHANGE = 3;
+  ACTIVITY_TYPE_PROFILE_UPDATE = 4;
+  ACTIVITY_TYPE_LIMIT_CHANGE = 5;
+  ACTIVITY_TYPE_2FA_ENABLE = 6;
+  ACTIVITY_TYPE_2FA_DISABLE = 7;
+  ACTIVITY_TYPE_KYC_SUBMIT = 8;
+  ACTIVITY_TYPE_DEPOSIT = 9;
+  ACTIVITY_TYPE_WITHDRAWAL = 10;
+  ACTIVITY_TYPE_BET_PLACE = 11;
+  ACTIVITY_TYPE_BONUS_ACTIVATE = 12;
+}

@@ -1,0 +1,168 @@
+# Casino Service Helm Chart Values
+# Сервис оркестрации казино и интеграции с провайдерами игр
+
+replicaCount: 3
+
+image:
+  repository: ghcr.io/opus-casino/casino
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+serviceAccount:
+  create: true
+  annotations:
+    eks.amazonaws.com/role-arn: ""
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+
+podSecurityContext:
+  fsGroup: 1000
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+service:
+  type: ClusterIP
+  httpPort: 8080
+  httpTargetPort: 8080
+  grpcPort: 9090
+  grpcTargetPort: 9090
+
+ingress:
+  enabled: true
+  className: "alb"
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/healthcheck-path: /health
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+  hosts:
+    - host: api.opus.casino
+      paths:
+        - path: /api/v1/casino
+          pathType: Prefix
+  tls:
+    - secretName: opus-casino-tls
+      hosts:
+        - api.opus.casino
+
+resources:
+  limits:
+    cpu: 2000m
+    memory: 2Gi
+  requests:
+    cpu: 500m
+    memory: 512Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 15
+  targetCPUUtilizationPercentage: 60
+  targetMemoryUtilizationPercentage: 70
+
+nodeSelector:
+  node-type: application
+
+healthCheck:
+  path: /health
+  port: 8080
+  liveness:
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readiness:
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+env:
+  - name: GIN_MODE
+    value: "release"
+  - name: APP_ENV
+    valueFrom:
+      configMapKeyRef:
+        name: casino-config
+        key: app-env
+  - name: DATABASE_URL
+    valueFrom:
+      secretKeyRef:
+        name: casino-secrets
+        key: database-url
+  - name: REDIS_ADDR
+    valueFrom:
+      secretKeyRef:
+        name: casino-secrets
+        key: redis-addr
+  - name: REDIS_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: casino-secrets
+        key: redis-password
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+
+networkPolicy:
+  enabled: true
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: istio-system
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+      ports:
+        - protocol: TCP
+          port: 8080
+        - protocol: TCP
+          port: 9090
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: data
+      ports:
+        - protocol: TCP
+          port: 5432
+        - protocol: TCP
+          port: 6379
+
+serviceMonitor:
+  enabled: true
+  interval: 30s
+  scrapeTimeout: 10s
+  path: /metrics
+  port: metrics
+
+# Casino-specific settings
+casino:
+  providers:
+    - name: evolution
+      enabled: true
+      api_url: "https://api.evolution.com"
+    - name: pragmatic_play
+      enabled: true
+      api_url: "https://api.pragmaticplay.com"
+    - name: netent
+      enabled: true
+      api_url: "https://api.netent.com"
+  
+  cache:
+    enabled: true
+    ttl: 300s  # 5 minutes for game data
+  
+  session:
+    timeout: 3600s  # 1 hour
+    max_concurrent: 5

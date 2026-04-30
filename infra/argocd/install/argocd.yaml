@@ -1,0 +1,126 @@
+# ArgoCD Installation Manifest
+# Using official Helm chart
+
+apiVersion: argoproj.io/v1alpha1
+kind: ArgoCD
+metadata:
+  name: argocd
+  namespace: argocd
+spec:
+  # Server configuration
+  server:
+    ingress:
+      enabled: true
+      ingressClassName: alb
+      annotations:
+        alb.ingress.kubernetes.io/scheme: internet-facing
+        alb.ingress.kubernetes.io/target-type: ip
+        alb.ingress.kubernetes.io/ssl-redirect: "443"
+      hostname: argocd.opus.casino
+      tls: true
+    route:
+      enabled: false
+    insecure: true  # Redirect to HTTPS
+    
+  # HA configuration
+  ha:
+    enabled: true
+    replicas: 3
+    
+  # Controller configuration
+  controller:
+    replicas: 1
+    resources:
+      limits:
+        cpu: 2000m
+        memory: 4Gi
+      requests:
+        cpu: 500m
+        memory: 1Gi
+        
+  # Repo server configuration
+  repoServer:
+    replicas: 3
+    resources:
+      limits:
+        cpu: 1000m
+        memory: 2Gi
+      requests:
+        cpu: 250m
+        memory: 512Mi
+        
+  # Application set controller
+  applicationSet:
+    replicas: 1
+    resources:
+      limits:
+        cpu: 500m
+        memory: 1Gi
+      requests:
+        cpu: 100m
+        memory: 256Mi
+        
+  # Redis configuration
+  redis:
+    replicas: 1
+    resources:
+      limits:
+        cpu: 500m
+        memory: 1Gi
+      requests:
+        cpu: 100m
+        memory: 256Mi
+        
+  # Config management
+  configManagement:
+    plugins: []
+    
+  # RBAC
+  rbac:
+    defaultPolicy: role:readonly
+    policy: |
+      g, platform-team, role:admin
+      g, dev-team, role:developer
+      g, ops-team, role:ops
+    scopes: "[groups]"
+    
+  # SSO configuration
+  sso:
+    provider: dex
+    dex:
+      openShiftOAuth: false
+      resources:
+        limits:
+          cpu: 500m
+          memory: 256Mi
+        requests:
+          cpu: 100m
+          memory: 128Mi
+          
+  # Resource tracking
+  resourceTrackingMethod: annotation
+  
+  # Status badge enabled
+  statusBadgeEnabled: true
+  
+  # Kustomize build options
+  kustomizeBuildOptions: "--load-restrictor LoadRestrictionsNone"
+  
+  # Helm repositories
+  helm:
+    repositories: |
+      - name: bitnami
+        url: https://charts.bitnami.com/bitnami
+      - name: ingress-nginx
+        url: https://kubernetes.github.io/ingress-nginx
+      - name: jetstack
+        url: https://charts.jetstack.io
+        
+  # Repositories
+  repositories: |
+    - name: opus-casino-infra
+      url: https://github.com/opus-casino/infra.git
+      name: opus-casino-infra
+    - name: opus-casino-services
+      url: https://github.com/opus-casino/services.git
+      name: opus-casino-services

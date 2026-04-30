@@ -1,0 +1,427 @@
+# PostgreSQL + Citus K8s Deployment
+# Author: DATA_ENGINEER
+# Date: 2026-03-24
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: data
+  labels:
+    app.kubernetes.io/part-of: opus-casino
+    istio-injection: enabled
+
+---
+# ConfigMap: PostgreSQL configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgresql-config
+  namespace: data
+data:
+  postgresql.conf: |
+    # Connection
+    max_connections = 200
+    superuser_reserved_connections = 5
+
+    # Memory
+    shared_buffers = 4GB
+    effective_cache_size = 12GB
+    work_mem = 64MB
+    maintenance_work_mem = 1GB
+
+    # WAL
+    wal_level = logical
+    max_wal_size = 4GB
+    min_wal_size = 1GB
+    wal_compression = zstd
+
+    # Checkpoints
+    checkpoint_completion_target = 0.9
+    checkpoint_timeout = 900
+
+    # Logging
+    log_destination = 'jsonlog'
+    log_statement = 'none'
+    log_min_duration_statement = 1000
+    log_checkpoints = on
+    log_connections = on
+    log_disconnections = on
+    log_lock_waits = on
+
+    # Query monitoring
+    shared_preload_libraries = 'citus,pg_stat_statements'
+    pg_stat_statements.max = 10000
+    pg_stat_statements.track = all
+
+    # Citus
+    citus.shard_count = 32
+    citus.shard_replication_factor = 2
+    citus.max_adaptive_executor_pool_size = 16
+
+    # Autovacuum (aggressive for hot tables)
+    autovacuum_max_workers = 5
+    autovacuum_naptime = 30
+    autovacuum_vacuum_threshold = 50
+    autovacuum_vacuum_scale_factor = 0.05
+    autovacuum_analyze_threshold = 50
+    autovacuum_analyze_scale_factor = 0.025
+
+---
+# StorageClass for PostgreSQL (already defined in cluster)
+# Using existing gp3 storage-class
+
+---
+# StatefulSet: PostgreSQL Coordinator
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: pg-coordinator
+  namespace: data
+  labels:
+    app: pg-coordinator
+    role: coordinator
+spec:
+  serviceName: pg-coordinator
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pg-coordinator
+  template:
+    metadata:
+      labels:
+        app: pg-coordinator
+        role: coordinator
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9187"
+    spec:
+      securityContext:
+        fsGroup: 999
+        runAsUser: 999
+        runAsGroup: 999
+      containers:
+        - name: postgres
+          image: citusdata/citus:12.1
+          ports:
+            - containerPort: 5432
+              name: postgres
+          env:
+            - name: POSTGRES_DB
+              value: opus_platform
+            - name: POSTGRES_USER
+              value: opus_admin
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgresql-secrets
+                  key: postgres-password
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: pgdata
+              mountPath: /var/lib/postgresql/data
+            - name: config
+              mountPath: /etc/postgresql/postgresql.conf
+              subPath: postgresql.conf
+          resources:
+            requests:
+              cpu: "2"
+              memory: "8Gi"
+            limits:
+              cpu: "4"
+              memory: "16Gi"
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - opus_admin
+                - -d
+                - opus_platform
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - opus_admin
+                - -d
+                - opus_platform
+            initialDelaySeconds: 5
+            periodSeconds: 5
+        # Metrics exporter
+        - name: postgres-exporter
+          image: prometheuscommunity/postgres-exporter:v0.15.0
+          ports:
+            - containerPort: 9187
+              name: metrics
+          env:
+            - name: DATA_SOURCE_URI
+              value: "localhost/opus_platform?sslmode=disable"
+            - name: DATA_SOURCE_USER
+              value: opus_admin
+            - name: DATA_SOURCE_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: postgresql-secrets
+                  key: postgres-password
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "200m"
+              memory: "256Mi"
+      volumes:
+        - name: config
+          configMap:
+            name: postgresql-config
+  volumeClaimTemplates:
+    - metadata:
+        name: pgdata
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: gp3
+        resources:
+          requests:
+            storage: 200Gi
+
+---
+# StatefulSet: PostgreSQL Workers (3 workers)
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: pg-worker
+  namespace: data
+  labels:
+    app: pg-worker
+    role: worker
+spec:
+  serviceName: pg-worker
+  replicas: 3
+  selector:
+    matchLabels:
+      app: pg-worker
+  template:
+    metadata:
+      labels:
+        app: pg-worker
+        role: worker
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9187"
+    spec:
+      securityContext:
+        fsGroup: 999
+        runAsUser: 999
+        runAsGroup: 999
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: pg-worker
+                topologyKey: kubernetes.io/hostname
+      containers:
+        - name: postgres
+          image: citusdata/citus:12.1
+          ports:
+            - containerPort: 5432
+              name: postgres
+          env:
+            - name: POSTGRES_DB
+              value: opus_platform
+            - name: POSTGRES_USER
+              value: opus_admin
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgresql-secrets
+                  key: postgres-password
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: pgdata
+              mountPath: /var/lib/postgresql/data
+            - name: config
+              mountPath: /etc/postgresql/postgresql.conf
+              subPath: postgresql.conf
+          resources:
+            requests:
+              cpu: "2"
+              memory: "8Gi"
+            limits:
+              cpu: "4"
+              memory: "16Gi"
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - opus_admin
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - opus_admin
+            initialDelaySeconds: 5
+            periodSeconds: 5
+        - name: postgres-exporter
+          image: prometheuscommunity/postgres-exporter:v0.15.0
+          ports:
+            - containerPort: 9187
+              name: metrics
+          env:
+            - name: DATA_SOURCE_URI
+              value: "localhost/opus_platform?sslmode=disable"
+            - name: DATA_SOURCE_USER
+              value: opus_admin
+            - name: DATA_SOURCE_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: postgresql-secrets
+                  key: postgres-password
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+      volumes:
+        - name: config
+          configMap:
+            name: postgresql-config
+  volumeClaimTemplates:
+    - metadata:
+        name: pgdata
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: gp3
+        resources:
+          requests:
+            storage: 200Gi
+
+---
+# Service: Coordinator (primary endpoint)
+apiVersion: v1
+kind: Service
+metadata:
+  name: pg-coordinator
+  namespace: data
+  labels:
+    app: pg-coordinator
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5432
+      targetPort: 5432
+      name: postgres
+  selector:
+    app: pg-coordinator
+
+---
+# Service: Workers (headless for StatefulSet)
+apiVersion: v1
+kind: Service
+metadata:
+  name: pg-worker
+  namespace: data
+  labels:
+    app: pg-worker
+spec:
+  clusterIP: None
+  ports:
+    - port: 5432
+      targetPort: 5432
+      name: postgres
+  selector:
+    app: pg-worker
+
+---
+# Service: PgBouncer (connection pooling)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pgbouncer
+  namespace: data
+  labels:
+    app: pgbouncer
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: pgbouncer
+  template:
+    metadata:
+      labels:
+        app: pgbouncer
+    spec:
+      containers:
+        - name: pgbouncer
+          image: edoburu/pgbouncer:1.21.0
+          ports:
+            - containerPort: 5432
+              name: pgbouncer
+          env:
+            - name: DATABASE_URL
+              value: "postgres://opus_admin:$(POSTGRES_PASSWORD)@pg-coordinator:5432/opus_platform"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgresql-secrets
+                  key: postgres-password
+            - name: POOL_MODE
+              value: "transaction"
+            - name: MAX_CLIENT_CONN
+              value: "10000"
+            - name: DEFAULT_POOL_SIZE
+              value: "50"
+            - name: RESERVE_POOL_SIZE
+              value: "10"
+            - name: SERVER_IDLE_TIMEOUT
+              value: "300"
+            - name: CLIENT_IDLE_TIMEOUT
+              value: "0"
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "256Mi"
+            limits:
+              cpu: "1"
+              memory: "512Mi"
+          livenessProbe:
+            tcpSocket:
+              port: 5432
+            initialDelaySeconds: 10
+            periodSeconds: 10
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pgbouncer
+  namespace: data
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5432
+      targetPort: 5432
+      name: pgbouncer
+  selector:
+    app: pgbouncer
+
+---
+# Secret: PostgreSQL credentials (placeholder — use Vault in production)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgresql-secrets
+  namespace: data
+type: Opaque
+stringData:
+  postgres-password: "CHANGE_ME_USE_VAULT"
+  replication-password: "CHANGE_ME_USE_VAULT"

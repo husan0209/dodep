@@ -1,0 +1,89 @@
+# VictoriaMetrics single-node deployment
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: victoria-metrics
+  namespace: opus-casino
+  labels:
+    app: victoria-metrics
+spec:
+  serviceName: victoria-metrics
+  replicas: 1
+  selector:
+    matchLabels:
+      app: victoria-metrics
+  template:
+    metadata:
+      labels:
+        app: victoria-metrics
+      annotations:
+        prometheus.io/scrape: "true"
+    spec:
+      serviceAccountName: opus-casino
+      containers:
+      - name: victoria-metrics
+        image: victoriametrics/victoria-metrics:v1.97.0
+        args:
+        - --storageDataPath=/storage
+        - --retentionPeriod=3
+        - --promscrape.config=/etc/vm/prometheus.yml
+        - --httpListenAddr=:8428
+        - --search.maxQueryLen=1MB
+        - --search.maxUniqueTimeseries=200000
+        - --memory.allowedPercent=60
+        ports:
+        - name: http
+          containerPort: 8428
+        volumeMounts:
+        - name: storage
+          mountPath: /storage
+        - name: config
+          mountPath: /etc/vm
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "1Gi"
+          limits:
+            cpu: "2000m"
+            memory: "4Gi"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8428
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8428
+          initialDelaySeconds: 5
+          periodSeconds: 10
+      volumes:
+      - name: config
+        configMap:
+          name: victoria-metrics-config
+  volumeClaimTemplates:
+  - metadata:
+      name: storage
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 100Gi
+      storageClassName: premium-ssd
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: victoria-metrics
+  namespace: opus-casino
+  labels:
+    app: victoria-metrics
+spec:
+  selector:
+    app: victoria-metrics
+  ports:
+  - name: http
+    port: 8428
+    targetPort: 8428
+  type: ClusterIP

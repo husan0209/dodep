@@ -1,0 +1,287 @@
+# OpenTelemetry Collector Configuration
+# Collects and exports traces
+
+---
+# OTEL Collector ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-config
+  namespace: monitoring
+data:
+  otel-collector-config.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+      jaeger:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:14250
+          thrift_http:
+            endpoint: 0.0.0.0:14268
+          thrift_compact:
+            endpoint: 0.0.0.0:6831
+          thrift_binary:
+            endpoint: 0.0.0.0:6832
+      zipkin:
+        endpoint: 0.0.0.0:9411
+        
+    processors:
+      batch:
+        timeout: 5s
+        send_batch_size: 1000
+        send_batch_max_size: 2000
+        
+      memory_limiter:
+        check_interval: 1s
+        limit_mib: 512
+        spike_limit_mib: 128
+        
+      # Tail sampling for errors
+      tail_sampling:
+        decision_wait: 30s
+        num_traces: 10000
+        expected_new_traces_per_sec: 1000
+        policies:
+          - name: errors
+            type: status_code
+            status_code:
+              status_codes:
+                - ERROR
+          - name: probabilistic
+            type: probabilistic
+            probabilistic:
+              sampling_percentage: 10
+              
+      # Resource detection
+      resourcedetection:
+        detectors: [env, system, k8snode]
+        timeout: 10s
+        override: false
+        
+      # Span metrics
+      spanmetrics:
+        metrics_exporter: prometheus
+        dimensions_cache_size: 10000
+        dimensions:
+          - name: service.namespace
+            default: default
+          - name: deployment.environment
+            default: production
+            
+    exporters:
+      jaeger:
+        endpoint: jaeger-collector:14250
+        tls:
+          insecure: true
+          
+      clickhouse:
+        dsn: tcp://clickhouse.data.svc.cluster.local:9000
+        database: opus_casino
+        traces_table: traces
+        timeout: 5s
+        retry_on_failure:
+          enabled: true
+          initial_interval: 5s
+          max_interval: 30s
+          max_elapsed_time: 300s
+          
+      prometheus:
+        endpoint: "0.0.0.0:8889"
+        namespace: otel
+        const_labels:
+          cluster: opus-casino
+          
+      logging:
+        loglevel: debug
+        
+    service:
+      telemetry:
+        logs:
+          level: info
+        metrics:
+          address: 0.0.0.0:8888
+      pipelines:
+        traces:
+          receivers: [otlp, jaeger, zipkin]
+          processors: [memory_limiter, batch, tail_sampling]
+          exporters: [jaeger, clickhouse, logging]
+        metrics:
+          receivers: [otlp]
+          processors: [memory_limiter, batch, spanmetrics]
+          exporters: [prometheus, logging]
+
+---
+# OTEL Collector Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-collector
+  namespace: monitoring
+  labels:
+    app: otel-collector
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: otel-collector
+  template:
+    metadata:
+      labels:
+        app: otel-collector
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8888"
+    spec:
+      serviceAccountName: otel-collector
+      containers:
+        - name: otel-collector
+          image: otel/opentelemetry-collector-contrib:0.90.0
+          command:
+            - /otelcol-contrib
+            - --config=/conf/otel-collector-config.yaml
+          ports:
+            - name: otlp-grpc
+              containerPort: 4317
+            - name: otlp-http
+              containerPort: 4318
+            - name: jaeger-grpc
+              containerPort: 14250
+            - name: jaeger-http
+              containerPort: 14268
+            - name: jaeger-compact
+              containerPort: 6831
+            - name: jaeger-binary
+              containerPort: 6832
+            - name: zipkin
+              containerPort: 9411
+            - name: metrics
+              containerPort: 8888
+            - name: prometheus
+              containerPort: 8889
+          env:
+            - name: GOMAXPROCS
+              valueFrom:
+                resourceFieldRef:
+                  resource: limits.cpu
+            - name: GOMEMLIMIT
+              valueFrom:
+                resourceFieldRef:
+                  resource: limits.memory
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: 1000m
+              memory: 2Gi
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 13133
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 13133
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          volumeMounts:
+            - name: config
+              mountPath: /conf
+      volumes:
+        - name: config
+          configMap:
+            name: otel-collector-config
+            items:
+              - key: otel-collector-config.yaml
+                path: otel-collector-config.yaml
+
+---
+# OTEL Collector Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-collector
+  namespace: monitoring
+  labels:
+    app: otel-collector
+spec:
+  ports:
+    - name: otlp-grpc
+      port: 4317
+      targetPort: 4317
+    - name: otlp-http
+      port: 4318
+      targetPort: 4318
+    - name: jaeger-grpc
+      port: 14250
+      targetPort: 14250
+    - name: jaeger-http
+      port: 14268
+      targetPort: 14268
+    - name: jaeger-compact
+      port: 6831
+      targetPort: 6831
+    - name: jaeger-binary
+      port: 6832
+      targetPort: 6832
+    - name: zipkin
+      port: 9411
+      targetPort: 9411
+    - name: metrics
+      port: 8888
+      targetPort: 8888
+  selector:
+    app: otel-collector
+  type: ClusterIP
+
+---
+# OTEL Collector ServiceAccount
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: otel-collector
+  namespace: monitoring
+
+---
+# OTEL Collector ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: otel-collector
+rules:
+  - apiGroups: [""]
+    resources:
+      - nodes
+      - nodes/proxy
+      - services
+      - endpoints
+      - pods
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["extensions"]
+    resources:
+      - ingresses
+    verbs: ["get", "list", "watch"]
+  - nonResourceURLs: ["/metrics"]
+    verbs: ["get"]
+
+---
+# OTEL Collector ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: otel-collector
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: otel-collector
+subjects:
+  - kind: ServiceAccount
+    name: otel-collector
+    namespace: monitoring

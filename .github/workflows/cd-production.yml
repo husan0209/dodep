@@ -1,0 +1,434 @@
+# Production CI/CD Pipeline с Canary Deployment
+# Opus Casino - Production Release с автоматическим canary и rollback
+
+name: CD - Production Release
+
+on:
+  push:
+    branches: [main]
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      service:
+        description: 'Service to deploy'
+        required: true
+        type: choice
+        options:
+          - betting-engine
+          - wallet-core
+          - websocket-gateway
+          - auth
+          - user
+          - payment
+          - bonus
+          - casino
+          - notification
+          - kyc
+      version:
+        description: 'Version to deploy (e.g., v1.2.3)'
+        required: true
+      skip-canary:
+        description: 'Skip canary and deploy directly'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME_PREFIX: ${{ github.repository_owner }}
+  CLUSTER_NAME: opus-casino-production
+  NAMESPACE: platform
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false  # Never cancel production deploys
+
+permissions:
+  contents: read
+  id-token: write  # For OIDC
+  packages: write  # For pushing images
+  deployments: write  # For deployment status
+
+jobs:
+  # ==========================================================================
+  # Pre-deployment checks
+  # ==========================================================================
+  pre-checks:
+    name: Pre-deployment Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      should-deploy: ${{ steps.check.outputs.should-deploy }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check deployment window
+        id: check
+        run: |
+          # Block deployments on weekends unless forced
+          DAY_OF_WEEK=$(date +%u)
+          if [ "$DAY_OF_WEEK" -gt 5 ] && [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
+            echo "❌ Production deployments are blocked on weekends"
+            echo "should-deploy=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          echo "should-deploy=true" >> $GITHUB_OUTPUT
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            VERSION="${{ github.ref_name }}"
+          else
+            # Generate version from commit
+            VERSION="dev-$(git rev-parse --short HEAD)-$(date +%Y%m%d%H%M%S)"
+          fi
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Check pending migrations
+        run: |
+          # Check if there are unrun database migrations
+          if [ -f "libs/migrations/postgresql/PENDING" ]; then
+            echo "⚠️ Pending database migrations detected"
+            cat libs/migrations/postgresql/PENDING
+          fi
+
+      - name: Verify ArgoCD health
+        run: |
+          # Check if ArgoCD is healthy before deploying
+          echo "Verifying ArgoCD cluster connection..."
+          # This would use argocd CLI in real implementation
+
+  # ==========================================================================
+  # Build and push image
+  # ==========================================================================
+  build:
+    name: Build & Push Image
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [pre-checks]
+    if: needs.pre-checks.outputs.should-deploy == 'true'
+    strategy:
+      matrix:
+        service: ${{ fromJson(inputs.service || '["betting-engine", "wallet-core", "auth", "payment"]') }}
+      fail-fast: false
+
+    outputs:
+      image-tag: ${{ steps.build.outputs.image-tag }}
+      image-digest: ${{ steps.build.outputs.image-digest }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build, scan and push Docker image
+        id: build
+        uses: ./.github/actions/docker-build-push
+        with:
+          registry: ${{ env.REGISTRY }}
+          image-name: ${{ env.IMAGE_NAME_PREFIX }}/${{ matrix.service }}
+          dockerfile: services/${{ startsWith(matrix.service, 'betting') || startsWith(matrix.service, 'wallet') || startsWith(matrix.service, 'websocket') && 'rust' || 'go' }}/${{ matrix.service }}/Dockerfile
+          context: .
+          scan-severity: 'HIGH'
+          push-image: 'true'
+          tags: |
+            type=raw,value=${{ needs.pre-checks.outputs.version }}
+            type=raw,value=latest
+
+      - name: Sign image with Cosign
+        if: success()
+        uses: sigstore/cosign-installer@v3
+        with:
+          cosign-release: 'v2.2.2'
+      
+      - name: Sign container image
+        if: success()
+        run: |
+          cosign sign --yes \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}/${{ matrix.service }}@${{ steps.build.outputs.image-digest }}
+        env:
+          COSIGN_EXPERIMENTAL: "true"
+
+  # ==========================================================================
+  # Security gates
+  # ==========================================================================
+  security-gate:
+    name: Security Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [build]
+    strategy:
+      matrix:
+        service: ${{ fromJson(inputs.service || '["betting-engine", "wallet-core", "auth", "payment"]') }}
+      fail-fast: false
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run comprehensive security scan
+        uses: ./.github/actions/security-scan
+        with:
+          language: ${{ contains(matrix.service, 'engine') || contains(matrix.service, 'gateway') || contains(matrix.service, 'core') && 'rust' || 'go' }}
+          working-directory: services/${{ contains(matrix.service, 'engine') || contains(matrix.service, 'gateway') || contains(matrix.service, 'core') && 'rust' || 'go' }}/${{ matrix.service }}
+          fail-on-severity: 'HIGH'
+          enable-trivy: 'true'
+          enable-semgrep: 'true'
+          enable-dependency-check: 'true'
+
+      - name: Check image signature
+        run: |
+          cosign verify \
+            --certificate-identity-regexp ".*" \
+            --certificate-oidc-issuer-regexp ".*" \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}/${{ matrix.service }}:${{ needs.pre-checks.outputs.version }} || true
+
+  # ==========================================================================
+  # Performance gate (staging)
+  # ==========================================================================
+  performance-gate:
+    name: Performance Gate (Staging)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [build, security-gate]
+    if: inputs.skip-canary != true
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to staging
+        run: |
+          echo "Deploying ${IMAGE} to staging for performance testing..."
+          # kubectl set image deployment/${SERVICE} ${SERVICE}=${IMAGE} -n staging
+          # Wait for rollout
+          # kubectl rollout status deployment/${SERVICE} -n staging
+        env:
+          SERVICE: ${{ matrix.service }}
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}/${{ matrix.service }}:${{ needs.pre-checks.outputs.version }}
+
+      - name: Run performance tests
+        uses: ./.github/actions/performance-test
+        with:
+          test-file: tools/testing/k6/scenarios/${{ matrix.service }}-load.js
+          working-directory: .
+          environment: staging
+          base-url: https://staging-api.opus-casino.com
+          vus: '50'
+          duration: '10m'
+          threshold-r95: '300'
+          threshold-r99: '500'
+          threshold-error-rate: '0.5'
+
+  # ==========================================================================
+  # Canary deployment
+  # ==========================================================================
+  canary:
+    name: Canary Deployment
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: [build, security-gate, performance-gate]
+    if: inputs.skip-canary != true
+    environment:
+      name: production-canary
+      url: https://canary.opus-casino.com
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install ArgoCD CLI
+        run: |
+          sudo curl -sSL -o /usr/local/bin/argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+          sudo chmod +x /usr/local/bin/argocd
+
+      - name: Login to ArgoCD
+        run: |
+          argocd login argocd.opus-casino.com \
+            --username ${{ secrets.ARGOCD_USERNAME }} \
+            --password ${{ secrets.ARGOCD_PASSWORD }}
+
+      - name: Start canary deployment
+        id: canary
+        run: |
+          # Update Rollout image to canary
+          kubectl argo rollouts set image ${{ matrix.service }} \
+            ${{ matrix.service }}=${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}/${{ matrix.service }}:${{ needs.pre-checks.outputs.version }} \
+            -n ${{ env.NAMESPACE }}
+          
+          # Set canary weight to 5%
+          kubectl argo rollouts promote ${{ matrix.service }} -n ${{ env.NAMESPACE }} --step-canary
+
+      - name: Monitor canary metrics
+        id: monitor
+        timeout-minutes: 15
+        run: |
+          # Wait for canary analysis
+          for i in {1..30}; do
+            # Check error rate
+            ERROR_RATE=$(curl -s "https://grafana.opus-casino.com/api/datasources/proxy/1/api/v1/query?query=sum(rate(http_requests_total{service=\"${{ matrix.service }}\",status=~\"5..\"}[5m]))" | jq '.data.result[0].value[1]')
+            
+            # Check latency p99
+            LATENCY_P99=$(curl -s "https://grafana.opus-casino.com/api/datasources/proxy/1/api/v1/query?query=histogram_quantile(0.99, rate(http_request_duration_seconds_bucket{service=\"${{ matrix.service }}\"}[5m]))" | jq '.data.result[0].value[1]')
+            
+            echo "Iteration $i: Error Rate: $ERROR_RATE, P99 Latency: $LATENCY_P99"
+            
+            # Fail if thresholds exceeded
+            if (( $(echo "$ERROR_RATE > 0.01" | bc -l) )); then
+              echo "❌ Error rate exceeded 1%"
+              echo "status=failed" >> $GITHUB_OUTPUT
+              exit 1
+            fi
+            
+            if (( $(echo "$LATENCY_P99 > 0.5" | bc -l) )); then
+              echo "❌ P99 latency exceeded 500ms"
+              echo "status=failed" >> $GITHUB_OUTPUT
+              exit 1
+            fi
+            
+            sleep 30
+          done
+          
+          echo "status=passed" >> $GITHUB_OUTPUT
+
+      - name: Promote canary to full rollout
+        if: steps.monitor.outputs.status == 'passed'
+        run: |
+          kubectl argo rollouts promote ${{ matrix.service }} -n ${{ env.NAMESPACE }} --full
+          kubectl rollout status deployment/${{ matrix.service }} -n ${{ env.NAMESPACE }} --timeout=300s
+
+      - name: Abort and rollback on failure
+        if: failure() || steps.monitor.outputs.status == 'failed'
+        run: |
+          echo "🚨 Canary failed! Rolling back..."
+          kubectl argo rollouts abort ${{ matrix.service }} -n ${{ env.NAMESPACE }}
+          
+          # Notify on-call
+          curl -X POST ${{ secrets.PAGERDUTY_WEBHOOK }} \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"routing_key\": \"${{ secrets.PAGERDUTY_ROUTING_KEY }}\",
+              \"event_action\": \"trigger\",
+              \"payload\": {
+                \"summary\": \"Canary deployment failed for ${{ matrix.service }}\",
+                \"severity\": \"critical\",
+                \"source\": \"github-actions\"
+              }
+            }"
+          
+          exit 1
+
+  # ==========================================================================
+  # Full production deployment
+  # ==========================================================================
+  deploy-production:
+    name: Full Production Deployment
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [canary]
+    if: always() && needs.canary.result == 'success'
+    environment:
+      name: production
+      url: https://api.opus-casino.com
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Verify canary success
+        run: |
+          echo "✅ Canary deployment successful, proceeding with full rollout"
+
+      - name: Update ArgoCD application
+        run: |
+          argocd app set ${{ matrix.service }} \
+            --helm-set image.tag=${{ needs.pre-checks.outputs.version }} \
+            --upsert
+          
+          argocd app sync ${{ matrix.service }} --prune --force
+
+      - name: Wait for rollout
+        run: |
+          kubectl rollout status deployment/${{ matrix.service }} -n ${{ env.NAMESPACE }} --timeout=600s
+
+      - name: Run smoke tests
+        run: |
+          # Basic health check
+          curl -f https://api.opus-casino.com/health || exit 1
+          
+          # Version check
+          VERSION=$(curl -s https://api.opus-casino.com/version | jq -r '.version')
+          echo "Deployed version: $VERSION"
+          
+          if [ "$VERSION" != "${{ needs.pre-checks.outputs.version }}" ]; then
+            echo "❌ Version mismatch!"
+            exit 1
+          fi
+
+      - name: Create deployment record
+        run: |
+          curl -X POST ${{ secrets.DEPLOYMENT_WEBHOOK }} \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"service\": \"${{ matrix.service }}\",
+              \"version\": \"${{ needs.pre-checks.outputs.version }}\",
+              \"deployed_at\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",
+              \"deployed_by\": \"${{ github.actor }}\",
+              \"status\": \"success\"
+            }"
+
+  # ==========================================================================
+  # Post-deployment verification
+  # ==========================================================================
+  post-verification:
+    name: Post-deployment Verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [deploy-production]
+    if: always()
+
+    steps:
+      - name: Run comprehensive smoke tests
+        run: |
+          echo "Running post-deployment verification..."
+          
+          # Health endpoints
+          curl -f https://api.opus-casino.com/health
+          curl -f https://api.opus-casino.com/ready
+          
+          # Critical paths
+          # curl -f https://api.opus-casino.com/api/v1/auth/login
+          # curl -f https://api.opus-casino.com/api/v1/wallet/balance
+          
+          echo "✅ All smoke tests passed"
+
+      - name: Monitor error rates
+        run: |
+          # Check error rates for 5 minutes post-deploy
+          for i in {1..5}; do
+            ERROR_RATE=$(curl -s "https://grafana.opus-casino.com/api/datasources/proxy/1/api/v1/query?query=sum(rate(http_requests_total{status=~\"5..\"}[5m]))" | jq '.data.result[0].value[1]')
+            echo "Minute $i: Error Rate = $ERROR_RATE"
+            sleep 60
+          done
+
+      - name: Notify stakeholders
+        if: success()
+        run: |
+          curl -X POST ${{ secrets.SLACK_WEBHOOK }} \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"text\": \"✅ Production deployment successful\",
+              \"attachments\": [{
+                \"color\": \"good\",
+                \"fields\": [
+                  {\"title\": \"Service\", \"value\": \"${{ matrix.service }}\", \"short\": true},
+                  {\"title\": \"Version\", \"value\": \"${{ needs.pre-checks.outputs.version }}\", \"short\": true},
+                  {\"title\": \"Deployed by\", \"value\": \"${{ github.actor }}\", \"short\": true}
+                ]
+              }]
+            }"

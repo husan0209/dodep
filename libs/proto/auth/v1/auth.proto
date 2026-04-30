@@ -1,0 +1,233 @@
+// Auth Service - gRPC service definition
+// Handles user authentication, sessions, and 2FA
+
+syntax = "proto3";
+
+package auth.v1;
+
+option go_package = "github.com/opus-casino/proto/gen/go/auth/v1";
+option java_multiple_files = true;
+option java_package = "com.opuscasino.proto.auth.v1";
+
+import "common/v1/types.proto";
+import "common/v1/error.proto";
+import "google/protobuf/timestamp.proto";
+
+// AuthService handles authentication and session management
+service AuthService {
+  // Register creates a new user account
+  rpc Register(RegisterRequest) returns (RegisterResponse);
+
+  // Login authenticates user with credentials
+  rpc Login(LoginRequest) returns (LoginResponse);
+
+  // RefreshToken refreshes an access token using refresh token
+  rpc RefreshToken(RefreshTokenRequest) returns (RefreshTokenResponse);
+
+  // Logout invalidates a user session
+  rpc Logout(LogoutRequest) returns (LogoutResponse);
+
+  // ValidateToken validates an access token
+  rpc ValidateToken(ValidateTokenRequest) returns (ValidateTokenResponse);
+
+  // GetSession returns session information
+  rpc GetSession(GetSessionRequest) returns (GetSessionResponse);
+
+  // Enable2FA enables two-factor authentication for a user
+  rpc Enable2FA(Enable2FARequest) returns (Enable2FAResponse);
+
+  // Verify2FA verifies a TOTP code and completes 2FA setup
+  rpc Verify2FA(Verify2FARequest) returns (Verify2FAResponse);
+
+  // Disable2FA disables two-factor authentication
+  rpc Disable2FA(Disable2FARequest) returns (Disable2FAResponse);
+
+  // ChangePassword changes user password
+  rpc ChangePassword(ChangePasswordRequest) returns (ChangePasswordResponse);
+
+  // InitiatePasswordReset initiates password reset flow (sends email)
+  rpc InitiatePasswordReset(InitiatePasswordResetRequest) returns (InitiatePasswordResetResponse);
+
+  // ResetPassword completes password reset with token
+  rpc ResetPassword(ResetPasswordRequest) returns (ResetPasswordResponse);
+}
+
+// ============ Registration ============
+
+message RegisterRequest {
+  string email = 1;
+  string password = 2;
+  string username = 3;
+  string country = 4;  // ISO 3166-1 alpha-2
+  string currency = 5; // ISO 4217
+  string device_id = 6;
+  string ip_address = 7;
+  optional string referral_code = 8;
+}
+
+message RegisterResponse {
+  common.v1.UserId user_id = 1;
+  AuthToken tokens = 2;
+  Session session = 3;
+  common.v1.ErrorDetails error = 4;
+}
+
+// ============ Login ============
+
+message LoginRequest {
+  string email = 1;
+  string password = 2;
+  string device_id = 3;
+  string ip_address = 4;
+  optional string totp_code = 5;  // Required if 2FA enabled
+  bool remember_me = 6;
+}
+
+message LoginResponse {
+  common.v1.UserId user_id = 1;
+  AuthToken tokens = 2;
+  Session session = 3;
+  bool requires_2fa = 4;
+  string temp_token = 5;  // Temporary token for 2FA verification
+  common.v1.ErrorDetails error = 6;
+}
+
+// ============ Token Refresh ============
+
+message RefreshTokenRequest {
+  string refresh_token = 1;
+  string device_id = 2;
+}
+
+message RefreshTokenResponse {
+  AuthToken tokens = 1;
+  common.v1.ErrorDetails error = 2;
+}
+
+// ============ Logout ============
+
+message LogoutRequest {
+  common.v1.UserId user_id = 1;
+  string session_id = 2;
+}
+
+message LogoutResponse {
+  bool success = 1;
+  common.v1.ErrorDetails error = 2;
+}
+
+// ============ Token Validation ============
+
+message ValidateTokenRequest {
+  string access_token = 1;
+}
+
+message ValidateTokenResponse {
+  bool valid = 1;
+  common.v1.UserId user_id = 2;
+  string session_id = 3;
+  map<string, string> claims = 4;
+  common.v1.ErrorDetails error = 5;
+}
+
+// ============ Session ============
+
+message GetSessionRequest {
+  string session_id = 1;
+}
+
+message GetSessionResponse {
+  Session session = 1;
+}
+
+// ============ 2FA ============
+
+message Enable2FARequest {
+  common.v1.UserId user_id = 1;
+}
+
+message Enable2FAResponse {
+  string secret = 1;       // TOTP secret (base32)
+  string qr_code_uri = 2;  // otpauth:// URI for QR code
+  string backup_codes = 3; // JSON array of backup codes
+  common.v1.ErrorDetails error = 4;
+}
+
+message Verify2FARequest {
+  common.v1.UserId user_id = 1;
+  string totp_code = 2;
+}
+
+message Verify2FAResponse {
+  bool success = 1;
+  common.v1.ErrorDetails error = 2;
+}
+
+message Disable2FARequest {
+  common.v1.UserId user_id = 1;
+  string totp_code = 2;
+}
+
+message Disable2FAResponse {
+  bool success = 1;
+  common.v1.ErrorDetails error = 2;
+}
+
+// ============ Password Management ============
+
+message ChangePasswordRequest {
+  common.v1.UserId user_id = 1;
+  string current_password = 2;
+  string new_password = 3;
+}
+
+message ChangePasswordResponse {
+  bool success = 1;
+  common.v1.ErrorDetails error = 2;
+}
+
+message InitiatePasswordResetRequest {
+  string email = 1;
+  string ip_address = 2;
+}
+
+message InitiatePasswordResetResponse {
+  bool success = 1;  // Always true to prevent email enumeration
+  common.v1.ErrorDetails error = 2;
+}
+
+message ResetPasswordRequest {
+  string token = 1;
+  string new_password = 2;
+}
+
+message ResetPasswordResponse {
+  bool success = 1;
+  common.v1.ErrorDetails error = 2;
+}
+
+// ============ Domain Models ============
+
+// AuthToken represents JWT token pair
+message AuthToken {
+  string access_token = 1;
+  string refresh_token = 2;
+  int64 expires_in = 3;         // Access token TTL in seconds
+  int64 refresh_expires_in = 4; // Refresh token TTL in seconds
+  string token_type = 5;        // "Bearer"
+}
+
+// Session represents an active user session
+message Session {
+  string session_id = 1;
+  common.v1.UserId user_id = 2;
+  string device_id = 3;
+  string device_type = 4;
+  string ip_address = 5;
+  string user_agent = 6;
+  string country = 7;
+  google.protobuf.Timestamp created_at = 8;
+  google.protobuf.Timestamp expires_at = 9;
+  google.protobuf.Timestamp last_activity = 10;
+  bool is_active = 11;
+}

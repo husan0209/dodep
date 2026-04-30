@@ -1,0 +1,18 @@
+apiVersion: v2
+name: betting-engine
+description: Helm chart for Betting Engine service
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+dependencies:
+  - name: service-chart
+    version: 0.1.0
+    repository: "file://../service-chart"
+keywords:
+  - betting
+  - casino
+  - rust
+home: https://opus.casino
+maintainers:
+  - name: Platform Team
+    email: platform@opus.casino

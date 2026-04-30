@@ -1,0 +1,310 @@
+# Litmus Chaos Engineering Configuration
+# Opus Casino - Production Resilience Testing
+
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosEngine
+metadata:
+  name: opus-casino-production-chaos
+  namespace: chaos-testing
+spec:
+  # Service under test
+  appinfo:
+    appns: platform
+    applabel: app
+    appkind: deployment
+  
+  # Chaos service account
+  chaosServiceAccount: chaos-admin
+  
+  # Run mode: parallel or serial
+  jobCleanUpPolicy: retain
+  
+  # Non-interactive mode
+  annotationCheck: 'false'
+  
+  # Experiments to run
+  experiments:
+    # ========================================================================
+    # Pod Deletion - Simulate pod crashes
+    # ========================================================================
+    - name: pod-delete
+      spec:
+        components:
+          env:
+            - name: TOTAL_CHAOS_DURATION
+              value: '60'  # 60 seconds
+            - name: CHAOS_INTERVAL
+              value: '30'  # Every 30 seconds
+            - name: FORCE
+              value: 'true'
+            - name: CHAOS_PERCENTAGE
+              value: '25'  # Delete 25% of pods
+            - name: SEQUENCE
+              value: 'parallel'
+        
+        # Target specific services
+        probe:
+          - name: check-service-health
+            type: httpProbe
+            httpProbe/inputs:
+              url: 'http://betting-engine.platform.svc.cluster.local:8080/health'
+              method:
+                get:
+                  criteria: '==200'
+            mode: SOT
+            runProperties:
+              probeTimeout: 5s
+              interval: 10s
+              attempt: 1
+              initialDelay: 0s
+    
+    # ========================================================================
+    # Network Latency - Simulate network delays
+    # ========================================================================
+    - name: network-latency
+      spec:
+        components:
+          env:
+            - name: NETWORK_INTERFACE
+              value: 'eth0'
+            - name: LATENCY
+              value: '500'  # 500ms latency
+            - name: JITTER
+              value: '100'  # ±100ms jitter
+            - name: TOTAL_CHAOS_DURATION
+              value: '120'
+            - name: CHAOS_INTERVAL
+              value: '60'
+            - name: DESTINATION_IPS
+              value: '["10.0.0.0/8"]'  # Internal network only
+    
+    # ========================================================================
+    # Network Partition - Simulate network split
+    # ========================================================================
+    - name: network-partition
+      spec:
+        components:
+          env:
+            - name: NETWORK_INTERFACE
+              value: 'eth0'
+            - name: TOTAL_CHAOS_DURATION
+              value: '60'
+            - name: CHAOS_INTERVAL
+              value: '30'
+            - name: DESTINATION_IPS
+              value: '["10.0.0.0/8"]'
+    
+    # ========================================================================
+    # CPU Stress - Simulate high CPU load
+    # ========================================================================
+    - name: cpu-stress
+      spec:
+        components:
+          env:
+            - name: CPU_CORES
+              value: '2'
+            - name: TOTAL_CHAOS_DURATION
+              value: '120'
+            - name: CHAOS_INTERVAL
+              value: '60'
+            - name: CPU_LOAD
+              value: '80'  # 80% CPU load
+    
+    # ========================================================================
+    # Memory Stress - Simulate memory pressure
+    # ========================================================================
+    - name: memory-stress
+      spec:
+        components:
+          env:
+            - name: MEMORY_PERCENTAGE
+              value: '80'  # Consume 80% of memory
+            - name: MEMORY_CONSUMPTION
+              value: '2G'
+            - name: TOTAL_CHAOS_DURATION
+              value: '120'
+            - name: CHAOS_INTERVAL
+              value: '60'
+    
+    # ========================================================================
+    # Disk Fill - Simulate disk space issues
+    # ========================================================================
+    - name: disk-fill
+      spec:
+        components:
+          env:
+            - name: FILL_PERCENTAGE
+              value: '80'
+            - name: TOTAL_CHAOS_DURATION
+              value: '180'
+            - name: CHAOS_INTERVAL
+              value: '60'
+    
+    # ========================================================================
+    # Pod CPU Limit - Test resource limits
+    # ========================================================================
+    - name: pod-cpu-limit
+      spec:
+        components:
+          env:
+            - name: CPU_LIMIT
+              value: '100m'  # Restrict to 100m CPU
+            - name: TOTAL_CHAOS_DURATION
+              value: '120'
+    
+    # ========================================================================
+    # Kubernetes Node Drain - Simulate node failure
+    # ========================================================================
+    - name: k8s-node-drain
+      spec:
+        components:
+          env:
+            - name: TOTAL_CHAOS_DURATION
+              value: '300'  # 5 minutes
+            - name: CHAOS_INTERVAL
+              value: '300'
+            - name: DRAIN_TIMEOUT
+              value: '60'
+    
+    # ========================================================================
+    # Database Failure - Simulate DB connection issues
+    # ========================================================================
+    - name: postgresql-failure
+      spec:
+        components:
+          env:
+            - name: DATABASE_SERVICE_NAME
+              value: 'postgres-primary.platform.svc.cluster.local'
+            - name: DATABASE_PORT
+              value: '5432'
+            - name: TOTAL_CHAOS_DURATION
+              value: '60'
+            - name: CHAOS_INTERVAL
+              value: '30'
+    
+    # ========================================================================
+    # Redis Cache Failure - Simulate cache unavailability
+    # ========================================================================
+    - name: redis-failure
+      spec:
+        components:
+          env:
+            - name: REDIS_SERVICE_NAME
+              value: 'redis-cluster.platform.svc.cluster.local'
+            - name: REDIS_PORT
+              value: '6379'
+            - name: TOTAL_CHAOS_DURATION
+              value: '60'
+            - name: CHAOS_INTERVAL
+              value: '30'
+
+---
+# Chaos Schedule - Automated chaos experiments
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosSchedule
+metadata:
+  name: opus-casino-chaos-schedule
+  namespace: chaos-testing
+spec:
+  # Schedule for chaos experiments
+  schedule:
+    # Run chaos experiments every Tuesday at 3AM UTC
+    cron: '0 3 * * 2'
+    
+  # Experiment references
+  experimentList:
+    - name: pod-delete
+    - name: network-latency
+  
+  # History limit
+  history:
+    limit: 5
+  
+  # Execution policy
+  executionPolicy:
+    # Don't run if previous experiment is still running
+    dontOverRun: true
+    # Stop on first failure
+    stopOnFailure: false
+
+---
+# Chaos Hub - Custom experiments for Opus Casino
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosHub
+metadata:
+  name: opus-casino-chaos-hub
+  namespace: chaos-testing
+spec:
+  chaoshub:
+    type: local
+    path: /charts
+    repo:
+      url: https://github.com/opus-casino/chaos-experiments
+      branch: main
+
+---
+# Service Account for Chaos
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: chaos-admin
+  namespace: chaos-testing
+  labels:
+    name: chaos-admin
+---
+# ClusterRole for Chaos
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: chaos-admin
+  labels:
+    name: chaos-admin
+rules:
+  - apiGroups: ["", "extensions", "apps", "batch", "litmuschaos.io"]
+    resources: ["*"]
+    verbs: ["*"]
+---
+# ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: chaos-admin
+  labels:
+    name: chaos-admin
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: chaos-admin
+subjects:
+  - kind: ServiceAccount
+    name: chaos-admin
+    namespace: chaos-testing
+
+---
+# Notification Configuration for Chaos Results
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: chaos-notification
+  namespace: chaos-testing
+data:
+  slack-webhook: |
+    https://hooks.slack.com/services/XXX/YYY/ZZZ
+  pagerduty-key: |
+    your-pagerduty-routing-key
+  notification-rules: |
+    {
+      "on_start": {
+        "slack": true,
+        "pagerduty": false
+      },
+      "on_complete": {
+        "slack": true,
+        "pagerduty": false
+      },
+      "on_fail": {
+        "slack": true,
+        "pagerduty": true,
+        "severity": "critical"
+      }
+    }

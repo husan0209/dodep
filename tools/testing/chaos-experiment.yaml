@@ -1,0 +1,40 @@
+# Litmus Chaos experiment for betting-engine
+
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosEngine
+metadata:
+  name: betting-engine-chaos
+  namespace: opus-casino
+spec:
+  appinfo:
+    appns: opus-casino
+    applabel: app=betting-engine
+    appkind: deployment
+  chaosServiceAccount: litmus-admin
+  experiments:
+  - name: pod-delete
+    spec:
+      components:
+        env:
+        - name: TOTAL_CHAOS_DURATION
+          value: '60'
+        - name: CHAOS_INTERVAL
+          value: '30'
+        - name: FORCE
+          value: 'true'
+  - name: network-loss
+    spec:
+      components:
+        env:
+        - name: TOTAL_CHAOS_DURATION
+          value: '30'
+        - name: NETWORK_PACKET_LOSS_PERCENTAGE
+          value: '50'
+  - name: container-kill
+    spec:
+      components:
+        env:
+        - name: TOTAL_CHAOS_DURATION
+          value: '60'
+        - name: CHAOS_INTERVAL
+          value: '30'

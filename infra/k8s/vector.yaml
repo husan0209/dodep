@@ -1,0 +1,36 @@
+# Vector log aggregator configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vector-config
+  namespace: opus-casino
+data:
+  vector.toml: |
+    [sources.k8s_logs]
+    type = "kubernetes_logs"
+    use_apiserver_cache = true
+    pod_annotation_fields = { container_name = "container_name", pod_labels = "pod_labels", pod_annotations = "pod_annotations", pod_namespace = "pod_namespace" }
+    
+    [transforms.app_logs]
+    type = "filter"
+    inputs = ["k8s_logs"]
+    condition = "starts_with(.pod_namespace, 'opus-casino')"
+    
+    [transforms.parse_json]
+    type = "remap"
+    inputs = ["app_logs"]
+    source = '''
+    .message = parse_json!(.message) ?? .message
+    '''
+    
+    [sinks.clickhouse]
+    type = "clickhouse"
+    inputs = ["parse_json"]
+    endpoint = "http://clickhouse.opus-casino.svc.cluster.local:8123"
+    database = "logs"
+    table = "vector_logs"
+    compression = "lz4"
+    encoding = { codec = "json" }
+    healthcheck = { enabled = true }
+    request = { timeout_secs = 60 }
+    buffer = { type = "memory", max_events = 500000, flush_period_ms = 1000 }

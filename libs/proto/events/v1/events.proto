@@ -1,0 +1,562 @@
+// Platform Events for Redpanda/Kafka
+// These messages are published to event streams for async processing
+
+syntax = "proto3";
+
+package events.v1;
+
+option go_package = "github.com/opus-casino/proto/gen/go/events/v1";
+option java_multiple_files = true;
+option java_package = "com.opuscasino.proto.events.v1";
+
+import "common/v1/types.proto";
+import "common/v1/money.proto";
+import "google/protobuf/timestamp.proto";
+
+// ============ BET EVENTS ============
+// Topic: bets.bet.placed
+// Key: user_id (string)
+// Partitioning: by user_id
+
+message BetPlacedEvent {
+  string event_id = 1;                    // Unique event ID (UUID v4)
+  google.protobuf.Timestamp timestamp = 2;
+  string user_id = 3;
+  string bet_id = 4;
+  common.v1.BetType bet_type = 5;
+  common.v1.Money stake = 6;
+  string odds = 7;
+  common.v1.Money potential_win = 8;
+  string event_id_external = 9;           // External sports event ID
+  string market_id = 10;
+  string selection_id = 11;
+  string currency = 12;
+  string device_id = 13;
+  string ip_address = 14;
+  string client_request_id = 15;          // For idempotency
+  map<string, string> metadata = 16;
+}
+
+// Topic: bets.bet.settled
+// Key: bet_id (string)
+
+message BetSettledEvent {
+  string event_id = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  string user_id = 3;
+  string bet_id = 4;
+  BetResult result = 5;
+  common.v1.Money actual_win = 6;
+  common.v1.Money pnl = 7;                // Profit/Loss (win - stake)
+  string settlement_source = 8;           // Source of result
+  google.protobuf.Timestamp settled_at = 9;
+}
+
+// Topic: bets.bet.cancelled
+// Key: bet_id (string)
+
+message BetCancelledEvent {
+  string event_id = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  string user_id = 3;
+  string bet_id = 4;
+  string reason = 5;
+  string cancelled_by = 6;                // "user", "admin", "system"
+  common.v1.Money refund_amount = 7;
+}
+
+// ============ USER EVENTS ============
+// Topic: users.user.registered
+// Key: user_id (string)
+
+message UserRegisteredEvent {
+  string event_id = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  string user_id = 3;
+  string email = 4;
+  string username = 5;
+  string country = 6;
+  string currency = 7;
+  string device_id = 8;
+  string ip_address = 9;
+  optional string referral_code = 10;
+}
+
+// Topic: users.user.verified
+// Key: user_id (string)
+
+message UserVerifiedEvent {
+  string event_id = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  string user_id = 3;
+  VerificationType verification_type = 4;
+  string verified_by = 5;                 // "system", "admin", "kyc_provider"
+}
+
+// Topic: users.user.kyc.status_changed
+// Key: user_id (string)
+
+message UserKycStatusChangedEvent {
+  string event_id = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  string user_id = 3;
+  KycStatus old_status = 4;
+  KycStatus new_status = 5;
+  string reason = 6;
+  string reviewed_by = 7;
+}
+
+// Topic: users.session.created
+// Key: session_id (string)
+
+message SessionCreatedEvent {
+  string event_id = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  string session_id = 3;
+  string user_id = 4;
+  string device_id = 5;
+  string device_type = 6;
+  string ip_address = 7;
+  string country = 8;
+  string user_agent = 9;
+}
+
+// Topic: users.session.terminated
+// Key: session_id (string)
+
+message SessionTerminatedEvent {
+  string event_id = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  string session_id = 3;
+  string user_id = 4;
+  SessionTerminateReason reason = 5;
+}
+
+// ============ PAYMENT EVENTS ============
+// Topic: payments.deposit.initiated
+// Key: user_id (string)
+
+message DepositInitiatedEvent {
+  string event_id = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  string user_id = 3;
+  string deposit_id = 4;
+  common.v1.Money amount = 5;
+  string payment_method = 6;
+  string payment_provider = 7;
+  string currency = 8;
+  string device_id = 9;
+  string ip_address = 10;
+}
+
+// Topic: payments.deposit.completed
+// Key: deposit_id (string)
+
+message DepositCompletedEvent {
+  string event_id = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  string user_id = 3;
+  string deposit_id = 4;
+  common.v1.Money amount = 5;
+  string payment_method = 6;
+  string payment_provider = 7;
+  string transaction_id = 8;  // Provider transaction ID
+  google.protobuf.Timestamp completed_at = 9;
+}
+
+// Topic: payments.deposit.failed
+// Key: deposit_id (string)
+
+message DepositFailedEvent {
+  string event_id = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  string user_id = 3;
+  string deposit_id = 4;
+  common.v1.Money amount = 5;
+  string payment_method = 6;
+  string error_code = 7;
+  string error_message = 8;
+}
+
+// Topic: payments.withdrawal.requested
+// Key: user_id (string)
+
+message WithdrawalRequestedEvent {
+  string event_id = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  string user_id = 3;
+  string withdrawal_id = 4;
+  common.v1.Money amount = 5;
+  string payment_method = 6;
+  string payment_details = 7;  // Encrypted payment details
+  string currency = 8;
+}
+
+// Topic: payments.withdrawal.approved
+// Key: withdrawal_id (string)
+
+message WithdrawalApprovedEvent {
+  string event_id = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  string user_id = 3;
+  string withdrawal_id = 4;
+  common.v1.Money amount = 5;
+  string approved_by = 6;     // "system", "admin"
+  string transaction_id = 7;
+}
+
+// Topic: payments.withdrawal.rejected
+// Key: withdrawal_id (string)
+
+message WithdrawalRejectedEvent {
+  string event_id = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  string user_id = 3;
+  string withdrawal_id = 4;
+  common.v1.Money amount = 5;
+  string rejection_reason = 6;
+  string rejected_by = 7;
+}
+
+// ============ CASINO EVENTS ============
+// Topic: casino.game.started
+// Key: session_id (string)
+
+message CasinoGameStartedEvent {
+  string event_id = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  string user_id = 3;
+  string game_session_id = 4;
+  string game_id = 5;
+  string provider_id = 6;
+  string device_type = 7;
+}
+
+// Topic: casino.game.round.completed
+// Key: game_session_id (string)
+
+message CasinoRoundCompletedEvent {
+  string event_id = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  string user_id = 3;
+  string game_session_id = 4;
+  string game_id = 5;
+  string round_id = 6;
+  common.v1.Money bet_amount = 7;
+  common.v1.Money win_amount = 8;
+  common.v1.Money net_result = 9;   // win - bet
+  string currency = 10;
+  google.protobuf.Timestamp round_started = 11;
+  google.protobuf.Timestamp round_ended = 12;
+}
+
+// Topic: casino.game.ended
+// Key: game_session_id (string)
+
+message CasinoGameEndedEvent {
+  string event_id = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  string user_id = 3;
+  string game_session_id = 4;
+  string game_id = 5;
+  common.v1.Money total_bet = 6;
+  common.v1.Money total_win = 7;
+  common.v1.Money net_result = 8;
+  int64 rounds_played = 9;
+  google.protobuf.Timestamp started_at = 10;
+  google.protobuf.Timestamp ended_at = 11;
+}
+
+// ============ BONUS EVENTS ============
+// Topic: bonus.bonus.activated
+// Key: user_id (string)
+
+message BonusActivatedEvent {
+  string event_id = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  string user_id = 3;
+  string bonus_id = 4;
+  string bonus_type = 5;          // "welcome", "deposit", "free_spins", "cashback"
+  common.v1.Money bonus_amount = 6;
+  int32 free_spins_count = 7;
+  string wagering_requirement = 8;
+  google.protobuf.Timestamp expires_at = 9;
+}
+
+// Topic: bonus.wagering.progress_updated
+// Key: user_id (string)
+
+message WageringProgressUpdatedEvent {
+  string event_id = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  string user_id = 3;
+  string bonus_id = 4;
+  common.v1.Money wagered_amount = 5;
+  common.v1.Money required_amount = 6;
+  double progress_percentage = 7;
+  bool is_completed = 8;
+}
+
+// ============ FRAUD EVENTS ============
+// Topic: fraud.alert.created
+// Key: user_id (string)
+
+message FraudAlertCreatedEvent {
+  string event_id = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  string user_id = 3;
+  string alert_id = 4;
+  FraudAlertType alert_type = 5;
+  string risk_score = 6;
+  string reason = 7;
+  map<string, string> context = 8;
+}
+
+// Topic: fraud.action.taken
+// Key: user_id (string)
+
+message FraudActionTakenEvent {
+  string event_id = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  string user_id = 3;
+  string alert_id = 4;
+  FraudAction action = 5;
+  string taken_by = 6;          // "system", "fraud_analyst"
+  string reason = 7;
+}
+
+// ============ AFFILIATE EVENTS ============
+// Topic: affiliate.enrollment.requested
+// Key: user_id (string)
+
+message AffiliateEnrollmentRequestedEvent {
+  string event_id = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  string user_id = 3;
+  string enrollment_request_id = 4;
+  string reason = 5;
+}
+
+// Topic: affiliate.enrollment.approved
+// Key: affiliate_id (string)
+
+message AffiliateEnrollmentApprovedEvent {
+  string event_id = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  string affiliate_id = 3;
+  string enrollment_request_id = 4;
+  string user_id = 5;
+  string approved_by = 6;
+  string affiliate_code = 7;
+}
+
+// Topic: affiliate.enrollment.rejected
+// Key: user_id (string)
+
+message AffiliateEnrollmentRejectedEvent {
+  string event_id = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  string user_id = 3;
+  string enrollment_request_id = 4;
+  string rejected_by = 5;
+  string reason = 6;
+}
+
+// Topic: affiliate.click.tracked
+// Key: affiliate_id (string)
+
+message AffiliateClickTrackedEvent {
+  string event_id = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  string affiliate_id = 3;
+  string affiliate_code = 4;
+  string click_id = 5;
+  string campaign = 6;
+  string landing_page = 7;
+  string ip_hash = 8;
+  string user_agent_hash = 9;
+  string device_fingerprint = 10;
+  string country_code = 11;
+}
+
+// Topic: affiliate.attribution.created
+// Key: affiliate_id (string)
+
+message AffiliateAttributionCreatedEvent {
+  string event_id = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  string affiliate_id = 3;
+  string referred_user_id = 4;
+  string click_id = 5;
+}
+
+// Topic: affiliate.player.ftd
+// Key: affiliate_id (string)
+
+message AffiliatePlayerFTDEvent {
+  string event_id = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  string affiliate_id = 3;
+  string referred_user_id = 4;
+  string deposit_id = 5;
+  common.v1.Money amount = 6;
+}
+
+// Topic: affiliate.commission.accrued
+// Key: affiliate_id (string)
+
+message AffiliateCommissionAccruedEvent {
+  string event_id = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  string affiliate_id = 3;
+  string earning_id = 4;
+  string referred_user_id = 5;
+  common.v1.Money ggr_amount = 6;
+  common.v1.Money ngr_amount = 7;
+  common.v1.Money commission_amount = 8;
+  string commission_rate = 9;
+  google.protobuf.Timestamp hold_until = 10;
+}
+
+// Topic: affiliate.commission.released
+// Key: affiliate_id (string)
+
+message AffiliateCommissionReleasedEvent {
+  string event_id = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  string affiliate_id = 3;
+  string earning_id = 4;
+  common.v1.Money commission_amount = 5;
+}
+
+// Topic: affiliate.commission.reversed
+// Key: affiliate_id (string)
+
+message AffiliateCommissionReversedEvent {
+  string event_id = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  string affiliate_id = 3;
+  string earning_id = 4;
+  string reason = 5;
+  common.v1.Money amount = 6;
+}
+
+// Topic: affiliate.payout.requested
+// Key: affiliate_id (string)
+
+message AffiliatePayoutRequestedEvent {
+  string event_id = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  string affiliate_id = 3;
+  string payout_id = 4;
+  common.v1.Money amount = 5;
+  string method_id = 6;
+}
+
+// Topic: affiliate.payout.approved
+// Key: affiliate_id (string)
+
+message AffiliatePayoutApprovedEvent {
+  string event_id = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  string affiliate_id = 3;
+  string payout_id = 4;
+  common.v1.Money amount = 5;
+  string approved_by = 6;
+  string provider_reference = 7;
+}
+
+// Topic: affiliate.payout.rejected
+// Key: affiliate_id (string)
+
+message AffiliatePayoutRejectedEvent {
+  string event_id = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  string affiliate_id = 3;
+  string payout_id = 4;
+  common.v1.Money amount = 5;
+  string rejected_by = 6;
+  string reason = 7;
+}
+
+// Topic: affiliate.payout.paid
+// Key: affiliate_id (string)
+
+message AffiliatePayoutPaidEvent {
+  string event_id = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  string affiliate_id = 3;
+  string payout_id = 4;
+  common.v1.Money amount = 5;
+  string provider_reference = 6;
+}
+
+// Topic: affiliate.fraud.flagged
+// Key: affiliate_id (string)
+
+message AffiliateFraudFlaggedEvent {
+  string event_id = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  string affiliate_id = 3;
+  string referred_user_id = 4;
+  string flag_type = 5;
+  string severity = 6;
+  string details = 7;
+}
+
+// ============ ENUMS ============
+
+enum BetResult {
+  BET_RESULT_UNSPECIFIED = 0;
+  BET_RESULT_WON = 1;
+  BET_RESULT_LOST = 2;
+  BET_RESULT_VOID = 3;
+  BET_RESULT_HALF_WON = 4;
+  BET_RESULT_HALF_LOST = 5;
+}
+
+enum VerificationType {
+  VERIFICATION_TYPE_UNSPECIFIED = 0;
+  VERIFICATION_TYPE_EMAIL = 1;
+  VERIFICATION_TYPE_PHONE = 2;
+  VERIFICATION_TYPE_IDENTITY = 3;
+  VERIFICATION_TYPE_ADDRESS = 4;
+}
+
+enum KycStatus {
+  KYC_STATUS_UNSPECIFIED = 0;
+  KYC_STATUS_PENDING = 1;
+  KYC_STATUS_IN_REVIEW = 2;
+  KYC_STATUS_VERIFIED = 3;
+  KYC_STATUS_REJECTED = 4;
+  KYC_STATUS_EXPIRED = 5;
+}
+
+enum SessionTerminateReason {
+  SESSION_TERMINATE_REASON_UNSPECIFIED = 0;
+  SESSION_TERMINATE_REASON_LOGOUT = 1;
+  SESSION_TERMINATE_REASON_EXPIRED = 2;
+  SESSION_TERMINATE_REASON_KICKED = 3;
+  SESSION_TERMINATE_REASON_SECURITY = 4;
+}
+
+enum FraudAlertType {
+  FRAUD_ALERT_TYPE_UNSPECIFIED = 0;
+  FRAUD_ALERT_TYPE_VELOCITY_CHECK = 1;
+  FRAUD_ALERT_TYPE_MULTI_ACCOUNT = 2;
+  FRAUD_ALERT_TYPE_BONUS_ABUSE = 3;
+  FRAUD_ALERT_TYPE_ARBITRAGE_BETTING = 4;
+  FRAUD_ALERT_TYPE_PAYMENT_FRAUD = 5;
+  FRAUD_ALERT_TYPE_IDENTITY_FRAUD = 6;
+  FRAUD_ALERT_TYPE_GEO_VIOLATION = 7;
+}
+
+enum FraudAction {
+  FRAUD_ACTION_UNSPECIFIED = 0;
+  FRAUD_ACTION_NONE = 1;
+  FRAUD_ACTION_WARNING = 2;
+  FRAUD_ACTION_ACCOUNT_REVIEW = 3;
+  FRAUD_ACTION_ACCOUNT_FROZEN = 4;
+  FRAUD_ACTION_ACCOUNT_CLOSED = 5;
+  FRAUD_ACTION_FUNDS_WITHHELD = 6;
+}

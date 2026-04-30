@@ -1,0 +1,29 @@
+# Code owners for Opus Casino repository
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default owners
+* @opus-casino/core-team
+
+# Rust services
+/services/rust/** @opus-casino/rust-team
+
+# Go services
+/services/go/** @opus-casino/go-team
+
+# Python services
+/services/python/** @opus-casino/python-team
+
+# Frontend
+/apps/web/** @opus-casino/frontend-team
+/apps/admin/** @opus-casino/frontend-team
+
+# Mobile
+/apps/mobile/** @opus-casino/mobile-team
+
+# Infrastructure
+/infra/k8s/** @opus-casino/devops-team
+/infra/terraform/** @opus-casino/devops-team
+/infra/docker/** @opus-casino/devops-team
+
+# Documentation
+/docs/** @opus-casino/core-team

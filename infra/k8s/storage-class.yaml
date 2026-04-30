@@ -1,0 +1,87 @@
+# StorageClass для Kubernetes
+# Определяет типы хранилищ для Persistent Volumes
+
+---
+# Standard StorageClass (gp3) - для общих целей
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: standard
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+provisioner: ebs.csi.aws.com
+parameters:
+  type: gp3
+  fsType: ext4
+  encrypted: "true"
+  kmsKeyId: ""  # Будет заполнено через Terraform
+reclaimPolicy: Retain
+mountOptions:
+  - discard
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+
+---
+# Fast StorageClass (io2) - для баз данных
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: fast
+  annotations:
+    description: "High-performance SSD for databases"
+provisioner: ebs.csi.aws.com
+parameters:
+  type: io2
+  fsType: ext4
+  encrypted: "true"
+  iops: "10000"  # IOPS для io2
+reclaimPolicy: Retain
+mountOptions:
+  - discard
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+
+---
+# Archive StorageClass (sc1) - для холодных данных
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: archive
+  annotations:
+    description: "Low-cost HDD for cold data"
+provisioner: ebs.csi.aws.com
+parameters:
+  type: sc1
+  fsType: ext4
+  encrypted: "true"
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: false
+
+---
+# EFS StorageClass - для shared storage
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: efs
+  annotations:
+    description: "Elastic File System for shared storage"
+provisioner: efs.csi.aws.com
+parameters:
+  provisioningMode: efs-ap
+  fileSystemId: ""  # Будет заполнено через Terraform
+  directoryPerms: "700"
+reclaimPolicy: Retain
+volumeBindingMode: Immediate
+
+---
+# Local StorageClass - для кэша (без репликации)
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: local
+  annotations:
+    description: "Local ephemeral storage for cache"
+provisioner: kubernetes.io/no-provisioner
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Delete

@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "casino.fullname" . }}-config
+  labels:
+    {{- include "casino.labels" . | nindent 4 }}
+data:
+  app-env: {{ .Values.env | dig 0 "value" "development" | quote }}
+  grpc-port: "{{ .Values.service.grpcTargetPort }}"
+  
+  # Casino provider configurations
+  casino.providers.enabled: "true"
+  casino.cache.enabled: "{{ .Values.casino.cache.enabled }}"
+  casino.cache.ttl: "{{ .Values.casino.cache.ttl }}"
+  casino.session.timeout: "{{ .Values.casino.session.timeout }}"
+  casino.session.max-concurrent: "{{ .Values.casino.session.max_concurrent }}"

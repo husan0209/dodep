@@ -1,0 +1,146 @@
+# Resource Quotas для namespaces
+# Ограничивает потребление ресурсов на namespace
+
+---
+# Development Quotas
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: dev-quota
+  namespace: dev
+  labels:
+    environment: development
+spec:
+  hard:
+    # Compute quotas
+    requests.cpu: "10"
+    requests.memory: 20Gi
+    limits.cpu: "20"
+    limits.memory: 40Gi
+    
+    # Storage quotas
+    requests.storage: 100Gi
+    persistentvolumeclaims: "10"
+    
+    # Object count quotas
+    pods: "50"
+    services: "20"
+    secrets: "50"
+    configmaps: "50"
+    replicationcontrollers: "10"
+    services.loadbalancers: "2"
+    services.nodeports: "5"
+
+---
+# Staging Quotas
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: staging-quota
+  namespace: staging
+  labels:
+    environment: staging
+spec:
+  hard:
+    # Compute quotas
+    requests.cpu: "20"
+    requests.memory: 40Gi
+    limits.cpu: "40"
+    limits.memory: 80Gi
+    
+    # Storage quotas
+    requests.storage: 200Gi
+    persistentvolumeclaims: "15"
+    
+    # Object count quotas
+    pods: "100"
+    services: "30"
+    secrets: "100"
+    configmaps: "100"
+    replicationcontrollers: "20"
+    services.loadbalancers: "3"
+    services.nodeports: "5"
+
+---
+# Production Quotas
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: production-quota
+  namespace: production
+  labels:
+    environment: production
+spec:
+  hard:
+    # Compute quotas
+    requests.cpu: "100"
+    requests.memory: 200Gi
+    limits.cpu: "200"
+    limits.memory: 400Gi
+    
+    # Storage quotas
+    requests.storage: 500Gi
+    persistentvolumeclaims: "30"
+    
+    # Object count quotas
+    pods: "500"
+    services: "100"
+    secrets: "200"
+    configmaps: "200"
+    replicationcontrollers: "50"
+    services.loadbalancers: "10"
+    services.nodeports: "10"
+
+---
+# Data Services Quotas
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: data-quota
+  namespace: data
+  labels:
+    environment: shared
+spec:
+  hard:
+    # Compute quotas
+    requests.cpu: "50"
+    requests.memory: 100Gi
+    limits.cpu: "100"
+    limits.memory: 200Gi
+    
+    # Storage quotas
+    requests.storage: 2Ti
+    persistentvolumeclaims: "20"
+    
+    # Object count quotas
+    pods: "50"
+    services: "20"
+    secrets: "50"
+    configmaps: "50"
+
+---
+# Monitoring Quotas
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: monitoring-quota
+  namespace: monitoring
+  labels:
+    environment: shared
+spec:
+  hard:
+    # Compute quotas
+    requests.cpu: "20"
+    requests.memory: 40Gi
+    limits.cpu: "40"
+    limits.memory: 80Gi
+    
+    # Storage quotas
+    requests.storage: 500Gi
+    persistentvolumeclaims: "10"
+    
+    # Object count quotas
+    pods: "30"
+    services: "15"
+    secrets: "30"
+    configmaps: "30"

@@ -1,0 +1,27 @@
+{
+  "name": "opus-casino",
+  "version": "0.0.1",
+  "description": "High-performance gambling platform for 10M+ users",
+  "private": true,
+  "scripts": {
+    "dev": "nx run-many --target=serve --all",
+    "build": "nx run-many --target=build --all",
+    "test": "nx run-many --target=test --all",
+    "lint": "nx run-many --target=lint --all",
+    "format": "nx format:write",
+    "graph": "nx graph",
+    "affected:dev": "nx affected --target=serve",
+    "affected:build": "nx affected --target=build",
+    "affected:test": "nx affected --target=test"
+  },
+  "devDependencies": {
+    "nx": "^18.0.0",
+    "@nx/js": "^18.0.0",
+    "prettier": "^3.2.0",
+    "typescript": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  }
+}

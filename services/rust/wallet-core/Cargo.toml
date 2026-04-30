@@ -1,0 +1,88 @@
+[package]
+name = "wallet-core"
+version = "0.1.0"
+edition = "2021"
+description = "Wallet Core Service - Financial operations for Opus Casino platform"
+license = "Proprietary"
+authors = ["Opus Casino Team"]
+
+[dependencies]
+# Async runtime
+tokio = { version = "1.35", features = ["full"] }
+
+# Web framework
+axum = { version = "0.7", features = ["macros"] }
+tower = { version = "0.4", features = ["full"] }
+tower-http = { version = "0.5", features = ["trace", "cors", "request-id"] }
+
+# gRPC
+tonic = "0.10"
+prost = "0.12"
+prost-types = "0.12"
+
+# Database
+sqlx = { version = "0.7", features = ["runtime-tokio", "postgres", "uuid", "chrono", "rust_decimal"] }
+
+# Cache
+redis = { version = "0.24", features = ["tokio-comp", "connection-manager"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Error handling
+thiserror = "1.0"
+anyhow = "1.0"
+
+# Logging & tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+opentelemetry = { version = "0.21", features = ["trace"] }
+opentelemetry-otlp = "0.14"
+tracing-opentelemetry = "0.22"
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# UUID
+uuid = { version = "1.6", features = ["v4", "serde"] }
+
+# Money handling
+rust_decimal = { version = "1.33", features = ["serde"] }
+
+# Validation
+validator = { version = "0.16", features = ["derive"] }
+
+# Configuration
+config = "0.14"
+dotenvy = "0.15"
+
+# Metrics
+metrics = "0.22"
+metrics-exporter-prometheus = "0.13"
+
+# Shared libraries
+opus-shared = { path = "../../../libs/shared/rust", features = ["tokio"] }
+
+# Generated proto code
+# (Removed, we will use tonic::include_proto!)
+
+[dev-dependencies]
+tokio = { version = "1.35", features = ["full", "test-util"] }
+testcontainers = "0.15"
+reqwest = { version = "0.11", features = ["json"] }
+tonic-build = "0.10"
+pretty_assertions = "1.4"
+fake = { version = "2.9", features = ["derive"] }
+
+[build-dependencies]
+tonic-build = "0.10"
+protoc-bin-vendored = "3.0.0"
+
+[[bin]]
+name = "wallet-core"
+path = "src/main.rs"
+
+[lib]
+name = "wallet_core"
+path = "src/lib.rs"

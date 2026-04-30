@@ -1,0 +1,211 @@
+# GitHub Actions Workflow для автоматического деплоя
+# Opus Casino — CI/CD Pipeline
+
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_VERSION: '1.75'
+  GO_VERSION: '1.21'
+  PYTHON_VERSION: '3.11'
+  NODE_VERSION: '20'
+
+jobs:
+  # ==========================================================================
+  # Build and Test
+  # ==========================================================================
+  build-and-test:
+    name: Build and Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-action@stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          components: clippy, rustfmt
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          npm install
+          cd services/rust && cargo fetch
+          cd ../go/auth && go mod download
+          cd ../../python/fraud-ml && pip install -r requirements.txt
+
+      - name: Run linters
+        run: |
+          npm run lint
+          cd services/rust && cargo clippy -- -D warnings
+          cd ../go/auth && golangci-lint run
+          cd ../../python/fraud-ml && ruff check .
+
+      - name: Run tests
+        run: |
+          npm run test
+          cd services/rust && cargo test
+          cd ../go/auth && go test ./...
+          cd ../../python/fraud-ml && pytest
+
+      - name: Build
+        run: |
+          npm run build
+          cd services/rust && cargo build --release
+
+  # ==========================================================================
+  # Deploy to Vercel (Web Frontend)
+  # ==========================================================================
+  deploy-web:
+    name: Deploy Web to Vercel
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [build-and-test]
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to Vercel
+        uses: amondnet/vercel-action@v25
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          working-directory: ./apps/web
+          vercel-args: '--prod'
+
+  # ==========================================================================
+  # Deploy to Railway (Backend Services)
+  # ==========================================================================
+  deploy-backend:
+    name: Deploy Backend to Railway
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [build-and-test]
+    if: github.ref == 'refs/heads/main'
+    
+    strategy:
+      matrix:
+        service:
+          - betting-engine
+          - wallet-core
+          - websocket-gateway
+          - auth
+          - payment
+      fail-fast: false
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to Railway
+        uses: jaxxstorm/action-install-gh-release@v1.11.0
+        with:
+          repo: railwayapp/railway-cli
+      
+      - name: Login to Railway
+        run: railway login --token ${{ secrets.RAILWAY_TOKEN }}
+      
+      - name: Deploy service
+        run: |
+          cd services/rust/${{ matrix.service }}
+          railway up --service=${{ matrix.service }} --detach
+
+  # ==========================================================================
+  # Deploy Admin Panel
+  # ==========================================================================
+  deploy-admin:
+    name: Deploy Admin Panel
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [build-and-test]
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install dependencies
+        run: cd apps/admin && npm install
+
+      - name: Build
+        run: cd apps/admin && npm run build
+
+      - name: Deploy to Vercel
+        uses: amondnet/vercel-action@v25
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_ADMIN_PROJECT_ID }}
+          working-directory: ./apps/admin
+          vercel-args: '--prod'
+
+  # ==========================================================================
+  # Notify
+  # ==========================================================================
+  notify:
+    name: Notify Deployment Status
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [deploy-web, deploy-backend, deploy-admin]
+    if: always()
+    
+    steps:
+      - name: Notify Slack
+        if: always()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          text: |
+            Deployment Status: ${{ job.status }}
+            Web: ${{ needs.deploy-web.result }}
+            Backend: ${{ needs.deploy-backend.result }}
+            Admin: ${{ needs.deploy-admin.result }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+
+      - name: Notify Success
+        if: success()
+        run: |
+          echo "✅ Deployment successful!"
+          echo "Web: https://opus-casino.vercel.app"
+          echo "Admin: https://admin.opus-casino.vercel.app"
+
+      - name: Notify Failure
+        if: failure()
+        run: |
+          echo "❌ Deployment failed!"
+          echo "Check GitHub Actions logs for details"
+          exit 1

@@ -1,0 +1,78 @@
+# Pod Security Standards
+# Ограничивает безопасность pod'ов на уровне namespace
+
+---
+# Restricted Pod Security Standard (для production)
+# Самый строгий уровень безопасности
+apiVersion: pod-security.kubernetes.io/v1
+kind: PodSecurityConfiguration
+metadata:
+  name: restricted
+  namespace: production
+defaults:
+  enforce: restricted
+  enforce-version: latest
+  audit: restricted
+  audit-version: latest
+  warn: restricted
+  warn-version: latest
+
+---
+# Baseline Pod Security Standard (для staging)
+# Средний уровень безопасности
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: staging
+  labels:
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: latest
+
+---
+# Baseline Pod Security Standard (для dev)
+# Разрешает больше возможностей для разработки
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dev
+  labels:
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit: baseline
+    pod-security.kubernetes.io/audit-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: latest
+
+---
+# Privileged (для data namespace - базы данных)
+# Требуется для работы баз данных
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: data
+  labels:
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit: baseline
+    pod-security.kubernetes.io/audit-version: latest
+    pod-security.kubernetes.io/warn: baseline
+    pod-security.kubernetes.io/warn-version: latest
+
+---
+# Privileged (для monitoring namespace)
+# Требуется для мониторинга
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+  labels:
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit: baseline
+    pod-security.kubernetes.io/audit-version: latest
+    pod-security.kubernetes.io/warn: baseline
+    pod-security.kubernetes.io/warn-version: latest

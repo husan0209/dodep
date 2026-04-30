@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "fraud-ml.fullname" . }}-config
+  labels:
+    {{- include "fraud-ml.labels" . | nindent 4 }}
+data:
+  app-env: {{ .Values.app_env | default "development" | quote }}
+  
+  # ClickHouse configuration
+  clickhouse-host: {{ .Values.ml.clickhouse.host | quote }}
+  clickhouse-port: {{ .Values.ml.clickhouse.port | quote }}
+  clickhouse-database: {{ .Values.ml.clickhouse.database | quote }}
+  
+  # Redpanda configuration
+  redpanda-brokers: {{ .Values.ml.redpanda.brokers | quote }}
+  
+  # ML settings
+  model-update-freq-hours: {{ .Values.ml.modelUpdateFreqHours | quote }}
+  threshold-bet-anomaly: {{ .Values.ml.thresholds.bet_anomaly | quote }}
+  threshold-bonus-abuse: {{ .Values.ml.thresholds.bonus_abuse | quote }}
+  threshold-payment-fraud: {{ .Values.ml.thresholds.payment_fraud | quote }}
+  threshold-account-takeover: {{ .Values.ml.thresholds.account_takeover | quote }}

@@ -1,0 +1,306 @@
+# Grafana Dashboards
+# Pre-configured dashboards for monitoring
+
+---
+# K8s Cluster Overview Dashboard
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-k8s-cluster
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "true"
+data:
+  k8s-cluster.json: |
+    {
+      "dashboard": {
+        "title": "Kubernetes Cluster Overview",
+        "tags": ["kubernetes", "cluster"],
+        "timezone": "browser",
+        "panels": [
+          {
+            "id": 1,
+            "title": "Cluster CPU Usage",
+            "type": "gauge",
+            "targets": [
+              {
+                "expr": "sum(rate(container_cpu_usage_seconds_total{image!=\"\"}[5m])) / sum(machine_cpu_cores) * 100"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "percent",
+                "thresholds": {
+                  "steps": [
+                    {"value": null, "color": "green"},
+                    {"value": 60, "color": "yellow"},
+                    {"value": 80, "color": "red"}
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": 2,
+            "title": "Cluster Memory Usage",
+            "type": "gauge",
+            "targets": [
+              {
+                "expr": "sum(container_memory_working_set_bytes{image!=\"\"}) / sum(machine_memory_bytes) * 100"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "percent",
+                "thresholds": {
+                  "steps": [
+                    {"value": null, "color": "green"},
+                    {"value": 60, "color": "yellow"},
+                    {"value": 80, "color": "red"}
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": 3,
+            "title": "Pod Count by Namespace",
+            "type": "bargauge",
+            "targets": [
+              {
+                "expr": "count(kube_pod_info) by (namespace)"
+              }
+            ]
+          },
+          {
+            "id": 4,
+            "title": "Node Status",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "sum(kube_node_status_condition{condition=\"Ready\",status=\"true\"})"
+              }
+            ]
+          }
+        ],
+        "refresh": "30s",
+        "time": {
+          "from": "now-1h",
+          "to": "now"
+        }
+      }
+    }
+
+---
+# Node Resources Dashboard
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-node-resources
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "true"
+data:
+  node-resources.json: |
+    {
+      "dashboard": {
+        "title": "Node Resources",
+        "tags": ["node", "resources"],
+        "panels": [
+          {
+            "id": 1,
+            "title": "CPU Usage per Node",
+            "type": "timeseries",
+            "targets": [
+              {
+                "expr": "sum(rate(container_cpu_usage_seconds_total{image!=\"\"}[5m])) by (node)"
+              }
+            ]
+          },
+          {
+            "id": 2,
+            "title": "Memory Usage per Node",
+            "type": "timeseries",
+            "targets": [
+              {
+                "expr": "sum(container_memory_working_set_bytes{image!=\"\"}) by (node)"
+              }
+            ]
+          },
+          {
+            "id": 3,
+            "title": "Disk Usage per Node",
+            "type": "timeseries",
+            "targets": [
+              {
+                "expr": "sum(node_filesystem_size_bytes - node_filesystem_avail_bytes) by (node)"
+              }
+            ]
+          }
+        ],
+        "refresh": "1m"
+      }
+    }
+
+---
+# Pod Resources Dashboard
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-pod-resources
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "true"
+data:
+  pod-resources.json: |
+    {
+      "dashboard": {
+        "title": "Pod Resources",
+        "tags": ["pod", "resources"],
+        "panels": [
+          {
+            "id": 1,
+            "title": "Top 10 CPU Consuming Pods",
+            "type": "table",
+            "targets": [
+              {
+                "expr": "topk(10, sum(rate(container_cpu_usage_seconds_total{image!=\"\",pod!=\"\"}[5m])) by (pod, namespace))"
+              }
+            ]
+          },
+          {
+            "id": 2,
+            "title": "Top 10 Memory Consuming Pods",
+            "type": "table",
+            "targets": [
+              {
+                "expr": "topk(10, sum(container_memory_working_set_bytes{image!=\"\",pod!=\"\"}) by (pod, namespace))"
+              }
+            ]
+          }
+        ],
+        "refresh": "30s"
+      }
+    }
+
+---
+# Istio Mesh Dashboard
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-istio
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "true"
+data:
+  istio-mesh.json: |
+    {
+      "dashboard": {
+        "title": "Istio Mesh Overview",
+        "tags": ["istio", "service-mesh"],
+        "panels": [
+          {
+            "id": 1,
+            "title": "Request Volume",
+            "type": "timeseries",
+            "targets": [
+              {
+                "expr": "sum(rate(istio_requests_total[1m]))"
+              }
+            ]
+          },
+          {
+            "id": 2,
+            "title": "Success Rate",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "sum(rate(istio_requests_total{response_code!~\"5.*\"}[1m])) / sum(rate(istio_requests_total[1m])) * 100"
+              }
+            ]
+          },
+          {
+            "id": 3,
+            "title": "P99 Latency",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "histogram_quantile(0.99, sum(rate(istio_request_duration_milliseconds_bucket[5m])) by (le))"
+              }
+            ]
+          },
+          {
+            "id": 4,
+            "title": "Service Graph",
+            "type": "nodeGraph",
+            "targets": [
+              {
+                "expr": "sum(rate(istio_requests_total[5m])) by (source_workload, destination_workload)"
+              }
+            ]
+          }
+        ],
+        "refresh": "30s"
+      }
+    }
+
+---
+# PostgreSQL Dashboard
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-postgresql
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "true"
+data:
+  postgresql.json: |
+    {
+      "dashboard": {
+        "title": "PostgreSQL Overview",
+        "tags": ["postgresql", "database"],
+        "panels": [
+          {
+            "id": 1,
+            "title": "Active Connections",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "sum(pg_stat_activity_count)"
+              }
+            ]
+          },
+          {
+            "id": 2,
+            "title": "Cache Hit Ratio",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "sum(pg_stat_database_blks_hit) / sum(pg_stat_database_blks_hit + pg_stat_database_blks_read) * 100"
+              }
+            ]
+          },
+          {
+            "id": 3,
+            "title": "Database Size",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "sum(pg_database_size_bytes)"
+              }
+            ]
+          },
+          {
+            "id": 4,
+            "title": "Transactions per Second",
+            "type": "timeseries",
+            "targets": [
+              {
+                "expr": "rate(pg_stat_database_xact_commit[5m]) + rate(pg_stat_database_xact_rollback[5m])"
+              }
+            ]
+          }
+        ],
+        "refresh": "30s"
+      }
+    }

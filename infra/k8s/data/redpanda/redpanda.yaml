@@ -1,0 +1,487 @@
+# Redpanda K8s Deployment
+# Author: DATA_ENGINEER
+# Date: 2026-03-24
+# 3-broker cluster with Schema Registry
+# Kafka API compatible, no JVM/ZooKeeper
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: data
+  labels:
+    app.kubernetes.io/part-of: opus-casino
+
+---
+# ConfigMap: Redpanda configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redpanda-config
+  namespace: data
+data:
+  redpanda.yaml: |
+    redpanda:
+      # Networking
+      advertised_rpc_api:
+        address: 0.0.0.0
+        port: 33145
+      kafka_api:
+        - address: 0.0.0.0
+          port: 9092
+          name: internal
+      advertised_kafka_api:
+        - address: 0.0.0.0
+          port: 9092
+          name: internal
+      rpc_server:
+        address: 0.0.0.0
+        port: 33145
+      admin_api:
+        - address: 0.0.0.0
+          port: 9644
+
+      # Storage
+      data_directory: /var/lib/redpanda/data
+      log_segment_size: 134217728  # 128MB
+      compacted_log_segment_size: 67108864  # 64MB
+
+      # Tuning
+      default_topic_partitions: 32
+      default_topic_replication_factor: 3
+      group_initial_rebalance_delay: 300ms
+      log_retention_check_interval: 600s
+
+      # Schema Registry
+      schema_registry:
+        schema_registry_api:
+          - address: 0.0.0.0
+            port: 8081
+
+      # Performance
+      kafka_batch_max_bytes: 1048576  # 1MB
+      kafka_batch_max_delay_ms: 5
+      target_quota_byte_rate: 104857600  # 100MB/s
+
+      # Pandaproxy (optional REST API)
+      pandaproxy:
+        pandaproxy_api:
+          - address: 0.0.0.0
+            port: 8082
+
+---
+# StatefulSet: Redpanda (3 brokers)
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redpanda
+  namespace: data
+  labels:
+    app: redpanda
+    component: event-broker
+spec:
+  serviceName: redpanda
+  replicas: 3
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app: redpanda
+  template:
+    metadata:
+      labels:
+        app: redpanda
+        component: event-broker
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9644"
+        prometheus.io/path: "/metrics"
+    spec:
+      terminationGracePeriodSeconds: 300
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: redpanda
+                topologyKey: kubernetes.io/hostname
+      initContainers:
+        - name: redpanda-init
+          image: docker.redpanda.com/redpandadata/redpanda:v23.3.18
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -ex
+              # Set node ID from pod ordinal
+              NODE_ID=${HOSTNAME##*-}
+              rpk redpanda mode prod \
+                --node-id $NODE_ID \
+                --kafka-addr 0.0.0.0:9092 \
+                --kafka-advertised-addr ${HOSTNAME}.redpanda.data.svc.cluster.local:9092 \
+                --rpc-addr 0.0.0.0:33145 \
+                --rpc-advertised-addr ${HOSTNAME}.redpanda.data.svc.cluster.local:33145 \
+                --schema-registry-addr 0.0.0.0:8081 \
+                --pandaproxy-addr 0.0.0.0:8082 \
+                --seeds redpanda-0.redpanda.data.svc.cluster.local:33145,redpanda-1.redpanda.data.svc.cluster.local:33145,redpanda-2.redpanda.data.svc.cluster.local:33145
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/redpanda
+      containers:
+        - name: redpanda
+          image: docker.redpanda.com/redpandadata/redpanda:v23.3.18
+          ports:
+            - containerPort: 9092
+              name: kafka
+            - containerPort: 33145
+              name: rpc
+            - containerPort: 9644
+              name: admin
+            - containerPort: 8081
+              name: schema-registry
+            - containerPort: 8082
+              name: pandaproxy
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          args:
+            - --redpanda-cfg
+            - /etc/redpanda/redpanda.yaml
+            - --default-log-level=info
+          resources:
+            requests:
+              cpu: "4"
+              memory: "16Gi"
+            limits:
+              cpu: "8"
+              memory: "32Gi"
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/redpanda
+            - name: config
+              mountPath: /etc/redpanda
+          readinessProbe:
+            httpGet:
+              path: /v1/status/ready
+              port: 9644
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /v1/status/ready
+              port: 9644
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 5
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  - /bin/bash
+                  - -c
+                  - |
+                    # Graceful shutdown: stop accepting new requests
+                    rpk cluster maintenance enable $(rpk cluster info | grep $(hostname) | awk '{print $NF}')
+                    sleep 30
+      volumes:
+        - name: config
+          configMap:
+            name: redpanda-config
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: gp3
+        resources:
+          requests:
+            storage: 500Gi
+
+---
+# Service: Redpanda headless (for StatefulSet DNS)
+apiVersion: v1
+kind: Service
+metadata:
+  name: redpanda
+  namespace: data
+  labels:
+    app: redpanda
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+    - port: 9092
+      targetPort: 9092
+      name: kafka
+    - port: 33145
+      targetPort: 33145
+      name: rpc
+    - port: 9644
+      targetPort: 9644
+      name: admin
+    - port: 8081
+      targetPort: 8081
+      name: schema-registry
+    - port: 8082
+      targetPort: 8082
+      name: pandaproxy
+  selector:
+    app: redpanda
+
+---
+# Service: Redpanda Cluster (load balanced Kafka + Schema Registry)
+apiVersion: v1
+kind: Service
+metadata:
+  name: redpanda-cluster
+  namespace: data
+  labels:
+    app: redpanda
+spec:
+  type: ClusterIP
+  ports:
+    - port: 9092
+      targetPort: 9092
+      name: kafka
+    - port: 8081
+      targetPort: 8081
+      name: schema-registry
+    - port: 8082
+      targetPort: 8082
+      name: pandaproxy
+  selector:
+    app: redpanda
+
+---
+# PodDisruptionBudget: at least 2 brokers available
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: redpanda-pdb
+  namespace: data
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: redpanda
+
+---
+# NetworkPolicy: Redpanda accessible from platform and data namespaces
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: redpanda-network-policy
+  namespace: data
+spec:
+  podSelector:
+    matchLabels:
+      app: redpanda
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Kafka API from platform and data namespaces
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: platform
+        - namespaceSelector:
+            matchLabels:
+              name: data
+      ports:
+        - protocol: TCP
+          port: 9092
+    # Schema Registry from platform and data namespaces
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: platform
+        - namespaceSelector:
+            matchLabels:
+              name: data
+      ports:
+        - protocol: TCP
+          port: 8081
+    # Admin API from data namespace only
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: data
+      ports:
+        - protocol: TCP
+          port: 9644
+    # Inter-broker communication
+    - from:
+        - podSelector:
+            matchLabels:
+              app: redpanda
+      ports:
+        - protocol: TCP
+          port: 33145
+  egress:
+    # Inter-broker communication
+    - to:
+        - podSelector:
+            matchLabels:
+              app: redpanda
+      ports:
+        - protocol: TCP
+          port: 33145
+    # DNS resolution
+    - to: []
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+
+---
+# Job: Create Redpanda topics
+# Runs once on initial deployment
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: redpanda-create-topics
+  namespace: data
+  labels:
+    app: redpanda
+    component: topic-setup
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: redpanda
+        component: topic-setup
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: create-topics
+          image: docker.redpanda.com/redpandadata/redpanda:v23.3.18
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -e
+              echo "Waiting for Redpanda cluster to be ready..."
+              until rpk cluster info --brokers redpanda-0.redpanda.data.svc.cluster.local:9092,redpanda-1.redpanda.data.svc.cluster.local:9092,redpanda-2.redpanda.data.svc.cluster.local:9092 2>/dev/null; do
+                sleep 5
+              done
+              echo "Cluster ready, creating topics..."
+
+              BROKERS="redpanda-0.redpanda.data.svc.cluster.local:9092,redpanda-1.redpanda.data.svc.cluster.local:9092,redpanda-2.redpanda.data.svc.cluster.local:9092"
+
+              # Operational topics (32 partitions, 7 days retention)
+              rpk topic create bets.bet.placed \
+                --brokers $BROKERS \
+                --partitions 32 \
+                --replicas 3 \
+                -c retention.ms=604800000 \
+                -c min.insync.replicas=2 \
+                -c cleanup.policy=delete \
+                -c compression.type=zstd
+
+              rpk topic create bets.bet.settled \
+                --brokers $BROKERS \
+                --partitions 32 \
+                --replicas 3 \
+                -c retention.ms=604800000 \
+                -c min.insync.replicas=2
+
+              rpk topic create bets.bet.cashout \
+                --brokers $BROKERS \
+                --partitions 32 \
+                --replicas 3 \
+                -c retention.ms=604800000 \
+                -c min.insync.replicas=2
+
+              rpk topic create payments.initiated \
+                --brokers $BROKERS \
+                --partitions 16 \
+                --replicas 3 \
+                -c retention.ms=604800000 \
+                -c min.insync.replicas=2
+
+              rpk topic create payments.completed \
+                --brokers $BROKERS \
+                --partitions 16 \
+                --replicas 3 \
+                -c retention.ms=604800000 \
+                -c min.insync.replicas=2
+
+              rpk topic create users.registered \
+                --brokers $BROKERS \
+                --partitions 8 \
+                --replicas 3 \
+                -c retention.ms=604800000 \
+                -c min.insync.replicas=2
+
+              rpk topic create users.updated \
+                --brokers $BROKERS \
+                --partitions 8 \
+                --replicas 3 \
+                -c retention.ms=604800000 \
+                -c min.insync.replicas=2
+
+              rpk topic create users.kyc_verified \
+                --brokers $BROKERS \
+                --partitions 8 \
+                --replicas 3 \
+                -c retention.ms=604800000 \
+                -c min.insync.replicas=2
+
+              rpk topic create events.odds_updated \
+                --brokers $BROKERS \
+                --partitions 32 \
+                --replicas 3 \
+                -c retention.ms=604800000 \
+                -c min.insync.replicas=2
+
+              rpk topic create notifications.send \
+                --brokers $BROKERS \
+                --partitions 8 \
+                --replicas 3 \
+                -c retention.ms=604800000 \
+                -c min.insync.replicas=2
+
+              # Analytics topics (16 partitions, 30 days retention)
+              rpk topic create analytics.events \
+                --brokers $BROKERS \
+                --partitions 16 \
+                --replicas 3 \
+                -c retention.ms=2592000000 \
+                -c min.insync.replicas=2
+
+              rpk topic create casino.round.completed \
+                --brokers $BROKERS \
+                --partitions 16 \
+                --replicas 3 \
+                -c retention.ms=2592000000 \
+                -c min.insync.replicas=2
+
+              rpk topic create fraud.signals \
+                --brokers $BROKERS \
+                --partitions 8 \
+                --replicas 3 \
+                -c retention.ms=2592000000 \
+                -c min.insync.replicas=2
+
+              # Audit topic (8 partitions, infinite retention, compact)
+              rpk topic create audit.log \
+                --brokers $BROKERS \
+                --partitions 8 \
+                --replicas 3 \
+                -c retention.ms=-1 \
+                -c cleanup.policy=compact \
+                -c min.insync.replicas=2
+
+              echo "All topics created successfully."
+              rpk topic list --brokers $BROKERS

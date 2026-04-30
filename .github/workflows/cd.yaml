@@ -1,0 +1,41 @@
+name: CD Pipeline - ArgoCD Sync
+
+on:
+  workflow_run:
+    workflows: ["CI Pipeline"]
+    types:
+      - completed
+    branches: [main]
+
+env:
+  ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
+  ARGOCD_APP: opus-casino-production
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Install argocd CLI
+      run: |
+        curl -sSL -o argocd-linux-amd64 https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+        sudo install -m 555 argocd-linux-amd64 /usr/local/bin/argocd
+        rm argocd-linux-amd64
+    
+    - name: Login to ArgoCD
+      run: |
+        argocd login ${{ env.ARGOCD_SERVER }} \
+          --username ${{ secrets.ARGOCD_USERNAME }} \
+          --password ${{ secrets.ARGOCD_PASSWORD }} \
+          --insecure
+    
+    - name: Sync ArgoCD application
+      run: |
+        argocd app sync ${{ env.ARGOCD_APP }} --prune --force
+    
+    - name: Wait for deployment
+      run: |
+        argocd app wait ${{ env.ARGOCD_APP }} --sync --health --operation --timeout 300s

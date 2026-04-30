@@ -1,0 +1,168 @@
+# Istio Security Policies
+# Authorization Policies и PeerAuthentication
+
+---
+# Default Deny All (production)
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: default-deny
+  namespace: production
+spec:
+  {}  # Empty = deny all by default
+
+---
+# Allow Istio System
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-istio-system
+  namespace: production
+spec:
+  selector:
+    matchLabels:
+      app: istio-ingressgateway
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            namespaces: ["istio-system"]
+      to:
+        - operation:
+            ports: ["15021", "8080", "8443"]
+
+---
+# Allow Monitoring
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-monitoring
+  namespace: production
+spec:
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            namespaces: ["monitoring"]
+      to:
+        - operation:
+            ports: ["9090", "8080"]
+            methods: ["GET"]
+            paths: ["/metrics", "/health", "/ready"]
+
+---
+# PeerAuthentication - mTLS STRICT для production
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: default
+  namespace: production
+spec:
+  mtls:
+    mode: STRICT
+
+---
+# PeerAuthentication - mTLS PERMISSIVE для dev (отладка)
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: default
+  namespace: dev
+spec:
+  mtls:
+    mode: PERMISSIVE
+
+---
+# PeerAuthentication - mTLS STRICT для staging
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: default
+  namespace: staging
+spec:
+  mtls:
+    mode: STRICT
+
+---
+# Rate Limiting для Login endpoint
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: rate-limit-auth
+  namespace: production
+spec:
+  selector:
+    matchLabels:
+      app: auth
+  action: ALLOW
+  rules:
+    - to:
+        - operation:
+            methods: ["POST"]
+            paths: ["/api/v1/auth/login"]
+      when:
+        - key: request.headers[x-ratelimit-remaining]
+          notValues: ["0"]
+
+---
+# Allow Betting Engine от всех внутренних сервисов
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-betting-engine
+  namespace: production
+spec:
+  selector:
+    matchLabels:
+      app: betting-engine
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            namespaces: ["production", "staging", "dev"]
+      to:
+        - operation:
+            ports: ["8080"]
+
+---
+# Allow Wallet Core только от авторизованных сервисов
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-wallet-core
+  namespace: production
+spec:
+  selector:
+    matchLabels:
+      app: wallet-core
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals:
+              - cluster.local/ns/production/sa/betting-engine
+              - cluster.local/ns/production/sa/auth
+              - cluster.local/ns/production/sa/payment
+      to:
+        - operation:
+            ports: ["8080"]
+
+---
+# RequestAuthentication для JWT валидации
+apiVersion: security.istio.io/v1beta1
+kind: RequestAuthentication
+metadata:
+  name: jwt-auth
+  namespace: production
+spec:
+  selector:
+    matchLabels:
+      app: istio-ingressgateway
+  jwtRules:
+    - issuer: "https://auth.opus.casino"
+      jwksUri: "https://auth.opus.casino/.well-known/jwks.json"
+      forwardOriginalToken: true
+      fromHeaders:
+        - name: Authorization
+          prefix: "Bearer "
+      outputPayloadToHeader: "x-jwt-payload"

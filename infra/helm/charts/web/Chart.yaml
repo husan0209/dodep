@@ -1,0 +1,17 @@
+apiVersion: v2
+name: web
+description: Opus Casino Web Platform - Next.js 14 application
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - nextjs
+  - react
+  - casino
+  - gambling
+home: https://opus.casino
+sources:
+  - https://github.com/opus-casino/opus-casino
+maintainers:
+  - name: Opus Casino Team
+    email: team@opus.casino

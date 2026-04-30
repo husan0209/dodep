@@ -1,0 +1,26 @@
+# Buf configuration for Opus Casino Protobuf schemas
+# Documentation: https://docs.buf.build/configuration/v2
+
+version: v2
+
+modules:
+  - path: .
+    name: buf.build/opus-casino/api
+
+lint:
+  use:
+    - DEFAULT
+    - COMMENTS
+    - FILE_LOWER_SNAKE_CASE
+  except:
+    - PACKAGE_VERSION_SUFFIX
+    - SERVICE_SUFFIX
+  ignore:
+    - libs/proto/types.proto  # Legacy file, will be migrated
+
+breaking:
+  use:
+    - FILE
+  except:
+    - EXTENSION_NO_DELETE
+    - FIELD_SAME_DEFAULT

@@ -1,0 +1,205 @@
+# Notification Service Helm Chart Values
+# Сервис уведомлений (Email, SMS, Push, In-App)
+
+replicaCount: 3
+
+image:
+  repository: ghcr.io/opus-casino/notification
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+serviceAccount:
+  create: true
+  annotations:
+    eks.amazonaws.com/role-arn: ""
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+
+podSecurityContext:
+  fsGroup: 1000
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+service:
+  type: ClusterIP
+  httpPort: 8081
+  httpTargetPort: 8081
+  grpcPort: 9091
+  grpcTargetPort: 9091
+
+ingress:
+  enabled: true
+  className: "alb"
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/healthcheck-path: /health
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+  hosts:
+    - host: api.opus.casino
+      paths:
+        - path: /api/v1/notifications
+          pathType: Prefix
+  tls:
+    - secretName: opus-casino-tls
+      hosts:
+        - api.opus.casino
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+  requests:
+    cpu: 250m
+    memory: 256Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 60
+  targetMemoryUtilizationPercentage: 70
+
+nodeSelector:
+  node-type: application
+
+healthCheck:
+  path: /health
+  port: 8081
+  liveness:
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readiness:
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+env:
+  - name: APP_ENV
+    valueFrom:
+      configMapKeyRef:
+        name: notification-config
+        key: app-env
+  - name: DATABASE_URL
+    valueFrom:
+      secretKeyRef:
+        name: notification-secrets
+        key: database-url
+  - name: REDIS_ADDR
+    valueFrom:
+      secretKeyRef:
+        name: notification-secrets
+        key: redis-addr
+  - name: REDIS_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: notification-secrets
+        key: redis-password
+  - name: REDPANDA_BROKERS
+    valueFrom:
+      configMapKeyRef:
+        name: notification-config
+        key: redpanda-brokers
+  - name: EMAIL_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: notification-secrets
+        key: email-api-key
+  - name: SMS_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: notification-secrets
+        key: sms-api-key
+  - name: PUSH_FIREBASE_KEY
+    valueFrom:
+      secretKeyRef:
+        name: notification-secrets
+        key: push-firebase-key
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+
+networkPolicy:
+  enabled: true
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: istio-system
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+      ports:
+        - protocol: TCP
+          port: 8081
+        - protocol: TCP
+          port: 9091
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: data
+      ports:
+        - protocol: TCP
+          port: 5432
+        - protocol: TCP
+          port: 6379
+        - protocol: TCP
+          port: 9092
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: external
+      ports:
+        - protocol: TCP
+          port: 443
+
+serviceMonitor:
+  enabled: true
+  interval: 30s
+  scrapeTimeout: 10s
+  path: /metrics
+  port: metrics
+
+# Notification-specific settings
+notification:
+  email:
+    enabled: true
+    provider: sendgrid
+    from: noreply@opuscasino.com
+  
+  sms:
+    enabled: false
+    provider: twilio
+  
+  push:
+    enabled: true
+    firebase:
+      project-id: opus-casino
+  
+  in_app:
+    enabled: true
+  
+  redpanda:
+    enabled: true
+    brokers: "redpanda-data:9092"
+    consumer_group: notification-service
+    topics:
+      - bets.settled
+      - payments.deposit_confirmed
+      - payments.withdrawal_processed
+      - users.kyc_verified
+      - bonus.activated
+      - bonus.expiring

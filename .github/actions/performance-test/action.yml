@@ -1,0 +1,162 @@
+# Reusable Composite Action для performance testing с k6
+# Opus Casino - Production CI/CD
+
+name: 'Performance Test'
+description: 'Run k6 performance tests with thresholds and reporting'
+branding:
+  icon: 'activity'
+  color: 'green'
+
+inputs:
+  test-file:
+    description: 'Path to k6 test file'
+    required: true
+  working-directory:
+    description: 'Working directory'
+    required: false
+    default: '.'
+  environment:
+    description: 'Target environment (dev, staging, production)'
+    required: false
+    default: 'staging'
+  base-url:
+    description: 'Base URL for tests'
+    required: true
+  vus:
+    description: 'Number of virtual users'
+    required: false
+    default: '10'
+  duration:
+    description: 'Test duration'
+    required: false
+    default: '5m'
+  threshold-r95:
+    description: 'p95 latency threshold (ms)'
+    required: false
+    default: '500'
+  threshold-r99:
+    description: 'p99 latency threshold (ms)'
+    required: false
+    default: '1000'
+  threshold-error-rate:
+    description: 'Error rate threshold (%)'
+    required: false
+    default: '1'
+  load-profile:
+    description: 'Load profile (constant, ramp, spike)'
+    required: false
+    default: 'constant'
+  enable-cloud:
+    description: 'Enable k6 cloud execution'
+    required: false
+    default: 'false'
+
+outputs:
+  test-status:
+    description: 'Test execution status'
+    value: ${{ steps.k6.outputs.status }}
+  summary-json:
+    description: 'k6 summary JSON'
+    value: ${{ steps.k6.outputs.summary }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Install k6
+      shell: bash
+      run: |
+        sudo gpg -k
+        sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+        echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+        sudo apt-get update
+        sudo apt-get install k6
+
+    - name: Validate environment
+      id: validate
+      shell: bash
+      run: |
+        if [ "${{ inputs.environment }}" = "production" ] && [ "${{ github.ref }}" != "refs/heads/main" ]; then
+          echo "❌ Performance tests can only run against production from main branch"
+          exit 1
+        fi
+        echo "Environment validated"
+
+    - name: Run k6 performance test
+      id: k6
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        BASE_URL: ${{ inputs.base-url }}
+        ENVIRONMENT: ${{ inputs.environment }}
+        K6_OUT: file=results.json
+        K6_VUS: ${{ inputs.vus }}
+        K6_DURATION: ${{ inputs.duration }}
+      run: |
+        # Create results directory
+        mkdir -p k6-results
+        
+        # Run k6 with thresholds
+        k6 run \
+          --out json=results.json \
+          --summary-export=summary.json \
+          --tag environment=${{ inputs.environment }} \
+          --tag build=${{ github.sha }} \
+          ${{ inputs.test-file }} || TEST_EXIT_CODE=$?
+        
+        # Convert to HTML report
+        k6 convert results.json --format html > k6-results/report.html
+        
+        # Output status
+        echo "status=${TEST_EXIT_CODE:-0}" >> $GITHUB_OUTPUT
+        echo "summary=$(cat summary.json)" >> $GITHUB_OUTPUT
+        
+        exit ${TEST_EXIT_CODE:-0}
+
+    - name: Upload k6 results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: k6-results-${{ inputs.environment }}-${{ github.run_id }}
+        path: |
+          k6-results/results.json
+          k6-results/summary.json
+          k6-results/report.html
+        retention-days: 30
+
+    - name: Publish k6 summary to job summary
+      if: always()
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        echo "## 📊 Performance Test Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Environment:** ${{ inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Build:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        # Parse and display key metrics
+        if [ -f summary.json ]; then
+          echo "### Key Metrics" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          cat summary.json | jq -r '
+            "| Metric | Value |",
+            "|--------|-------|",
+            "| Duration | \(.metrics.http_reqs.values.count) requests |",
+            "| p95 Latency | \(.metrics.http_req_duration.values["p(95)"]) ms |",
+            "| p99 Latency | \(.metrics.http_req_duration.values["p(99)"]) ms |",
+            "| Error Rate | \(.metrics.http_req_failed.values.rate * 100 | floor)% |"
+          ' >> $GITHUB_STEP_SUMMARY
+        fi
+
+    - name: Comment PR with results
+      if: always() && github.event_name == 'pull_request'
+      uses: thollander/actions-comment-pull-request@v2
+      with:
+        message: |
+          ## 📊 Performance Test Results
+          
+          **Environment:** ${{ inputs.environment }}
+          **Status:** ${{ steps.k6.outputs.status == '0' && '✅ Passed' || '❌ Failed' }}
+          
+          See full report in [workflow artifacts](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+        comment_tag: performance-test

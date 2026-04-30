@@ -1,0 +1,281 @@
+// Payment Service - gRPC service definition
+// Handles deposits, withdrawals, and payment methods
+
+syntax = "proto3";
+
+package payment.v1;
+
+option go_package = "github.com/opus-casino/proto/gen/go/payment/v1";
+option java_multiple_files = true;
+option java_package = "com.opuscasino.proto.payment.v1";
+
+import "common/v1/types.proto";
+import "common/v1/money.proto";
+import "common/v1/pagination.proto";
+import "common/v1/error.proto";
+import "google/protobuf/timestamp.proto";
+
+// PaymentService handles payment operations
+service PaymentService {
+  // GetPaymentMethods returns available payment methods for user
+  rpc GetPaymentMethods(GetPaymentMethodsRequest) returns (GetPaymentMethodsResponse);
+
+  // CreateDeposit creates a new deposit
+  rpc CreateDeposit(CreateDepositRequest) returns (CreateDepositResponse);
+
+  // GetDeposit returns deposit details
+  rpc GetDeposit(GetDepositRequest) returns (GetDepositResponse);
+
+  // ListDeposits returns user deposit history
+  rpc ListDeposits(ListDepositsRequest) returns (ListDepositsResponse);
+
+  // RequestWithdrawal creates a withdrawal request
+  rpc RequestWithdrawal(RequestWithdrawalRequest) returns (RequestWithdrawalResponse);
+
+  // GetWithdrawal returns withdrawal details
+  rpc GetWithdrawal(GetWithdrawalRequest) returns (GetWithdrawalResponse);
+
+  // ListWithdrawals returns user withdrawal history
+  rpc ListWithdrawals(ListWithdrawalsRequest) returns (ListWithdrawalsResponse);
+
+  // CancelWithdrawal cancels a pending withdrawal
+  rpc CancelWithdrawal(CancelWithdrawalRequest) returns (CancelWithdrawalResponse);
+
+  // GetPaymentMethod returns saved payment method details
+  rpc GetPaymentMethod(GetPaymentMethodRequest) returns (GetPaymentMethodResponse);
+
+  // SavePaymentMethod saves a payment method for future use
+  rpc SavePaymentMethod(SavePaymentMethodRequest) returns (SavePaymentMethodResponse);
+
+  // DeletePaymentMethod removes a saved payment method
+  rpc DeletePaymentMethod(DeletePaymentMethodRequest) returns (DeletePaymentMethodResponse);
+}
+
+// ============ Payment Methods ============
+
+message GetPaymentMethodsRequest {
+  common.v1.UserId user_id = 1;
+  optional PaymentMethodType type = 2;
+  optional common.v1.TransactionType transaction_type = 3;  // deposit or withdrawal
+}
+
+message GetPaymentMethodsResponse {
+  repeated PaymentMethodInfo methods = 1;
+}
+
+message GetPaymentMethodRequest {
+  common.v1.UserId user_id = 1;
+  string payment_method_id = 2;
+}
+
+message GetPaymentMethodResponse {
+  PaymentMethod method = 1;
+  common.v1.ErrorDetails error = 2;
+}
+
+message SavePaymentMethodRequest {
+  common.v1.UserId user_id = 1;
+  PaymentMethodType type = 2;
+  string provider = 3;
+  map<string, string> details = 4;  // Encrypted payment details
+  string nickname = 5;
+  bool is_default = 6;
+}
+
+message SavePaymentMethodResponse {
+  PaymentMethod method = 1;
+  common.v1.ErrorDetails error = 2;
+}
+
+message DeletePaymentMethodRequest {
+  common.v1.UserId user_id = 1;
+  string payment_method_id = 2;
+}
+
+message DeletePaymentMethodResponse {
+  bool success = 1;
+  common.v1.ErrorDetails error = 2;
+}
+
+// ============ Deposits ============
+
+message CreateDepositRequest {
+  common.v1.UserId user_id = 1;
+  common.v1.Money amount = 2;
+  string payment_method_id = 3;
+  string payment_provider = 4;
+  string idempotency_key = 5;
+  map<string, string> provider_params = 6;  // Provider-specific params
+}
+
+message CreateDepositResponse {
+  Deposit deposit = 1;
+  string redirect_url = 2;      // For redirect-based payments
+  string qr_code = 3;           // For QR-based payments
+  common.v1.ErrorDetails error = 4;
+}
+
+message GetDepositRequest {
+  common.v1.UserId user_id = 1;
+  string deposit_id = 2;
+}
+
+message GetDepositResponse {
+  Deposit deposit = 1;
+}
+
+message ListDepositsRequest {
+  common.v1.UserId user_id = 1;
+  optional common.v1.TransactionStatus status = 2;
+  optional common.v1.DateRange date_range = 3;
+  common.v1.PageRequest pagination = 4;
+}
+
+message ListDepositsResponse {
+  repeated Deposit deposits = 1;
+  common.v1.PageResponse pagination = 2;
+}
+
+// ============ Withdrawals ============
+
+message RequestWithdrawalRequest {
+  common.v1.UserId user_id = 1;
+  common.v1.Money amount = 2;
+  string payment_method_id = 3;
+  string payment_provider = 4;
+  map<string, string> payment_details = 5;  // Encrypted withdrawal details
+  string idempotency_key = 6;
+}
+
+message RequestWithdrawalResponse {
+  Withdrawal withdrawal = 1;
+  common.v1.ErrorDetails error = 2;
+}
+
+message GetWithdrawalRequest {
+  common.v1.UserId user_id = 1;
+  string withdrawal_id = 2;
+}
+
+message GetWithdrawalResponse {
+  Withdrawal withdrawal = 1;
+}
+
+message ListWithdrawalsRequest {
+  common.v1.UserId user_id = 1;
+  optional common.v1.TransactionStatus status = 2;
+  optional common.v1.DateRange date_range = 3;
+  common.v1.PageRequest pagination = 4;
+}
+
+message ListWithdrawalsResponse {
+  repeated Withdrawal withdrawals = 1;
+  common.v1.PageResponse pagination = 2;
+}
+
+message CancelWithdrawalRequest {
+  common.v1.UserId user_id = 1;
+  string withdrawal_id = 2;
+}
+
+message CancelWithdrawalResponse {
+  bool success = 1;
+  common.v1.ErrorDetails error = 2;
+}
+
+// ============ Domain Models ============
+
+message PaymentMethodInfo {
+  string id = 1;
+  PaymentMethodType type = 2;
+  string provider = 3;
+  string display_name = 4;
+  string logo_url = 5;
+  repeated string supported_currencies = 6;
+  MoneyRange limits = 7;
+  ProcessingTime processing_time = 8;
+  repeated string supported_transaction_types = 9;
+  map<string, string> metadata = 10;
+}
+
+message PaymentMethod {
+  string id = 1;
+  common.v1.UserId user_id = 2;
+  PaymentMethodType type = 3;
+  string provider = 4;
+  string nickname = 5;
+  string display_value = 6;     // Last 4 digits, masked email, etc.
+  bool is_default = 7;
+  bool is_active = 8;
+  google.protobuf.Timestamp created_at = 9;
+  google.protobuf.Timestamp last_used_at = 10;
+}
+
+message Deposit {
+  string id = 1;
+  common.v1.UserId user_id = 2;
+  common.v1.Money amount = 3;
+  common.v1.Money fee = 4;
+  common.v1.Money net_amount = 5;
+  string currency = 6;
+  string payment_method_id = 7;
+  PaymentMethodType payment_method_type = 8;
+  string payment_provider = 9;
+  string provider_transaction_id = 10;
+  common.v1.TransactionStatus status = 11;
+  string idempotency_key = 12;
+  google.protobuf.Timestamp created_at = 13;
+  google.protobuf.Timestamp updated_at = 14;
+  optional google.protobuf.Timestamp completed_at = 15;
+  string failure_reason = 16;
+  map<string, string> metadata = 17;
+}
+
+message Withdrawal {
+  string id = 1;
+  common.v1.UserId user_id = 2;
+  common.v1.Money amount = 3;
+  common.v1.Money fee = 4;
+  common.v1.Money net_amount = 5;
+  string currency = 6;
+  string payment_method_id = 7;
+  PaymentMethodType payment_method_type = 8;
+  string payment_provider = 9;
+  map<string, string> payment_details = 10;  // Encrypted
+  string provider_transaction_id = 11;
+  common.v1.TransactionStatus status = 12;
+  string idempotency_key = 13;
+  google.protobuf.Timestamp created_at = 14;
+  google.protobuf.Timestamp updated_at = 15;
+  optional google.protobuf.Timestamp completed_at = 16;
+  optional google.protobuf.Timestamp approved_at = 17;
+  optional string approved_by = 18;  // "system" or admin ID
+  optional google.protobuf.Timestamp cancelled_at = 19;
+  string failure_reason = 20;
+  string rejection_reason = 21;
+  map<string, string> metadata = 22;
+}
+
+message MoneyRange {
+  common.v1.Money min = 1;
+  common.v1.Money max = 2;
+}
+
+message ProcessingTime {
+  string display = 1;           // Human-readable (e.g., "Instant", "1-3 business days")
+  int32 min_minutes = 2;
+  int32 max_minutes = 3;
+}
+
+enum PaymentMethodType {
+  PAYMENT_METHOD_TYPE_UNSPECIFIED = 0;
+  PAYMENT_METHOD_TYPE_CREDIT_CARD = 1;
+  PAYMENT_METHOD_TYPE_DEBIT_CARD = 2;
+  PAYMENT_METHOD_TYPE_BANK_TRANSFER = 3;
+  PAYMENT_METHOD_TYPE_E_WALLET = 4;      // PayPal, Skrill, Neteller
+  PAYMENT_METHOD_TYPE_CRYPTO = 5;        // Bitcoin, Ethereum, USDT
+  PAYMENT_METHOD_TYPE_PREPAID = 6;       // Paysafecard
+  PAYMENT_METHOD_TYPE_MOBILE = 7;        // Boku, Payforit
+  PAYMENT_METHOD_TYPE_PIX = 8;           // Brazil PIX
+  PAYMENT_METHOD_TYPE_UPI = 9;           // India UPI
+}

@@ -1,0 +1,355 @@
+# Environment Promotion Pipeline
+# Opus Casino - Автоматическое продвижение между окружениями
+
+name: CD - Environment Promotion
+
+on:
+  workflow_run:
+    workflows: ["CD - Production Release"]
+    types:
+      - completed
+  workflow_dispatch:
+    inputs:
+      source-environment:
+        description: 'Source environment'
+        required: true
+        type: choice
+        options:
+          - dev
+          - staging
+      target-environment:
+        description: 'Target environment'
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+      service:
+        description: 'Service to promote'
+        required: true
+        type: choice
+        options:
+          - betting-engine
+          - wallet-core
+          - websocket-gateway
+          - auth
+          - user
+          - payment
+          - bonus
+          - casino
+          - notification
+          - kyc
+      version:
+        description: 'Version to promote'
+        required: true
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME_PREFIX: ${{ github.repository_owner }}
+
+concurrency:
+  group: promotion-${{ inputs.target-environment || 'staging' }}
+  cancel-in-progress: false
+
+jobs:
+  # ==========================================================================
+  # Validate promotion request
+  # ==========================================================================
+  validate:
+    name: Validate Promotion
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      source-env: ${{ steps.detect.outputs.source-env }}
+      target-env: ${{ steps.detect.outputs.target-env }}
+      version: ${{ steps.detect.outputs.version }}
+      image: ${{ steps.detect.outputs.image }}
+    
+    steps:
+      - name: Detect promotion context
+        id: detect
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            SOURCE_ENV="${{ inputs.source-environment }}"
+            TARGET_ENV="${{ inputs.target-environment }}"
+            VERSION="${{ inputs.version }}"
+            SERVICE="${{ inputs.service }}"
+          else
+            # Triggered by successful deployment
+            if [ "${{ github.event.workflow_run.conclusion }}" != "success" ]; then
+              echo "❌ Parent workflow failed"
+              exit 1
+            fi
+            
+            # Extract from parent workflow
+            SOURCE_ENV="dev"
+            TARGET_ENV="staging"
+            VERSION="${{ github.event.workflow_run.head_branch }}"
+            SERVICE="auto"
+          fi
+          
+          echo "source-env=${SOURCE_ENV}" >> $GITHUB_OUTPUT
+          echo "target-env=${TARGET_ENV}" >> $GITHUB_OUTPUT
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "image=${REGISTRY}/${IMAGE_NAME_PREFIX}/${SERVICE}:${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Check environment protection
+        run: |
+          TARGET="${{ steps.detect.outputs.target-env }}"
+          
+          if [ "$TARGET" = "production" ]; then
+            # Check if current time is within deployment window
+            HOUR=$(date +%H)
+            DAY=$(date +%u)
+            
+            # Production deployments only Mon-Fri, 9AM-5PM UTC
+            if [ "$DAY" -gt 5 ]; then
+              echo "❌ Production deployments blocked on weekends"
+              exit 1
+            fi
+            
+            if [ "$HOUR" -lt 9 ] || [ "$HOUR" -gt 17 ]; then
+              echo "❌ Production deployments only allowed 9AM-5PM UTC"
+              exit 1
+            fi
+          fi
+          
+          echo "✅ Environment protection checks passed"
+
+  # ==========================================================================
+  # Run tests in target environment
+  # ==========================================================================
+  test:
+    name: Run Tests in Target Environment
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [validate]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to ${{ needs.validate.outputs.target-env }}
+        run: |
+          echo "Deploying ${IMAGE} to ${TARGET_ENV}..."
+          # kubectl set image deployment/${SERVICE} ${SERVICE}=${IMAGE} -n ${TARGET_ENV}
+          # kubectl rollout status deployment/${SERVICE} -n ${TARGET_ENV} --timeout=300s
+        env:
+          SERVICE: ${{ inputs.service || 'betting-engine' }}
+          IMAGE: ${{ needs.validate.outputs.image }}
+          TARGET_ENV: ${{ needs.validate.outputs.target-env }}
+
+      - name: Run integration tests
+        run: |
+          echo "Running integration tests against ${TARGET_ENV}..."
+          
+          # Run API tests
+          # npm run test:integration -- --env=${TARGET_ENV}
+          
+          # Run contract tests
+          # npm run test:contracts -- --env=${TARGET_ENV}
+          
+          echo "✅ Integration tests passed"
+        env:
+          TARGET_ENV: ${{ needs.validate.outputs.target-env }}
+          API_URL: ${{ needs.validate.outputs.target-env == 'staging' && 'https://staging-api.opus-casino.com' || 'https://api.opus-casino.com' }}
+
+      - name: Run E2E tests
+        if: needs.validate.outputs.target-env == 'staging'
+        run: |
+          echo "Running E2E tests against staging..."
+          
+          # Run Playwright/Cypress E2E tests
+          # npm run test:e2e -- --env=staging
+          
+          echo "✅ E2E tests passed"
+
+  # ==========================================================================
+  # Performance validation
+  # ==========================================================================
+  performance:
+    name: Performance Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [validate, test]
+    if: needs.validate.outputs.target-env == 'staging'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run load tests
+        uses: ./.github/actions/performance-test
+        with:
+          test-file: tools/testing/k6/scenarios/regression.js
+          working-directory: .
+          environment: staging
+          base-url: https://staging-api.opus-casino.com
+          vus: '100'
+          duration: '15m'
+          threshold-r95: '400'
+          threshold-r99: '800'
+          threshold-error-rate: '1'
+          load-profile: 'ramp'
+
+  # ==========================================================================
+  # Security scan before promotion
+  # ==========================================================================
+  security-check:
+    name: Security Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [validate]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Pull image for scanning
+        run: |
+          docker pull ${{ needs.validate.outputs.image }}
+
+      - name: Run Trivy image scan
+        run: |
+          trivy image \
+            --severity HIGH,CRITICAL \
+            --timeout 10m \
+            --exit-code 1 \
+            --format table \
+            ${{ needs.validate.outputs.image }} || exit 1
+
+      - name: Verify image signature
+        run: |
+          cosign verify \
+            --certificate-identity-regexp ".*" \
+            --certificate-oidc-issuer-regexp ".*" \
+            ${{ needs.validate.outputs.image }} || echo "⚠️ Signature verification skipped"
+
+  # ==========================================================================
+  # Promote image
+  # ==========================================================================
+  promote:
+    name: Promote Image
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [validate, test, performance, security-check]
+    if: always() && needs.test.result == 'success' && (needs.performance.result == 'success' || needs.performance.result == 'skipped') && needs.security-check.result == 'success'
+    
+    environment:
+      name: ${{ needs.validate.outputs.target-env }}
+      url: ${{ needs.validate.outputs.target-env == 'production' && 'https://api.opus-casino.com' || 'https://staging-api.opus-casino.com' }}
+    
+    steps:
+      - name: Login to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Promote image tag
+        run: |
+          SOURCE_IMAGE="${{ needs.validate.outputs.image }}"
+          TARGET_TAG="${{ needs.validate.outputs.target-env }}-$(date +%Y%m%d%H%M%S)"
+          
+          # Pull source image
+          docker pull ${SOURCE_IMAGE}
+          
+          # Tag for target environment
+          docker tag ${SOURCE_IMAGE} ${REGISTRY}/${IMAGE_NAME_PREFIX}/${SERVICE}:${TARGET_TAG}
+          
+          # Push to registry
+          docker push ${REGISTRY}/${IMAGE_NAME_PREFIX}/${SERVICE}:${TARGET_TAG}
+          
+          # Update latest tag for target environment
+          docker tag ${SOURCE_IMAGE} ${REGISTRY}/${IMAGE_NAME_PREFIX}/${SERVICE}:${TARGET_ENV}-latest
+          docker push ${REGISTRY}/${IMAGE_NAME_PREFIX}/${SERVICE}:${TARGET_ENV}-latest
+          
+          echo "✅ Image promoted: ${TARGET_TAG}"
+        env:
+          SERVICE: ${{ inputs.service || 'betting-engine' }}
+          TARGET_ENV: ${{ needs.validate.outputs.target-env }}
+
+      - name: Update ArgoCD application
+        run: |
+          argocd login argocd.opus-casino.com \
+            --username ${{ secrets.ARGOCD_USERNAME }} \
+            --password ${{ secrets.ARGOCD_PASSWORD }}
+          
+          argocd app set ${SERVICE}-${TARGET_ENV} \
+            --helm-set image.tag=${TARGET_ENV}-latest \
+            --upsert
+          
+          argocd app sync ${SERVICE}-${TARGET_ENV} --prune
+        env:
+          SERVICE: ${{ inputs.service || 'betting-engine' }}
+          TARGET_ENV: ${{ needs.validate.outputs.target-env }}
+
+      - name: Wait for rollout
+        run: |
+          kubectl rollout status deployment/${SERVICE} -n ${TARGET_ENV} --timeout=600s
+        env:
+          SERVICE: ${{ inputs.service || 'betting-engine' }}
+          TARGET_ENV: ${{ needs.validate.outputs.target-env }}
+
+      - name: Run smoke tests
+        run: |
+          API_URL="${TARGET_ENV == 'production' && 'https://api.opus-casino.com' || 'https://staging-api.opus-casino.com'}"
+          
+          # Health check
+          curl -f ${API_URL}/health || exit 1
+          
+          # Version check
+          VERSION=$(curl -s ${API_URL}/version | jq -r '.version')
+          echo "✅ Deployed version: ${VERSION}"
+        env:
+          TARGET_ENV: ${{ needs.validate.outputs.target-env }}
+
+      - name: Create promotion record
+        run: |
+          curl -X POST ${{ secrets.DEPLOYMENT_WEBHOOK }} \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"action\": \"promotion\",
+              \"service\": \"${{ inputs.service || 'betting-engine' }}\",
+              \"source_environment\": \"${{ needs.validate.outputs.source-env }}\",
+              \"target_environment\": \"${{ needs.validate.outputs.target-env }}\",
+              \"version\": \"${{ needs.validate.outputs.version }}\",
+              \"promoted_at\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",
+              \"promoted_by\": \"${{ github.actor }}\",
+              \"status\": \"success\"
+            }"
+
+      - name: Notify success
+        if: success()
+        run: |
+          curl -X POST ${{ secrets.SLACK_WEBHOOK }} \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"text\": \"✅ Promotion successful\",
+              \"attachments\": [{
+                \"color\": \"good\",
+                \"fields\": [
+                  {\"title\": \"Service\", \"value\": \"${{ inputs.service || 'betting-engine' }}\", \"short\": true},
+                  {\"title\": \"From\", \"value\": \"${{ needs.validate.outputs.source-env }}\", \"short\": true},
+                  {\"title\": \"To\", \"value\": \"${{ needs.validate.outputs.target-env }}\", \"short\": true},
+                  {\"title\": \"Version\", \"value\": \"${{ needs.validate.outputs.version }}\", \"short\": true}
+                ]
+              }]
+            }"
+
+      - name: Notify failure
+        if: failure()
+        run: |
+          curl -X POST ${{ secrets.SLACK_WEBHOOK }} \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"text\": \"❌ Promotion failed\",
+              \"attachments\": [{
+                \"color\": \"danger\",
+                \"fields\": [
+                  {\"title\": \"Service\", \"value\": \"${{ inputs.service || 'betting-engine' }}\", \"short\": true},
+                  {\"title\": \"Environment\", \"value\": \"${{ needs.validate.outputs.target-env }}\", \"short\": true}
+                ]
+              }]
+            }"

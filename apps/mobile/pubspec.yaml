@@ -1,0 +1,87 @@
+name: dod_mobile
+description: DOD Mobile Application - iOS & Android
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.2.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State Management
+  flutter_bloc: ^8.1.3
+  bloc: ^8.1.2
+  freezed_annotation: ^2.4.1
+
+  # Dependency Injection
+  get_it: ^7.6.4
+  injectable: ^2.3.2
+
+  # Networking
+  dio: ^5.4.0
+  web_socket_channel: ^2.4.0
+
+  # Navigation
+  go_router: ^13.0.0
+
+  # Functional Programming
+  dartz: ^0.10.1
+  equatable: ^2.0.5
+
+  # Data
+  json_annotation: ^4.8.1
+  hive_flutter: ^1.1.0
+  flutter_secure_storage: ^9.0.0
+
+  # UI
+  cupertino_icons: ^1.0.6
+  flutter_svg: ^2.0.9
+  cached_network_image: ^3.3.1
+  shimmer: ^3.0.0
+
+  # Utils
+  intl: ^0.18.1
+  uuid: ^4.3.3
+  logger: ^2.1.0
+
+  # Native
+  local_auth: ^2.1.8
+  firebase_core: ^2.24.2
+  firebase_messaging: ^14.7.9
+  flutter_local_notifications: ^16.3.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  # Code Generation
+  build_runner: ^2.4.8
+  freezed: ^2.4.6
+  json_serializable: ^6.7.1
+  injectable_generator: ^2.4.1
+
+  # Testing
+  bloc_test: ^9.1.5
+  mocktail: ^1.0.2
+
+  # Linting
+  flutter_lints: ^3.0.1
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/
+    - assets/icons/
+    - assets/logo/
+
+  fonts:
+    - family: Montserrat
+      fonts:
+        - asset: assets/fonts/Montserrat-Regular.ttf
+        - asset: assets/fonts/Montserrat-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Montserrat-SemiBold.ttf
+          weight: 600

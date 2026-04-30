@@ -1,0 +1,201 @@
+# Jaeger Installation
+# Distributed tracing backend
+
+---
+# Jaeger Operator
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jaeger-operator
+  namespace: monitoring
+  labels:
+    app: jaeger-operator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jaeger-operator
+  template:
+    metadata:
+      labels:
+        app: jaeger-operator
+    spec:
+      serviceAccountName: jaeger-operator
+      containers:
+        - name: jaeger-operator
+          image: jaegertracing/jaeger-operator:1.50.0
+          args:
+            - start
+            - --metrics-host=:8383
+            - --log-level=info
+          ports:
+            - name: metrics
+              containerPort: 8383
+          env:
+            - name: WATCH_NAMESPACE
+              value: ""
+            - name: OPERATOR_NAME
+              value: "jaeger-operator"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+
+---
+# Jaeger ServiceAccount
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: jaeger-operator
+  namespace: monitoring
+
+---
+# Jaeger ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: jaeger-operator
+rules:
+  - apiGroups: [""]
+    resources:
+      - namespaces
+      - pods
+      - services
+      - configmaps
+      - secrets
+    verbs: ["get", "list", "watch", "create", "update", "delete"]
+  - apiGroups: ["apps"]
+    resources:
+      - deployments
+      - daemonsets
+      - statefulsets
+    verbs: ["get", "list", "watch", "create", "update", "delete"]
+  - apiGroups: ["jaegertracing.io"]
+    resources:
+      - jaegers
+    verbs: ["get", "list", "watch", "create", "update", "delete"]
+
+---
+# Jaeger ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: jaeger-operator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: jaeger-operator
+subjects:
+  - kind: ServiceAccount
+    name: jaeger-operator
+    namespace: monitoring
+
+---
+# Jaeger Instance (Production)
+apiVersion: jaegertracing.io/v1
+kind: Jaeger
+metadata:
+  name: jaeger
+  namespace: monitoring
+spec:
+  strategy: production
+  collector:
+    image: jaegertracing/jaeger-collector:1.50.0
+    replicas: 3
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: 1000m
+        memory: 2Gi
+    options:
+      log-level: info
+      collector:
+        num-workers: 100
+        queue-size: 2000
+    autoscale:
+      minReplicas: 3
+      maxReplicas: 10
+      targetCPUUtilizationPercentage: 80
+      
+  query:
+    image: jaegertracing/jaeger-query:1.50.0
+    replicas: 2
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
+    options:
+      log-level: info
+      query:
+        base-path: /jaeger
+    ingress:
+      enabled: true
+      hosts:
+        - jaeger.opus.casino
+      annotations:
+        alb.ingress.kubernetes.io/scheme: internet-facing
+        alb.ingress.kubernetes.io/target-type: ip
+        alb.ingress.kubernetes.io/ssl-redirect: "443"
+      tls:
+        - hosts:
+            - jaeger.opus.casino
+          secretName: jaeger-tls
+          
+  agent:
+    image: jaegertracing/jaeger-agent:1.50.0
+    strategy: DaemonSet
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
+        
+  storage:
+    type: elasticsearch
+    options:
+      es:
+        server-urls: http://elasticsearch.monitoring.svc.cluster.local:9200
+        index-prefix: jaeger
+    dependencies:
+      image: jaegertracing/spark-dependencies
+      sparkMaster: k8s://https://kubernetes.default.svc:443
+      schedule: "55 23 * * *"
+      
+  sampling:
+    options:
+      default_strategy:
+        type: probabilistic
+        param: 0.1
+      service_strategies:
+        - service: betting-engine
+          type: probabilistic
+          param: 0.5
+        - service: wallet-core
+          type: probabilistic
+          param: 0.3
+        - service: auth
+          type: probabilistic
+          param: 0.2
+          
+  ui:
+    options:
+      dependencies:
+        menuEnabled: true
+      tracking:
+        gaID: ""
+      archiveEnabled: true
+      search:
+        maxLimit: 10000
+        
+  allInOne:
+    enabled: false

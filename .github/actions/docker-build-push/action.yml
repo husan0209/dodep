@@ -1,0 +1,160 @@
+# Reusable Composite Action для сборки, сканирования и push Docker образов
+# Opus Casino - Production CI/CD
+
+name: 'Docker Build, Scan & Push'
+description: 'Build Docker image, scan for vulnerabilities, and push to registry'
+branding:
+  icon: 'box'
+  color: 'blue'
+
+inputs:
+  registry:
+    description: 'Container registry URL'
+    required: true
+    default: 'ghcr.io'
+  username:
+    description: 'Registry username'
+    required: true
+    default: ${{ github.actor }}
+  password:
+    description: 'Registry password'
+    required: true
+    default: ${{ github.token }}
+  image-name:
+    description: 'Docker image name'
+    required: true
+  dockerfile:
+    description: 'Path to Dockerfile'
+    required: true
+    default: 'Dockerfile'
+  context:
+    description: 'Build context'
+    required: false
+    default: '.'
+  build-args:
+    description: 'Build arguments (JSON array)'
+    required: false
+    default: '[]'
+  platforms:
+    description: 'Target platforms'
+    required: false
+    default: 'linux/amd64'
+  scan-severity:
+    description: 'Minimum severity level to fail'
+    required: false
+    default: 'HIGH'
+  scan-timeout:
+    description: 'Trivy scan timeout'
+    required: false
+    default: '10m'
+  push-image:
+    description: 'Push image to registry'
+    required: false
+    default: 'true'
+  tags:
+    description: 'Additional tags (JSON array)'
+    required: false
+    default: '[]'
+
+outputs:
+  image-digest:
+    description: 'Docker image digest'
+    value: ${{ steps.build.outputs.digest }}
+  image-tag:
+    description: 'Primary image tag'
+    value: ${{ steps.meta.outputs.tags }}
+  scan-result:
+    description: 'Trivy scan result'
+    value: ${{ steps.scan.outputs.result }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ inputs.registry }}
+        username: ${{ inputs.username }}
+        password: ${{ inputs.password }}
+
+    - name: Extract metadata (tags, labels)
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ inputs.registry }}/${{ inputs.image-name }}
+        tags: |
+          type=sha,prefix=
+          type=ref,event=branch
+          type=ref,event=pr
+          type=semver,pattern={{version}}
+          type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', 'main') }}
+          ${{ inputs.tags }}
+
+    - name: Build and push Docker image
+      id: build
+      uses: docker/build-push-action@v5
+      with:
+        context: ${{ inputs.context }}
+        file: ${{ inputs.dockerfile }}
+        platforms: ${{ inputs.platforms }}
+        push: ${{ inputs.push-image == 'true' }}
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        build-args: ${{ inputs.build-args }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        provenance: false
+        sbom: true
+
+    - name: Install Trivy
+      if: always() && steps.build.outcome == 'success'
+      shell: bash
+      run: |
+        curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin v0.50.0
+
+    - name: Run Trivy vulnerability scanner
+      id: scan
+      if: always() && steps.build.outcome == 'success'
+      shell: bash
+      env:
+        IMAGE_TAG: ${{ steps.meta.outputs.tags }}
+        SEVERITY: ${{ inputs.scan-severity }}
+        TIMEOUT: ${{ inputs.scan-timeout }}
+      run: |
+        # Scan image
+        trivy image \
+          --severity ${SEVERITY},CRITICAL \
+          --timeout ${TIMEOUT} \
+          --format sarif \
+          --output trivy-results.sarif \
+          --exit-code 1 \
+          ${IMAGE_TAG} || SCAN_EXIT_CODE=$?
+        
+        # Also generate HTML report
+        trivy image \
+          --severity ${SEVERITY},CRITICAL \
+          --timeout ${TIMEOUT} \
+          --format table \
+          --output trivy-report.html \
+          ${IMAGE_TAG} || true
+        
+        echo "result=${SCAN_EXIT_CODE:-0}" >> $GITHUB_OUTPUT
+        exit ${SCAN_EXIT_CODE:-0}
+
+    - name: Upload Trivy scan results to GitHub Security tab
+      if: always()
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: trivy-results.sarif
+        category: trivy
+
+    - name: Upload Trivy report as artifact
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: trivy-report-${{ inputs.image-name }}
+        path: trivy-report.html
+        retention-days: 30

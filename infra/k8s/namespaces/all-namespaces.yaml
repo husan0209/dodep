@@ -1,0 +1,114 @@
+# Kubernetes Namespaces for Opus Casino Platform
+# Разделяет ресурсы по окружениям и назначению
+
+---
+# Development окружение
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dev
+  labels:
+    name: dev
+    environment: development
+    istio-injection: enabled
+  annotations:
+    description: "Development namespace for testing and development"
+    owner: "platform-team"
+
+---
+# Staging окружение
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: staging
+  labels:
+    name: staging
+    environment: staging
+    istio-injection: enabled
+  annotations:
+    description: "Staging namespace for pre-production testing"
+    owner: "platform-team"
+
+---
+# Production окружение
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: production
+  labels:
+    name: production
+    environment: production
+    istio-injection: enabled
+  annotations:
+    description: "Production namespace for live traffic"
+    owner: "platform-team"
+
+---
+# Monitoring namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+  labels:
+    name: monitoring
+    environment: shared
+    istio-injection: disabled
+  annotations:
+    description: "Monitoring stack (VictoriaMetrics, Grafana, Jaeger)"
+    owner: "observability-team"
+
+---
+# Data services namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: data
+  labels:
+    name: data
+    environment: shared
+    istio-injection: enabled
+  annotations:
+    description: "Data services (PostgreSQL, ClickHouse, DragonflyDB, Redpanda)"
+    owner: "data-team"
+
+---
+# Security namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: security
+  labels:
+    name: security
+    environment: shared
+    istio-injection: enabled
+  annotations:
+    description: "Security services (Vault, cert-manager)"
+    owner: "security-team"
+
+---
+# Istio system namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: istio-system
+  labels:
+    name: istio-system
+    environment: shared
+    istio-injection: disabled
+  annotations:
+    description: "Istio service mesh components"
+    owner: "platform-team"
+
+---
+# ArgoCD namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: argocd
+  labels:
+    name: argocd
+    environment: shared
+    istio-injection: enabled
+  annotations:
+    description: "ArgoCD GitOps controller"
+    owner: "platform-team"
