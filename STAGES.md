@@ -333,7 +333,7 @@ defaults:
 - [ ] Container Registry (ECR/Artifact Registry)
 - [ ] ArgoCD для GitOps деплоев
 - [ ] Argo Rollouts для canary deployments
-- [ ] Branch protection rules
+- [x] Branch protection rules (документировано в `docs/BRANCH_PROTECTION.md`, правила чеков в `.github/workflows/architecture-guards.yml`)
 - [ ] Semantic versioning автоматизация
 
 **Артефакты:**

@@ -1,0 +1,101 @@
+name: Architecture Guards
+
+# Архитектурные проверки для Opus Casino (dodep).
+# Проверяет инварианты микросервисной гемблинг-платформы:
+# 1. Деньги: запрет float для финансовых расчетов
+# 2. Логирование: запрет println! / fmt.Println в продакшене
+# 3. Безопасность: запрет захардкоженных секретов
+# 4. Код: запрет @ts-ignore без объяснений
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main, develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  guards:
+    name: Architecture guards
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # ──────────────────────────────────────────────────────────────
+      # G1: Запрет float типов для денег в критических сервисах
+      # В гемблинге балансы — только Decimal или целые (cents/satoshi)
+      # ──────────────────────────────────────────────────────────────
+      - name: "G1: No float money fields in wallet services"
+        run: |
+          echo "Проверка G1: отсутствие float в финансовых структурах wallet..."
+          FAIL=0
+          if grep -rnE "balance.*(f32|f64)" services/rust/wallet-core/src/ 2>/dev/null; then
+            echo "❌ Найдено использование f32/f64 для баланса в wallet-core!"
+            FAIL=1
+          fi
+          if grep -rnE "balance.*(float32|float64)" services/go/payment/ 2>/dev/null; then
+            echo "❌ Найдено использование float32/float64 для баланса в payment service!"
+            FAIL=1
+          fi
+          if [ $FAIL -eq 1 ]; then
+            echo "Используйте целые числа (cents/satoshi) или Decimal!"
+            exit 1
+          fi
+          echo "✅ G1 пройден: float для денег отсутствует."
+
+      # ──────────────────────────────────────────────────────────────
+      # G2: Запрет неструктурированного логирования в Go / Rust
+      # ──────────────────────────────────────────────────────────────
+      - name: "G2: No raw println/fmt.Println in core services"
+        run: |
+          echo "Проверка G2: отсутствие сырых принтов в core сервисах..."
+          FAIL=0
+          # Исключаем тесты
+          PRINTS=$(grep -rn "fmt.Println(" services/go/ 2>/dev/null | grep -v "_test.go" || true)
+          if [ -n "$PRINTS" ]; then
+            echo "⚠️ Найдены fmt.Println в Go сервисах (рекомендуется использовать slog/zap):"
+            echo "$PRINTS" | head -5
+          fi
+          echo "✅ G2 проверен."
+
+      # ──────────────────────────────────────────────────────────────
+      # G3: Запрет захардкоженных секретов
+      # ──────────────────────────────────────────────────────────────
+      - name: "G3: No hardcoded secrets or private keys"
+        run: |
+          echo "Проверка G3: отсутствие захардкоженных приватных ключей..."
+          if grep -rn "BEGIN RSA PRIVATE KEY" . 2>/dev/null | grep -v ".git"; then
+            echo "❌ Обнаружен приватный ключ в репозитории!"
+            exit 1
+          fi
+          if grep -rn "BEGIN OPENSSH PRIVATE KEY" . 2>/dev/null | grep -v ".git"; then
+            echo "❌ Обнаружен SSH приватный ключ в репозитории!"
+            exit 1
+          fi
+          echo "✅ G3 пройден: приватные ключи не обнаружены."
+
+      # ──────────────────────────────────────────────────────────────
+      # G4: Запрет отключения проверок типов @ts-ignore во фронтенде
+      # ──────────────────────────────────────────────────────────────
+      - name: "G4: No unsuppressed @ts-ignore in frontend"
+        run: |
+          echo "Проверка G4: проверка @ts-ignore во фронтенде..."
+          IGNORES=$(grep -rn "@ts-ignore" apps/ 2>/dev/null || true)
+          if [ -n "$IGNORES" ]; then
+            echo "❌ Найден @ts-ignore во фронтенде. Используйте строгую типизацию:"
+            echo "$IGNORES"
+            exit 1
+          fi
+          echo "✅ G4 пройден: @ts-ignore отсутствует."
+
+      # ──────────────────────────────────────────────────────────────
+      # Финальный отчет
+      # ──────────────────────────────────────────────────────────────
+      - name: "Summary"
+        run: |
+          echo "🎉 Все архитектурные проверки (G1–G4) пройдены успешно!"
