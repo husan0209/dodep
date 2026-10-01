@@ -146,7 +146,7 @@ func main() {
 	handlers.RegisterDashboardRoutes(admin, db, log, auditSvc)
 	handlers.RegisterUserRoutes(admin, usersSvc, log)
 	handlers.RegisterFinanceRoutes(admin, financeSvc, db, log)
-	handlers.RegisterPlayerRoutes(admin, db, log, auditSvc)
+	handlers.RegisterPlayerRoutes(admin, db, log, auditSvc, usersSvc)
 	handlers.RegisterCRMRoutes(admin, db, log, auditSvc)
 	handlers.RegisterWSRoutes(admin, wsHub, log)
 

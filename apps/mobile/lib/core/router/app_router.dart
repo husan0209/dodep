@@ -10,6 +10,8 @@ import '../features/wallet/presentation/pages/wallet_page.dart';
 import '../features/profile/presentation/pages/profile_page.dart';
 import '../features/bonuses/presentation/pages/bonuses_page.dart';
 import '../features/notifications/presentation/pages/notifications_page.dart';
+import '../features/affiliate/presentation/pages/affiliate_page.dart';
+import '../features/responsible_gambling/presentation/pages/rg_page.dart';
 import 'main_shell.dart';
 
 /// App router configuration
@@ -77,6 +79,16 @@ GoRouter appRouter({required AuthState authState}) {
             path: '/notifications',
             name: 'notifications',
             pageBuilder: (context, state) => const NoTransitionPage(child: NotificationsPage()),
+          ),
+          GoRoute(
+            path: '/affiliate',
+            name: 'affiliate',
+            pageBuilder: (context, state) => const NoTransitionPage(child: AffiliatePage()),
+          ),
+          GoRoute(
+            path: '/responsible-gambling',
+            name: 'responsible-gambling',
+            builder: (context, state) => const RGPage(),
           ),
         ],
       ),

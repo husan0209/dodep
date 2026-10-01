@@ -45,3 +45,11 @@ func (s *UsersService) DeleteUser(ctx context.Context, adminID int64, userID int
 func (s *UsersService) GetActivity(ctx context.Context, userID int64, pageSize int32, cursor string) ([]*userv1.ActivityEntry, *commonv1.PageResponse, error) {
 	return s.userClient.GetActivity(ctx, userID, pageSize, cursor)
 }
+
+func (s *UsersService) GetLimits(ctx context.Context, userID int64) (*userv1.UserLimits, error) {
+	return s.userClient.GetLimits(ctx, userID)
+}
+
+func (s *UsersService) SetLimits(ctx context.Context, userID int64, req *userv1.SetLimitsRequest) (*userv1.UserLimits, error) {
+	return s.userClient.SetLimits(ctx, userID, req)
+}
