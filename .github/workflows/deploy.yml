@@ -23,6 +23,7 @@ env:
   GO_VERSION: '1.26'
   PYTHON_VERSION: '3.11'
   NODE_VERSION: '20'
+  SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
 
 jobs:
   # ==========================================================================
@@ -203,6 +204,11 @@ jobs:
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
 
     steps:
+      # A missing Slack webhook must not turn a green run red. action-slack
+      # aborts with "Specify secrets.SLACK_WEBHOOK_URL" when the variable is
+      # empty, and for a fork/branch without the repository secret configured
+      # that was the only thing this job reported. Gate the step on the secret
+      # actually being present.
       - name: Notify Slack
         if: always() && env.SLACK_WEBHOOK_URL != ''
         uses: 8398a7/action-slack@v3
