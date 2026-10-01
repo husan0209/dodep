@@ -4,8 +4,10 @@ go 1.24.0
 
 require (
 	github.com/gofiber/fiber/v2 v2.52.0
+	github.com/golang-jwt/jwt/v5 v5.2.1
 	github.com/jackc/pgx/v5 v5.7.4
 	github.com/opus-casino/proto v0.0.0
+	github.com/pashagolub/pgxmock/v4 v4.9.0
 	github.com/redis/go-redis/v9 v9.3.0
 	go.uber.org/zap v1.26.0
 	google.golang.org/grpc v1.80.0
@@ -24,9 +26,7 @@ require (
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-runewidth v0.0.15 // indirect
-	github.com/pashagolub/pgxmock/v4 v4.9.0 // indirect
 	github.com/rivo/uniseg v0.2.0 // indirect
-	github.com/stretchr/testify v1.9.0 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasthttp v1.51.0 // indirect
 	github.com/valyala/tcplisten v1.0.0 // indirect

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -60,5 +61,85 @@ func TestLoadBadIntFallsBack(t *testing.T) {
 	}
 	if cfg.RedisDB != 0 {
 		t.Errorf("expected 0 fallback, got %d", cfg.RedisDB)
+	}
+}
+
+func TestLoadReadsEd25519PublicKey(t *testing.T) {
+	t.Setenv("JWT_ED25519_PUBLIC_KEY", "base64-encoded-public-key")
+	cfg := Load()
+	if cfg.JWTEd25519PublicKey != "base64-encoded-public-key" {
+		t.Fatalf("ed25519 public key not loaded: %+v", cfg)
+	}
+}
+
+// TestValidateRejectsUnusableJWTConfig pins the fail-fast behaviour. Every
+// player route is authenticated, so an unusable JWT key is not a degraded
+// state: it means either all requests are rejected or tokens verify against a
+// secret published in the repository.
+func TestValidateRejectsUnusableJWTConfig(t *testing.T) {
+	cases := []struct {
+		name string
+		cfg  Config
+		want string
+	}{
+		{"production with placeholder secret", Config{Env: "production", JWTSecretKey: defaultJWTSecret}, "must be set"},
+		{"production with empty secret", Config{Env: "production", JWTSecretKey: ""}, "must be set"},
+		{"production with short secret", Config{Env: "production", JWTSecretKey: "twenty-bytes-of-junk!!"}, "too short"},
+		{"staging with placeholder", Config{Env: "staging", JWTSecretKey: defaultJWTSecret}, "must be set"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.cfg.Validate()
+			if err == nil {
+				t.Fatalf("expected rejection for %+v", tc.cfg)
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error %q must mention %q", err, tc.want)
+			}
+		})
+	}
+}
+
+func TestValidateAcceptsUsableJWTConfig(t *testing.T) {
+	strong := strings.Repeat("k", MinJWTSecretLength)
+
+	cases := []struct {
+		name string
+		cfg  Config
+	}{
+		{"development always passes", Config{Env: "development", JWTSecretKey: defaultJWTSecret}},
+		{"production with strong hs256 secret", Config{Env: "production", JWTSecretKey: strong}},
+		{"production with ed25519 key only", Config{Env: "production", JWTEd25519PublicKey: "key"}},
+		{"production with both keys", Config{Env: "production", JWTSecretKey: strong, JWTEd25519PublicKey: "key"}},
+		{"test env with strong secret", Config{Env: "test", JWTSecretKey: strong}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := tc.cfg.Validate(); err != nil {
+				t.Fatalf("expected acceptance, got %v", err)
+			}
+		})
+	}
+}
+
+// TestValidateShortSecretReportedPrecisely covers the branch where a secret is
+// present but too weak: the error must report the actual length rather than the
+// generic "must be set" message, otherwise an operator cannot tell which of the
+// two problems to fix.
+func TestValidateShortSecretReportedPrecisely(t *testing.T) {
+	cfg := Config{Env: "production", JWTSecretKey: "short"}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected rejection")
+	}
+	if !strings.Contains(err.Error(), "too short") {
+		t.Fatalf("expected a length-specific error, got %v", err)
+	}
+}
+
+func TestValidateNilConfig(t *testing.T) {
+	var cfg *Config
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("nil config must be rejected, not panic")
 	}
 }
