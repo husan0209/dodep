@@ -63,12 +63,14 @@ def parse_pyproject(include_dev: bool = False) -> dict[str, str]:
     pins: dict[str, str] = {}
     for spec in specs:
         match = _PIN_RE.match(spec)
-        if not match:
+        if match is None:
             # dev tooling is intentionally unpinned (CI installs latest)
             if include_dev and _CI_TOOL_RE.match(spec):
-                pins.setdefault(_normalize(spec.split("[")[0].split(">=")[0].split("==")[0]), "dev")
+                name = spec.split("[")[0].split(">=")[0].split("==")[0]
+                pins.setdefault(_normalize(name), "dev")
                 continue
             pytest.fail(f"Unpinned dependency in pyproject.toml: {spec!r}")
+            continue
         pins[_normalize(match.group(1))] = match.group(2)
     return pins
 
