@@ -6,16 +6,27 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/opus-casino/user/internal/domain"
 )
 
-type UserRepository struct {
-	pool *pgxpool.Pool
+// DBPool is the subset of pgxpool.Pool used by UserRepository.
+// *pgxpool.Pool satisfies it implicitly; tests inject a pgxmock pool.
+type DBPool interface {
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 }
 
-func NewUserRepository(pool *pgxpool.Pool) *UserRepository {
+type UserRepository struct {
+	pool DBPool
+}
+
+func NewUserRepository(pool DBPool) *UserRepository {
+	if pool == nil {
+		panic("user: pool is required")
+	}
 	return &UserRepository{pool: pool}
 }
 
@@ -169,11 +180,17 @@ func (r *UserRepository) GetLimits(ctx context.Context, userID int64) (*domain.U
 	limits := &domain.UserLimits{}
 	var sessionMinutes int
 	var sessionActive bool
+	// Money columns are NUMERIC in Postgres; scan into *string first and
+	// convert to MoneyLimit structs. Scanning directly into *MoneyLimit
+	// fails (destination kind 'ptr' not supported) whenever a row exists.
+	var dailyDeposit, weeklyDeposit, monthlyDeposit,
+		dailyBet, weeklyBet, monthlyBet,
+		dailyLoss, weeklyLoss, monthlyLoss *string
 	err := r.pool.QueryRow(ctx, query, userID).Scan(
 		&limits.UserID,
-		&limits.DailyDepositLimit, &limits.WeeklyDepositLimit, &limits.MonthlyDepositLimit,
-		&limits.DailyBetLimit, &limits.WeeklyBetLimit, &limits.MonthlyBetLimit,
-		&limits.DailyLossLimit, &limits.WeeklyLossLimit, &limits.MonthlyLossLimit,
+		&dailyDeposit, &weeklyDeposit, &monthlyDeposit,
+		&dailyBet, &weeklyBet, &monthlyBet,
+		&dailyLoss, &weeklyLoss, &monthlyLoss,
 		&sessionMinutes, &sessionActive,
 		&limits.SelfExclusion, &limits.SelfExclusionUntil, &limits.UpdatedAt,
 	)
@@ -183,11 +200,28 @@ func (r *UserRepository) GetLimits(ctx context.Context, userID int64) (*domain.U
 	if err != nil {
 		return nil, fmt.Errorf("get limits: %w", err)
 	}
+	limits.DailyDepositLimit = toMoneyLimit(dailyDeposit)
+	limits.WeeklyDepositLimit = toMoneyLimit(weeklyDeposit)
+	limits.MonthlyDepositLimit = toMoneyLimit(monthlyDeposit)
+	limits.DailyBetLimit = toMoneyLimit(dailyBet)
+	limits.WeeklyBetLimit = toMoneyLimit(weeklyBet)
+	limits.MonthlyBetLimit = toMoneyLimit(monthlyBet)
+	limits.DailyLossLimit = toMoneyLimit(dailyLoss)
+	limits.WeeklyLossLimit = toMoneyLimit(weeklyLoss)
+	limits.MonthlyLossLimit = toMoneyLimit(monthlyLoss)
 	limits.SessionTimeLimit = &domain.TimeLimit{
 		Minutes:  sessionMinutes,
 		IsActive: sessionActive,
 	}
 	return limits, nil
+}
+
+// toMoneyLimit converts a nullable NUMERIC-as-text column to MoneyLimit.
+func toMoneyLimit(amount *string) *domain.MoneyLimit {
+	if amount == nil {
+		return nil
+	}
+	return &domain.MoneyLimit{Amount: *amount}
 }
 
 func (r *UserRepository) SetLimits(ctx context.Context, userID int64, req *domain.SetLimitsRequest) error {

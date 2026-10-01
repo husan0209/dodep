@@ -7,15 +7,33 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/opus-casino/user/internal/domain"
-	"github.com/opus-casino/user/internal/repository"
 )
 
+// UserRepository is the persistence contract required by UserService.
+// The pgx-backed *repository.UserRepository satisfies it implicitly;
+// tests inject an in-memory fake. Defined here (service side) per the
+// dependency-inversion rule: handler → service → repository (interfaces).
+type UserRepository interface {
+	GetUserByID(ctx context.Context, id int64) (*domain.User, error)
+	GetUserByEmail(ctx context.Context, email string) (*domain.User, error)
+	UpdateUser(ctx context.Context, req *domain.UpdateUserRequest) (*domain.User, error)
+	SoftDeleteUser(ctx context.Context, userID int64) error
+	GetPreferences(ctx context.Context, userID int64) (*domain.UserPreferences, error)
+	UpsertPreferences(ctx context.Context, pref *domain.UserPreferences) error
+	GetLimits(ctx context.Context, userID int64) (*domain.UserLimits, error)
+	SetLimits(ctx context.Context, userID int64, req *domain.SetLimitsRequest) error
+	GetActivity(ctx context.Context, userID int64, limit, offset int) ([]map[string]interface{}, int, error)
+}
+
 type UserService struct {
-	repo *repository.UserRepository
+	repo UserRepository
 	log  *zap.Logger
 }
 
-func NewUserService(repo *repository.UserRepository, log *zap.Logger) *UserService {
+func NewUserService(repo UserRepository, log *zap.Logger) *UserService {
+	if repo == nil {
+		panic("user: repository is required")
+	}
 	return &UserService{repo: repo, log: log}
 }
 
