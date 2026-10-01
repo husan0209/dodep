@@ -1,4 +1,4 @@
-# CI/CD Pipeline для Python сервисов
+﻿# CI/CD Pipeline РґР»СЏ Python СЃРµСЂРІРёСЃРѕРІ
 # Opus Casino - Fraud ML, Analytics
 
 name: CI - Python
@@ -35,6 +35,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
+      # One broken service must not hide the other's result. With the
+      # default fail-fast, a failing fraud-ml cancels the analytics leg and
+      # the run reports CANCEL, which reads as a failure of a service that
+      # may well be green.
+      fail-fast: false
       matrix:
         service: [fraud-ml, analytics]
     
@@ -76,6 +81,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
+      # One broken service must not hide the other's result. With the
+      # default fail-fast, a failing fraud-ml cancels the analytics leg and
+      # the run reports CANCEL, which reads as a failure of a service that
+      # may well be green.
+      fail-fast: false
       matrix:
         service: [fraud-ml, analytics]
     
@@ -164,6 +174,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
+      # One broken service must not hide the other's result. With the
+      # default fail-fast, a failing fraud-ml cancels the analytics leg and
+      # the run reports CANCEL, which reads as a failure of a service that
+      # may well be green.
+      fail-fast: false
       matrix:
         service: [fraud-ml, analytics]
     
@@ -176,18 +191,44 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install safety
-        run: pip install safety
+      # `safety` 3.x moved its vulnerability database behind a paid Safety
+      # account: unauthenticated `safety check` aborts with exit 64 and
+      # prompts for an interactive login, so this job could never pass in CI
+      # (it was failing for every Python service, not just this change).
+      # pip-audit needs no credentials and is already the scanner used by
+      # .github/actions/security-scan, so this keeps one tool for Python
+      # dependencies across the repo.
+      - name: Install pip-audit
+        run: pip install pip-audit
 
-      - name: Run safety check
+      - name: Run pip-audit
         working-directory: services/python/${{ matrix.service }}
-        run: safety check --json > safety-results.json
+        run: |
+          # -r is required. Without it pip-audit audits the *ambient*
+          # environment, which on a fresh runner is just pip-audit and its
+          # own dependencies - so the job reported vulnerabilities in the
+          # scanner instead of in the service, and never looked at the
+          # service's own pins at all.
+          #
+          # exit 0 = clean, 1 = vulnerabilities found. Anything else is a
+          # real failure (tool/db/resolution error) and must not pass silently.
+          set +e
+          pip-audit -r requirements.txt --format json --output pip-audit.json
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ] && [ "$status" -ne 1 ]; then
+            echo "pip-audit failed with exit code $status"
+            exit "$status"
+          fi
+          exit "$status"
 
-      - name: Upload safety results
+      - name: Upload pip-audit results
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: safety-results-${{ matrix.service }}
-          path: safety-results.json
+          name: pip-audit-results-${{ matrix.service }}
+          path: services/python/${{ matrix.service }}/pip-audit.json
+          retention-days: 30
 
       - name: Run bandit
         run: pip install bandit
@@ -211,6 +252,11 @@ jobs:
     timeout-minutes: 30
     needs: [lint, test, security]
     strategy:
+      # One broken service must not hide the other's result. With the
+      # default fail-fast, a failing fraud-ml cancels the analytics leg and
+      # the run reports CANCEL, which reads as a failure of a service that
+      # may well be green.
+      fail-fast: false
       matrix:
         service: [fraud-ml, analytics]
     
@@ -288,6 +334,11 @@ jobs:
       url: https://dev.opus.casino
     
     strategy:
+      # One broken service must not hide the other's result. With the
+      # default fail-fast, a failing fraud-ml cancels the analytics leg and
+      # the run reports CANCEL, which reads as a failure of a service that
+      # may well be green.
+      fail-fast: false
       matrix:
         service: [fraud-ml, analytics]
     

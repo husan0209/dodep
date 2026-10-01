@@ -113,6 +113,10 @@ jobs:
   python-build:
     runs-on: ubuntu-latest
     strategy:
+      # One broken service must not hide the other's result: the default
+      # fail-fast cancels the analytics leg when fraud-ml fails, so the run
+      # reports CANCEL for a service that may well be green.
+      fail-fast: false
       matrix:
         service: [fraud-ml, analytics]
     defaults:
