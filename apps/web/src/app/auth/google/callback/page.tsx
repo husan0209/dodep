@@ -1,10 +1,18 @@
 'use client'
 
-import { useEffect } from 'react'
+import { Suspense, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuthStore } from '@/stores/auth-store'
 
-export default function GoogleCallbackPage() {
+/**
+ * Reads the OAuth tokens from the query string and drives the sign-in.
+ *
+ * This part must live inside a <Suspense> boundary: useSearchParams() opts
+ * the tree into client-side rendering, and prerendering the route without a
+ * boundary fails the build ("useSearchParams() should be wrapped in a
+ * suspense boundary").
+ */
+function GoogleCallbackInner() {
   const router = useRouter()
   const params = useSearchParams()
   const { setTokens, fetchUser } = useAuthStore()
@@ -38,5 +46,13 @@ export default function GoogleCallbackPage() {
         <p className="mt-2 text-gray-400">Google authorization complete, redirecting to sportsbook.</p>
       </div>
     </div>
+  )
+}
+
+export default function GoogleCallbackPage() {
+  return (
+    <Suspense fallback={null}>
+      <GoogleCallbackInner />
+    </Suspense>
   )
 }
