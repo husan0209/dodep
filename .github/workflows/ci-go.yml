@@ -20,7 +20,14 @@ on:
       - '.github/workflows/ci-go.yml'
 
 env:
-  GO_VERSION: '1.21'
+  # Pinned to a patch release, not a bare minor. Two reasons:
+  #   - it must satisfy the highest `go` directive in the matrix (kyc is on
+  #     1.26.0, bonus on 1.25.0 because its CVE-fixed pgx/grpc need >= 1.25);
+  #   - a bare '1.26' resolves to whatever patch is newest, and services whose
+  #     stdlib advisories are only fixed in a later patch then fail
+  #     govulncheck/gosec non-deterministically. Verified on 1.26.8:
+  #     govulncheck reports "No vulnerabilities found" for the bonus module.
+  GO_VERSION: '1.26.8'
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
@@ -30,16 +37,61 @@ concurrency:
 
 jobs:
   # ==========================================================================
+  # Protobuf stubs
+  # ==========================================================================
+  # libs/proto/gen is gitignored by design (libs/proto/.gitignore), so a clean
+  # checkout has no generated Go stubs and every service that imports
+  # github.com/opus-casino/proto/gen/go/* cannot be type-checked. gosec reports
+  # it as "package has type errors, skipping SSA analysis" and exits non-zero,
+  # which fails the security job for the whole matrix.
+  protos:
+    name: Generate Protobuf Stubs (Go)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Pinned, not "latest": remote plugin resolution must be reproducible
+      # for a build gate. The release archive unpacks to buf/bin/buf.
+      - name: Install buf (pinned)
+        run: |
+          BUF_VERSION=1.73.0
+          curl -fsSL -o /tmp/buf.tar.gz \
+            "https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/buf-Linux-x86_64.tar.gz"
+          sudo tar -xzf /tmp/buf.tar.gz -C /tmp
+          sudo install -m 0755 /tmp/buf/bin/buf /usr/local/bin/buf
+          buf --version
+
+      # The target documented in libs/proto/Makefile for local development.
+      - name: Generate Go stubs
+        run: make -C libs/proto gen-go
+
+      - name: Assert the stubs exist
+        run: |
+          test -f libs/proto/gen/go/common/v1/money.pb.go
+          test -d libs/proto/gen/go/wallet/v1
+          test -d libs/proto/gen/go/bonus/v1
+
+      - name: Upload generated stubs
+        uses: actions/upload-artifact@v4
+        with:
+          name: proto-go-stubs
+          path: libs/proto/gen/go
+          retention-days: 1
+
+  # ==========================================================================
   # Lint
   # ==========================================================================
   lint:
     name: Lint
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    needs: protos
     strategy:
       matrix:
         service: [auth, user, payment, bonus, casino, notification, kyc]
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -50,15 +102,21 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: services/go/${{ matrix.service }}/go.sum
 
-      - name: Install golangci-lint
-        uses: golangci/golangci-lint-action@v4
+      - name: Download generated protobuf stubs
+        uses: actions/download-artifact@v4
         with:
-          version: latest
+          name: proto-go-stubs
+          path: libs/proto/gen/go
+
+      - name: Install golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.1.0
           working-directory: services/go/${{ matrix.service }}
 
       - name: Run golangci-lint
         working-directory: services/go/${{ matrix.service }}
-        run: golangci-lint run --out-format=github-actions
+        run: golangci-lint run --output.text.path=stdout
 
   # ==========================================================================
   # Test
@@ -67,6 +125,7 @@ jobs:
     name: Test
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    needs: protos
     strategy:
       matrix:
         service: [auth, user, payment, bonus, casino, notification, kyc]
@@ -109,6 +168,12 @@ jobs:
       - name: Install gotestsum
         run: go install gotest.tools/gotestsum@latest
 
+      - name: Download generated protobuf stubs
+        uses: actions/download-artifact@v4
+        with:
+          name: proto-go-stubs
+          path: libs/proto/gen/go
+
       - name: Run tests
         working-directory: services/go/${{ matrix.service }}
         run: gotestsum --format testname --junitfile junit.xml -- -race -coverprofile=coverage.out ./...
@@ -138,10 +203,11 @@ jobs:
     name: Security Scan
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    needs: protos
     strategy:
       matrix:
         service: [auth, user, payment, bonus, casino, notification, kyc]
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -153,6 +219,12 @@ jobs:
 
       - name: Install gosec
         run: go install github.com/securego/gosec/v2/cmd/gosec@latest
+
+      - name: Download generated protobuf stubs
+        uses: actions/download-artifact@v4
+        with:
+          name: proto-go-stubs
+          path: libs/proto/gen/go
 
       - name: Run gosec
         working-directory: services/go/${{ matrix.service }}
