@@ -54,14 +54,22 @@ jobs:
       - name: "G2: No raw println/fmt.Println in core services"
         run: |
           echo "Проверка G2: отсутствие сырых принтов в core сервисах..."
-          FAIL=0
-          # Исключаем тесты
-          PRINTS=$(grep -rn "fmt.Println(" services/go/ 2>/dev/null | grep -v "_test.go" || true)
-          if [ -n "$PRINTS" ]; then
-            echo "⚠️ Найдены fmt.Println в Go сервисах (рекомендуется использовать slog/zap):"
-            echo "$PRINTS" | head -5
+          # Scope: long-running service code only.
+          #   - _test.go  : test output is expected
+          #   - /cmd/     : CLI entrypoints (migrate, seed, genhash) — printing
+          #                 to stdout IS their interface; they run once and exit
+          # Service packages (main.go, internal/**) must use zap/slog instead.
+          VIOLATIONS=$(grep -rn "fmt\.Println(" services/go/ 2>/dev/null \
+            | grep -v "_test\.go" \
+            | grep -v "/cmd/" \
+            || true)
+          if [ -n "$VIOLATIONS" ]; then
+            echo "❌ Найдены fmt.Println в сервисном коде Go:"
+            echo "$VIOLATIONS"
+            echo "Используйте структурированное логирование (zap/slog)."
+            exit 1
           fi
-          echo "✅ G2 проверен."
+          echo "✅ G2 пройден: fmt.Println только в тестах и CLI (cmd/)."
 
       # ──────────────────────────────────────────────────────────────
       # G3: Запрет захардкоженных секретов
@@ -69,12 +77,23 @@ jobs:
       - name: "G3: No hardcoded secrets or private keys"
         run: |
           echo "Проверка G3: отсутствие захардкоженных приватных ключей..."
-          if grep -rn "BEGIN RSA PRIVATE KEY" . 2>/dev/null | grep -v ".git"; then
-            echo "❌ Обнаружен приватный ключ в репозитории!"
-            exit 1
-          fi
-          if grep -rn "BEGIN OPENSSH PRIVATE KEY" . 2>/dev/null | grep -v ".git"; then
-            echo "❌ Обнаружен SSH приватный ключ в репозитории!"
+          # Scope: project code only. The marker strings also appear in
+          # bundled agent-skill docs (.claude/, .qwen/, …) as redacted
+          # Kubernetes examples — those are vendored, not project secrets.
+          # Prune with a plain `grep -v -E` on the path prefix.
+          FOUND=0
+          for MARKER in "BEGIN RSA PRIVATE KEY" "BEGIN OPENSSH PRIVATE KEY"; do
+            HITS=$(git grep -n "$MARKER" -- \
+              'apps' 'services' 'libs' 'infra' 'docs' 'tools' 'gen' 2>/dev/null \
+              | grep -v -E '^tools/guards/architecture_guards\.py:' || true)
+            if [ -n "$HITS" ]; then
+              echo "❌ Обнаружен приватный ключ ($MARKER):"
+              echo "$HITS"
+              FOUND=1
+            fi
+          done
+          if [ $FOUND -eq 1 ]; then
+            echo "Ключи должны приходить из Vault / переменных окружения."
             exit 1
           fi
           echo "✅ G3 пройден: приватные ключи не обнаружены."
@@ -82,19 +101,25 @@ jobs:
       # ──────────────────────────────────────────────────────────────
       # G4: Запрет отключения проверок типов @ts-ignore во фронтенде
       # ──────────────────────────────────────────────────────────────
-      - name: "G4: No unsuppressed @ts-ignore in frontend"
+      - name: "G4: No unsuppressed @ts-ignore / eslint-disable in frontend"
         run: |
-          echo "Проверка G4: проверка @ts-ignore во фронтенде..."
-          IGNORES=$(grep -rn "@ts-ignore" apps/ 2>/dev/null || true)
-          if [ -n "$IGNORES" ]; then
-            echo "❌ Найден @ts-ignore во фронтенде. Используйте строгую типизацию:"
-            echo "$IGNORES"
+          echo "Проверка G4: подавление проверок во фронтенде..."
+          # @ts-ignore/@ts-nocheck defeat the type checker, eslint-disable
+          # defeats the linter — including directives for rules that are not
+          # even enabled (they rot silently). Both are forbidden.
+          SUPPRESSIONS=$(git grep -nE "@ts-ignore|@ts-nocheck|eslint-disable" -- \
+            'apps' 'libs' 2>/dev/null || true)
+          if [ -n "$SUPPRESSIONS" ]; then
+            echo "❌ Найдены suppression-директивы. Используйте строгую типизацию:"
+            echo "$SUPPRESSIONS"
             exit 1
           fi
-          echo "✅ G4 пройден: @ts-ignore отсутствует."
+          echo "✅ G4 пройден: @ts-ignore / eslint-disable отсутствуют."
 
       # ──────────────────────────────────────────────────────────────
-      # Финальный отчет
+      # Локальный запуск: py tools/guards/architecture_guards.py
+      # Правила G1–G4 дублируются там, чтобы можно было проверять
+      # инварианты без пуша. Держите оба места в синхроне.
       # ──────────────────────────────────────────────────────────────
       - name: "Summary"
         run: |

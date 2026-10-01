@@ -60,8 +60,10 @@ export function trackEvent(event: TelemetryEvent, payload: TelemetryPayload = {}
     // Ignore storage errors in privacy mode / full quota.
   }
 
+  // Dev-only console mirror. The `no-console` rule is not enabled in
+  // .eslintrc.js (next/core-web-vitals), and architecture guard G4 forbids
+  // inline suppression comments — so this line is intentionally unsuppressed.
   if (process.env.NODE_ENV !== 'production') {
-    // eslint-disable-next-line no-console
     console.info('[telemetry]', event, normalizedPayload)
   }
 }

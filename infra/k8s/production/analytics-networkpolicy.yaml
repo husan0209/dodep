@@ -1,0 +1,83 @@
+# ============================================================
+# NetworkPolicy — Analytics Service (standalone file)
+# Does not edit infra/k8s/production/network-policies.yaml.
+# Internal-only service: HTTP 8000, no gRPC, no public ingress.
+# Callers: admin-bff and dashboards inside the mesh (platform ns).
+# Egress: ClickHouse HTTP 8123 / native 9000, Redis 6379 (data ns).
+# ============================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: analytics-service
+  namespace: platform
+  labels:
+    app.kubernetes.io/name: analytics
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: analytics
+      app.kubernetes.io/component: analytics-service
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # In-cluster callers (admin-bff, dashboards via mesh) + Istio sidecars
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: istio-system
+        - namespaceSelector:
+            matchLabels:
+              name: platform
+      ports:
+        - protocol: TCP
+          port: 8000
+    # Monitoring (scrape + OTLP)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+      ports:
+        - protocol: TCP
+          port: 8000
+    - ports:
+        - protocol: TCP
+          port: 53
+        - protocol: UDP
+          port: 53
+  egress:
+    # Data layer: ClickHouse + DragonflyDB
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: data
+      ports:
+        - protocol: TCP
+          port: 8123
+        - protocol: TCP
+          port: 9000
+        - protocol: TCP
+          port: 6379
+    # Observability
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+      ports:
+        - protocol: TCP
+          port: 4317
+        - protocol: TCP
+          port: 4318
+        - protocol: TCP
+          port: 9090
+    # DNS
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: TCP
+          port: 53
+        - protocol: UDP
+          port: 53

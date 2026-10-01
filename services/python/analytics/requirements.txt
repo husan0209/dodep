@@ -1,0 +1,14 @@
+# Runtime dependencies for the Analytics Service.
+# Mirrors pyproject.toml (runtime subset only — no airflow/pandas/polars,
+# which are not imported by the service code). Consumed by the generic
+# infra/docker/Dockerfile.python (COPY services/python/analytics/requirements.txt).
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+pydantic==2.5.3
+pydantic-settings==2.1.0
+clickhouse-connect==0.7.1
+
+# Testing / CI
+pytest==8.0.0
+pytest-asyncio==0.23.4
+httpx==0.26.0
