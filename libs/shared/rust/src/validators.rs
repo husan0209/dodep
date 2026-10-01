@@ -1,5 +1,6 @@
 //! Validators for Opus Casino platform
 
+use chrono::Datelike;
 use regex::Regex;
 use std::sync::OnceLock;
 
@@ -93,55 +94,36 @@ pub fn is_valid_percentage(value: f64) -> bool {
 }
 
 /// Validate IP address (IPv4 or IPv6)
+///
+/// Uses `std::net::IpAddr::from_str`, which is the canonical parser and accepts
+/// every valid textual form — including compressed IPv6 (`::1`, `2001:db8::1`)
+/// and IPv4-mapped IPv6. A hand-rolled regex could only cover a subset: the
+/// previous implementation rejected compressed IPv6, silently disagreeing with
+/// the Go and TypeScript validators on the same platform.
 pub fn is_valid_ip(ip: &str) -> bool {
-    // IPv4
-    static IPV4_REGEX: OnceLock<Regex> = OnceLock::new();
-    let ipv4_regex = IPV4_REGEX.get_or_init(|| {
-        Regex::new(r"^(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$").unwrap()
-    });
-    
-    // IPv6 (simplified)
-    static IPV6_REGEX: OnceLock<Regex> = OnceLock::new();
-    let ipv6_regex = IPV6_REGEX.get_or_init(|| {
-        Regex::new(r"^(?:[A-Fa-f0-9]{1,4}:){7}[A-Fa-f0-9]{1,4}$").unwrap()
-    });
-    
-    ipv4_regex.is_match(ip) || ipv6_regex.is_match(ip)
+    ip.parse::<std::net::IpAddr>().is_ok()
 }
 
 /// Validate date string (ISO 8601 format: YYYY-MM-DD)
+///
+/// Rejects impossible calendar dates (e.g. `2026-02-30`, `2025-02-29`): a
+/// range check on the day component alone would accept them. Bounded to
+/// 1900-2100 to match the other language implementations of this validator.
 pub fn is_valid_date(date: &str) -> bool {
     static DATE_REGEX: OnceLock<Regex> = OnceLock::new();
     let regex = DATE_REGEX.get_or_init(|| {
         Regex::new(r"^\d{4}-\d{2}-\d{2}$").unwrap()
     });
-    
+
     if !regex.is_match(date) {
         return false;
     }
-    
-    // Basic validation of date components
-    let parts: Vec<&str> = date.split('-').collect();
-    if parts.len() != 3 {
+
+    let Ok(naive) = chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d") else {
         return false;
-    }
-    
-    let year: u32 = match parts[0].parse() {
-        Ok(y) => y,
-        Err(_) => return false,
     };
-    
-    let month: u32 = match parts[1].parse() {
-        Ok(m) => m,
-        Err(_) => return false,
-    };
-    
-    let day: u32 = match parts[2].parse() {
-        Ok(d) => d,
-        Err(_) => return false,
-    };
-    
-    year >= 1900 && year <= 2100 && month >= 1 && month <= 12 && day >= 1 && day <= 31
+
+    (1900..=2100).contains(&naive.year())
 }
 
 /// Validate username
@@ -171,6 +153,9 @@ mod tests {
     fn test_invalid_uuid() {
         assert!(!is_valid_uuid("not-a-uuid"));
         assert!(!is_valid_uuid("550e8400-e29b-41d4-a716"));
+        assert!(!is_valid_uuid(""));
+        // v1 uuid: version nibble must be 4
+        assert!(!is_valid_uuid("550e8400-e29b-11d4-a716-446655440000"));
     }
 
     #[test]
@@ -184,6 +169,34 @@ mod tests {
         assert!(!is_valid_email("invalid"));
         assert!(!is_valid_email("@example.com"));
         assert!(!is_valid_email("user@"));
+        assert!(!is_valid_email(""));
+        assert!(!is_valid_email("a b@c.com"));
+    }
+
+    #[test]
+    fn test_country_and_currency_codes() {
+        for c in ["US", "UA", "DE"] {
+            assert!(is_valid_country_code(c), "{c} must be valid");
+        }
+        for c in ["", "U", "USA", "us", "U1"] {
+            assert!(!is_valid_country_code(c), "{c} must be invalid");
+        }
+        for c in ["USD", "EUR", "BTC"] {
+            assert!(is_valid_currency_code(c), "{c} must be valid");
+        }
+        for c in ["", "US", "USDD", "usd", "U1D"] {
+            assert!(!is_valid_currency_code(c), "{c} must be invalid");
+        }
+    }
+
+    #[test]
+    fn test_money_amount() {
+        for a in ["0", "10", "100.00", "0.99", "999999999.99"] {
+            assert!(is_valid_money_amount(a), "{a} must be valid");
+        }
+        for a in ["", "-5", "10.123", "abc", "10,00", " 10"] {
+            assert!(!is_valid_money_amount(a), "{a} must be invalid");
+        }
     }
 
     #[test]
@@ -199,6 +212,7 @@ mod tests {
         assert!(!is_valid_password("NOLOWERCASE1!"));
         assert!(!is_valid_password("NoSpecial1"));
         assert!(!is_valid_password("NoDigit@!"));
+        assert!(!is_valid_password(""));
     }
 
     #[test]
@@ -206,12 +220,64 @@ mod tests {
         assert!(is_valid_odds("1.50"));
         assert!(is_valid_odds("2.00"));
         assert!(is_valid_odds("100.00"));
+        assert!(is_valid_odds("1.01"));
+        assert!(is_valid_odds("1000"));
     }
 
     #[test]
     fn test_invalid_odds() {
-        assert!(!is_valid_odds("1.00"));  // Below minimum
-        assert!(!is_valid_odds("1001.00"));  // Above maximum
+        assert!(!is_valid_odds("1.00")); // Below minimum
+        assert!(!is_valid_odds("1000.01")); // Above maximum
+        assert!(!is_valid_odds("1001.00"));
         assert!(!is_valid_odds("invalid"));
+        assert!(!is_valid_odds("-2"));
+        assert!(!is_valid_odds(""));
+    }
+
+    #[test]
+    fn test_percentage() {
+        for v in [0.0, 50.5, 100.0] {
+            assert!(is_valid_percentage(v));
+        }
+        for v in [-0.1, 100.1, f64::NAN, f64::INFINITY] {
+            assert!(!is_valid_percentage(v));
+        }
+    }
+
+    #[test]
+    fn test_ip() {
+        for ip in ["127.0.0.1", "192.168.1.1", "2001:db8::1"] {
+            assert!(is_valid_ip(ip), "{ip} must be valid");
+        }
+        for ip in ["", "999.1.1.1", "abc"] {
+            assert!(!is_valid_ip(ip), "{ip} must be invalid");
+        }
+    }
+
+    #[test]
+    fn test_date_rejects_impossible_calendar_days() {
+        assert!(is_valid_date("2026-09-30"));
+        assert!(is_valid_date("2024-02-29")); // leap year
+        assert!(!is_valid_date("2025-02-29")); // not a leap year
+        assert!(!is_valid_date("2026-02-30"));
+        assert!(!is_valid_date("2026-04-31"));
+        assert!(!is_valid_date("2026-13-01"));
+        assert!(!is_valid_date("2026-00-10"));
+        assert!(!is_valid_date("2026-01-00"));
+        assert!(!is_valid_date("30-09-2026"));
+        assert!(!is_valid_date("2026-9-3"));
+        assert!(!is_valid_date(""));
+        assert!(!is_valid_date("1899-01-01"));
+        assert!(!is_valid_date("2101-01-01"));
+    }
+
+    #[test]
+    fn test_username() {
+        for u in ["player1", "A_bc123", "abcdefghijklmnopqrst"] {
+            assert!(is_valid_username(u), "{u} must be valid");
+        }
+        for u in ["", "ab", "1abc", "a", "abcdefghijklmnopqrstu", "a-b"] {
+            assert!(!is_valid_username(u), "{u} must be invalid");
+        }
     }
 }

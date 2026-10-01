@@ -1,8 +1,5 @@
 //! Constants for Opus Casino platform
 
-use rust_decimal::Decimal;
-use once_cell::sync::Lazy;
-
 /// Default pagination settings
 pub mod pagination {
     pub const DEFAULT_PAGE_SIZE: i32 = 20;
