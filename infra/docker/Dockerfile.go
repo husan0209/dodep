@@ -4,7 +4,10 @@
 # =============================================================================
 # Stage 1: Builder
 # =============================================================================
-FROM golang:1.22-alpine3.19 AS builder
+# NOTE: builder must stay >= the highest `go` directive across services
+# (currently go 1.24: grpc v1.80 requires it). Go 1.22 is EOL since Feb 2025
+# and ships no security fixes — do NOT downgrade below go 1.24.
+FROM golang:1.24-alpine3.21 AS builder
 
 # Install build dependencies
 RUN apk add --no-cache \
@@ -73,7 +76,7 @@ ENTRYPOINT ["/usr/local/bin/app"]
 # =============================================================================
 # Stage 3: Debug (for development)
 # =============================================================================
-FROM alpine:3.19 AS debug
+FROM alpine:3.21 AS debug
 
 # Install runtime dependencies
 RUN apk add --no-cache \

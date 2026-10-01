@@ -11,22 +11,22 @@ import (
 type BonusType string
 
 const (
-	BonusTypeWelcome    BonusType = "welcome"
-	BonusTypeReload     BonusType = "reload"
-	BonusTypeCashback   BonusType = "cashback"
-	BonusTypeFreeSpins  BonusType = "free_spins"
-	BonusTypeReferral   BonusType = "referral"
+	BonusTypeWelcome   BonusType = "welcome"
+	BonusTypeReload    BonusType = "reload"
+	BonusTypeCashback  BonusType = "cashback"
+	BonusTypeFreeSpins BonusType = "free_spins"
+	BonusTypeReferral  BonusType = "referral"
 )
 
 // BonusStatus tracks bonus lifecycle.
 type BonusStatus string
 
 const (
-	BonusStatusPending    BonusStatus = "pending"    // Awarded, not yet activated
-	BonusStatusActive     BonusStatus = "active"     // In progress (wagering)
-	BonusStatusCompleted  BonusStatus = "completed"  // Wagering complete, converted to real
-	BonusStatusExpired    BonusStatus = "expired"    // TTL exceeded before wagering complete
-	BonusStatusCancelled  BonusStatus = "cancelled"  // Manually or policy cancelled
+	BonusStatusPending   BonusStatus = "pending"   // Awarded, not yet activated
+	BonusStatusActive    BonusStatus = "active"    // In progress (wagering)
+	BonusStatusCompleted BonusStatus = "completed" // Wagering complete, converted to real
+	BonusStatusExpired   BonusStatus = "expired"   // TTL exceeded before wagering complete
+	BonusStatusCancelled BonusStatus = "cancelled" // Manually or policy cancelled
 )
 
 // Bonus represents a user's bonus record.

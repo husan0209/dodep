@@ -30,10 +30,21 @@ securityContext:
 
 service:
   type: ClusterIP
-  httpPort: 8080
-  httpTargetPort: 8080
-  grpcPort: 9090
-  grpcTargetPort: 9090
+  # HTTP (Fiber). Must match PORT env below and CONVENTIONS.md (bonus: 8088).
+  port: 8088
+  targetPort: 8088
+  # gRPC (tonic-style tonic equivalent: google.golang.org/grpc).
+  # Must match GRPC_PORT env below and CONVENTIONS.md (bonus: 50056).
+  grpcPort: 50056
+  grpcTargetPort: 50056
+  # Named Prometheus port on the same container port as HTTP: /metrics is
+  # served by the app on PORT, and only needs its own Service port name for
+  # the ServiceMonitor to select it.
+  extraPorts:
+    - name: metrics
+      containerPort: 8088
+      port: 8088
+      targetPort: 8088
 
 ingress:
   enabled: true
@@ -73,7 +84,7 @@ nodeSelector:
 
 healthCheck:
   path: /health
-  port: 8080
+  port: 8088
   liveness:
     initialDelaySeconds: 10
     periodSeconds: 10
@@ -86,28 +97,40 @@ healthCheck:
     failureThreshold: 3
 
 env:
-  - name: GIN_MODE
-    value: "release"
+  # NOTE: every name below must match what the service actually reads
+  # (see services/go/bonus/internal/config/config.go). Do NOT add
+  # framework vars (e.g. GIN_MODE — the service is Fiber, NEVER-8) or
+  # broker vars the service does not read (it reads KAFKA_BROKERS).
   - name: APP_ENV
-    valueFrom:
-      configMapKeyRef:
-        name: bonus-config
-        key: app-env
+    value: "development"
+  - name: PORT
+    value: "8088"
+  - name: GRPC_PORT
+    value: "50056"
   - name: DATABASE_URL
     valueFrom:
       secretKeyRef:
         name: bonus-secrets
         key: database-url
-  - name: REDIS_URL
+  - name: JWT_SECRET_KEY
     valueFrom:
       secretKeyRef:
         name: bonus-secrets
-        key: redis-url
-  - name: REDPANDA_BROKERS
-    valueFrom:
-      configMapKeyRef:
-        name: bonus-config
-        key: redpanda-brokers
+        key: jwt-secret-key
+  - name: KAFKA_BROKERS
+    value: "redpanda.data.svc.cluster.local:9092"
+  - name: WALLET_GRPC_ADDR
+    value: "wallet-core.platform.svc.cluster.local:50053"
+  - name: CORS_ORIGINS
+    value: "https://www.opus.casino,https://m.opus.casino"
+  - name: WELCOME_BONUS_PERCENTAGE
+    value: "100"
+  - name: WELCOME_BONUS_MAX_AMOUNT
+    value: "200"
+  - name: WELCOME_BONUS_WAGERING_REQUIREMENT
+    value: "30"
+  - name: WELCOME_BONUS_EXPIRY_DAYS
+    value: "30"
 
 podDisruptionBudget:
   enabled: true
@@ -125,9 +148,10 @@ networkPolicy:
               name: monitoring
       ports:
         - protocol: TCP
-          port: 8080
+          port: 8088
         - protocol: TCP
-          port: 9090
+          port: 50056
+        # Prometheus scrape (same port as HTTP, distinct reason).
   egress:
     - to:
         - namespaceSelector:
@@ -142,6 +166,9 @@ networkPolicy:
           port: 9092
 
 serviceMonitor:
+  # Prometheus scrapes /metrics on the service HTTP port (the exposition is
+  # served by the app itself, see internal/telemetry). Named `metrics` via
+  # service.extraPorts so the ServiceMonitor selector matches.
   enabled: true
   interval: 30s
   scrapeTimeout: 10s

@@ -40,6 +40,20 @@ service:
   type: ClusterIP
   port: 8080
   targetPort: 8080
+  # Optional second (gRPC) port. When set, Deployment exposes a `grpc`
+  # containerPort and Service exposes a `grpc` port alongside `http`.
+  # When unset, rendering is identical to the single-port behaviour.
+  # grpcPort: 50051
+  # grpcTargetPort: 50051
+  #
+  # Additional named ports (e.g. Prometheus `metrics`). Each entry needs
+  # name/containerPort (pod) and name/port/targetPort (Service):
+  # extraPorts:
+  #   - name: metrics
+  #     containerPort: 8080
+  #     port: 8080
+  #     targetPort: 8080
+  extraPorts: []
   annotations: {}
 
 # Ingress configuration
