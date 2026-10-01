@@ -8,11 +8,15 @@ import (
 
 // Event types
 const (
-	EventTypeDepositCompleted   = "deposit.completed"
-	EventTypeDepositFailed      = "deposit.failed"
+	EventTypeDepositCompleted    = "deposit.completed"
+	EventTypeDepositFailed       = "deposit.failed"
 	EventTypeWithdrawalCompleted = "withdrawal.completed"
-	EventTypeWithdrawalFailed   = "withdrawal.failed"
-	EventTypePaymentAudit       = "payment.audit"
+	EventTypeWithdrawalFailed    = "withdrawal.failed"
+	// Withdrawal review lifecycle (manual approval flow).
+	EventTypeWithdrawalReviewRequested = "withdrawal.review_requested"
+	EventTypeWithdrawalApproved        = "withdrawal.approved"
+	EventTypeWithdrawalRejected        = "withdrawal.rejected"
+	EventTypePaymentAudit              = "payment.audit"
 )
 
 // BaseEvent contains common event fields
@@ -27,13 +31,13 @@ type BaseEvent struct {
 // DepositCompletedEvent is published when a deposit completes
 type DepositCompletedEvent struct {
 	BaseEvent
-	UserID       int64           `json:"user_id"`
-	PaymentID    string          `json:"payment_id"`
-	PaymentUUID  string          `json:"payment_uuid"`
-	Amount       decimal.Decimal `json:"amount"`
-	FiatAmount   decimal.Decimal `json:"fiat_amount"`
-	Currency     string          `json:"currency"`
-	TransactionID string         `json:"transaction_id"`
+	UserID        int64           `json:"user_id"`
+	PaymentID     string          `json:"payment_id"`
+	PaymentUUID   string          `json:"payment_uuid"`
+	Amount        decimal.Decimal `json:"amount"`
+	FiatAmount    decimal.Decimal `json:"fiat_amount"`
+	Currency      string          `json:"currency"`
+	TransactionID string          `json:"transaction_id"`
 }
 
 // DepositFailedEvent is published when a deposit fails
@@ -49,14 +53,14 @@ type DepositFailedEvent struct {
 // WithdrawalCompletedEvent is published when a withdrawal completes
 type WithdrawalCompletedEvent struct {
 	BaseEvent
-	UserID        int64           `json:"user_id"`
-	WithdrawalID  string          `json:"withdrawal_id"`
-	WithdrawalUUID string         `json:"withdrawal_uuid"`
-	Amount        decimal.Decimal `json:"amount"`
-	FiatAmount    decimal.Decimal `json:"fiat_amount"`
-	Currency      string          `json:"currency"`
-	Address       string          `json:"address"`
-	TransactionID string          `json:"transaction_id"`
+	UserID         int64           `json:"user_id"`
+	WithdrawalID   string          `json:"withdrawal_id"`
+	WithdrawalUUID string          `json:"withdrawal_uuid"`
+	Amount         decimal.Decimal `json:"amount"`
+	FiatAmount     decimal.Decimal `json:"fiat_amount"`
+	Currency       string          `json:"currency"`
+	Address        string          `json:"address"`
+	TransactionID  string          `json:"transaction_id"`
 }
 
 // WithdrawalFailedEvent is published when a withdrawal fails
@@ -134,5 +138,35 @@ func NewPaymentAuditEvent(userID int64, opType, opID, refType, refID string) *Pa
 		OperationID:   opID,
 		ReferenceType: refType,
 		ReferenceID:   refID,
+	}
+}
+
+// WithdrawalReviewEvent is published on review transitions
+// (requested / approved / rejected).
+type WithdrawalReviewEvent struct {
+	BaseEvent
+	UserID         int64           `json:"user_id"`
+	WithdrawalUUID string          `json:"withdrawal_uuid"`
+	Amount         decimal.Decimal `json:"amount"`
+	FiatAmount     decimal.Decimal `json:"fiat_amount"`
+	Currency       string          `json:"currency"`
+	DecidedBy      string          `json:"decided_by,omitempty"`
+	Reason         string          `json:"reason,omitempty"`
+}
+
+// NewWithdrawalReviewEvent creates a review lifecycle event.
+func NewWithdrawalReviewEvent(eventType string, userID int64, withdrawalUUID string, amount, fiatAmount decimal.Decimal, currency, decidedBy, reason string) *WithdrawalReviewEvent {
+	return &WithdrawalReviewEvent{
+		BaseEvent: BaseEvent{
+			EventType: eventType,
+			Timestamp: time.Now(),
+		},
+		UserID:         userID,
+		WithdrawalUUID: withdrawalUUID,
+		Amount:         amount,
+		FiatAmount:     fiatAmount,
+		Currency:       currency,
+		DecidedBy:      decidedBy,
+		Reason:         reason,
 	}
 }

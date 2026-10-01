@@ -250,17 +250,18 @@ func (s *WebhookService) handleDepositFailed(ctx context.Context, payment *domai
 
 // handleWithdrawalFinished handles a finished withdrawal
 func (s *WebhookService) handleWithdrawalFinished(ctx context.Context, withdrawal *domain.Withdrawal) error {
-	// Finalize debit
-	_, err := s.wallet.FinalizeDebit(ctx, client.FinalizeDebitRequest{
+	// Settle the wallet reservation. The amount already left the available
+	// balance when it was locked, so it is booked as a debit here instead of
+	// being unlocked and debited again (which would charge the player twice).
+	if _, err := s.wallet.SettleFunds(ctx, client.SettleRequest{
 		UserID:         withdrawal.UserID,
-		Currency:       "USD",
-		Amount:         withdrawal.FiatAmount,
-		IdempotencyKey: "withdrawal:" + withdrawal.WithdrawalID,
-		ReferenceID:    withdrawal.WithdrawalID,
-	})
-	if err != nil {
-		log.Error().Err(err).Str("withdrawal_id", withdrawal.WithdrawalID).Msg("Failed to finalize debit")
-		return fmt.Errorf("finalize debit: %w", err)
+		Reference:      WithdrawalLockReference(withdrawal.UUID),
+		ReferenceType:  WithdrawalLockReferenceType,
+		IdempotencyKey: "withdrawal:" + withdrawal.UUID.String(),
+		Description:    "crypto payout " + withdrawal.WithdrawalID,
+	}); err != nil {
+		log.Error().Err(err).Str("withdrawal_id", withdrawal.WithdrawalID).Msg("Failed to settle reserved funds")
+		return fmt.Errorf("settle reserved funds: %w", err)
 	}
 
 	// Update withdrawal status
@@ -279,9 +280,14 @@ func (s *WebhookService) handleWithdrawalFinished(ctx context.Context, withdrawa
 
 // handleWithdrawalFailed handles a failed withdrawal
 func (s *WebhookService) handleWithdrawalFailed(ctx context.Context, withdrawal *domain.Withdrawal) error {
-	// Unlock funds
-	if err := s.wallet.UnlockFunds(ctx, withdrawal.WithdrawalID, "withdrawal_unlock:"+withdrawal.WithdrawalID); err != nil {
-		log.Error().Err(err).Str("withdrawal_id", withdrawal.WithdrawalID).Msg("Failed to unlock funds")
+	// Release the reservation: the payout never happened, the player keeps
+	// the money. Keyed by the reservation reference (not the provider id).
+	if err := s.wallet.UnlockFunds(ctx, client.UnlockRequest{
+		UserID:        withdrawal.UserID,
+		Reference:     WithdrawalLockReference(withdrawal.UUID),
+		ReferenceType: WithdrawalLockReferenceType,
+	}); err != nil {
+		log.Error().Err(err).Str("withdrawal_id", withdrawal.WithdrawalID).Msg("Failed to release reserved funds")
 	}
 
 	// Update withdrawal status
@@ -292,7 +298,7 @@ func (s *WebhookService) handleWithdrawalFailed(ctx context.Context, withdrawal 
 	log.Info().
 		Int64("user_id", withdrawal.UserID).
 		Str("withdrawal_id", withdrawal.WithdrawalID).
-		Msg("Withdrawal failed, funds unlocked")
+		Msg("Withdrawal failed, funds released")
 
 	return nil
 }
@@ -300,15 +306,15 @@ func (s *WebhookService) handleWithdrawalFailed(ctx context.Context, withdrawal 
 // mapPaymentStatus maps NOWPayments status to domain status
 func (s *WebhookService) mapPaymentStatus(status string) domain.PaymentStatus {
 	statusMap := map[string]domain.PaymentStatus{
-		"waiting":       domain.PaymentStatusWaiting,
-		"confirming":    domain.PaymentStatusConfirming,
-		"confirmed":     domain.PaymentStatusConfirmed,
-		"sending":       domain.PaymentStatusSending,
+		"waiting":        domain.PaymentStatusWaiting,
+		"confirming":     domain.PaymentStatusConfirming,
+		"confirmed":      domain.PaymentStatusConfirmed,
+		"sending":        domain.PaymentStatusSending,
 		"partially_paid": domain.PaymentStatusPartiallyPaid,
-		"finished":      domain.PaymentStatusFinished,
-		"failed":        domain.PaymentStatusFailed,
-		"expired":       domain.PaymentStatusExpired,
-		"refunded":      domain.PaymentStatusRefunded,
+		"finished":       domain.PaymentStatusFinished,
+		"failed":         domain.PaymentStatusFailed,
+		"expired":        domain.PaymentStatusExpired,
+		"refunded":       domain.PaymentStatusRefunded,
 	}
 	if s, ok := statusMap[status]; ok {
 		return s

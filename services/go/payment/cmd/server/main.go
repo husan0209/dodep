@@ -16,6 +16,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	"github.com/shopspring/decimal"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/propagation"
@@ -23,8 +24,8 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.24.0"
 	"go.opentelemetry.io/otel/trace"
-	"golang.org/x/sync/errgroup"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
@@ -33,11 +34,13 @@ import (
 
 	"github.com/opus-casino/payment/internal/client"
 	"github.com/opus-casino/payment/internal/config"
+	"github.com/opus-casino/payment/internal/crypto"
 	"github.com/opus-casino/payment/internal/event"
-	// grpcserver "github.com/opus-casino/payment/internal/grpc"
+	grpcserver "github.com/opus-casino/payment/internal/grpc"
 	"github.com/opus-casino/payment/internal/handler"
 	"github.com/opus-casino/payment/internal/repository"
 	"github.com/opus-casino/payment/internal/service"
+	paymentpb "github.com/opus-casino/proto/gen/go/payment/v1"
 )
 
 func main() {
@@ -145,7 +148,7 @@ func run() error {
 
 	// 10. Start gRPC server
 	g.Go(func() error {
-		return startGRPCServer(ctx, cfg, services)
+		return startGRPCServer(ctx, cfg, services, zapLogger)
 	})
 
 	// 11. Start metrics server
@@ -176,7 +179,7 @@ func initTracing(cfg *config.Config) (func(context.Context) error, trace.Tracer,
 	if cfg.Tracing.Insecure {
 		opts = append(opts, otlptracegrpc.WithInsecure())
 	}
-	
+
 	exporter, err := otlptracegrpc.New(ctx, opts...)
 	if err != nil {
 		return nil, nil, fmt.Errorf("create trace exporter: %w", err)
@@ -239,6 +242,7 @@ func initDatabase(cfg *config.Config) (*gorm.DB, error) {
 type Repositories struct {
 	Payment      repository.PaymentRepository
 	Withdrawal   repository.WithdrawalRepository
+	Method       repository.PaymentMethodRepository
 	Idempotency  repository.IdempotencyRepository
 	ExchangeRate repository.ExchangeRateRepository
 	DailyLimits  repository.DailyLimitsRepository
@@ -249,6 +253,7 @@ func buildRepositories(db *gorm.DB, rdb *redis.Client) *Repositories {
 	return &Repositories{
 		Payment:      repository.NewPaymentRepository(db),
 		Withdrawal:   repository.NewWithdrawalRepository(db),
+		Method:       repository.NewPaymentMethodRepository(db),
 		Idempotency:  repository.NewIdempotencyRepository(rdb),
 		ExchangeRate: repository.NewExchangeRateRepository(rdb),
 		DailyLimits:  repository.NewDailyLimitsRepository(rdb),
@@ -300,6 +305,7 @@ func buildClients(cfg *config.Config, logger *zap.Logger, tracer trace.Tracer) (
 type Services struct {
 	Payment    *service.PaymentService
 	Withdrawal *service.WithdrawalService
+	Methods    *service.PaymentMethodService
 	Webhook    *service.WebhookService
 	KYCLimits  *service.KYCLimitsService
 	Exchange   *service.ExchangeRateService
@@ -312,6 +318,25 @@ func buildServices(
 	producer *event.Producer,
 	tracer trace.Tracer,
 ) *Services {
+	fieldEnc, err := crypto.NewFieldEncryption(os.Getenv("PAYMENT_METHOD_ENCRYPTION_KEY"))
+	if err != nil {
+		log.Fatal().Err(err).Msg("Invalid payment method encryption key")
+	}
+	// Fail closed outside development: raw payout destinations must never
+	// be stored unencrypted.
+	if !fieldEnc.Ready() && cfg.Environment != "development" {
+		log.Fatal().Msg("PAYMENT_METHOD_ENCRYPTION_KEY is required outside development")
+	}
+	methodSvc, err := service.NewPaymentMethodService(repos.Method, fieldEnc)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Payment method service unavailable")
+	}
+
+	limit, err := decimal.NewFromString(cfg.Review.AutoApproveLimitUSD)
+	if err != nil || limit.IsNegative() {
+		log.Fatal().Str("value", cfg.Review.AutoApproveLimitUSD).Msg("Invalid review.auto_approve_limit_usd")
+	}
+
 	return &Services{
 		Payment: service.NewPaymentService(
 			repos.Payment,
@@ -336,7 +361,9 @@ func buildServices(
 			producer,
 			tracer,
 			cfg.NOWPayments.IPNCallbackURL,
+			service.ReviewConfig{Enabled: cfg.Review.Enabled, AutoApproveLimitUSD: limit},
 		),
+		Methods: methodSvc,
 		Webhook: service.NewWebhookService(
 			repos.Payment,
 			repos.Withdrawal,
@@ -404,7 +431,7 @@ func startHTTPServer(ctx context.Context, cfg *config.Config, handlers *handler.
 	return nil
 }
 
-func startGRPCServer(ctx context.Context, cfg *config.Config, services *Services) error {
+func startGRPCServer(ctx context.Context, cfg *config.Config, services *Services, logger *zap.Logger) error {
 	server := grpc.NewServer()
 
 	// Health check
@@ -412,8 +439,13 @@ func startGRPCServer(ctx context.Context, cfg *config.Config, services *Services
 	healthpb.RegisterHealthServer(server, healthServer)
 	healthServer.SetServingStatus("payment-service", healthpb.HealthCheckResponse_SERVING)
 
-	// TODO: Register payment gRPC service from proto
-	// paymentpb.RegisterPaymentServiceServer(server, grpcserver.NewPaymentGRPCServer(services.Payment))
+	// PaymentService: deposits, withdrawals (+review), saved methods.
+	paymentpb.RegisterPaymentServiceServer(server, grpcserver.NewPaymentGRPCServer(
+		services.Payment,
+		services.Withdrawal,
+		services.Methods,
+		logger,
+	))
 
 	addr := fmt.Sprintf(":%d", 50055)
 	lis, err := net.Listen("tcp", addr)

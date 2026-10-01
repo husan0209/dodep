@@ -49,6 +49,9 @@ type PaymentRepository interface {
 	// ListByUserID lists payments for a user with pagination
 	ListByUserID(ctx context.Context, userID int64, filter ListFilter) (*ListResult[domain.Payment], error)
 
+	// ListAll lists payments across users (admin/ops use-case)
+	ListAll(ctx context.Context, filter ListFilter) (*ListResult[domain.Payment], error)
+
 	// CountByUserIDStatus counts payments by user and status
 	CountByUserIDStatus(ctx context.Context, userID int64, statuses []domain.PaymentStatus) (int64, error)
 }
@@ -73,8 +76,17 @@ type WithdrawalRepository interface {
 	// UpdateStatus updates withdrawal status with optimistic locking
 	UpdateStatus(ctx context.Context, id int64, fromStatus, toStatus domain.WithdrawalStatus) error
 
+	// RecordDecision stores the review decision (actor, reason, timestamp).
+	RecordDecision(ctx context.Context, id int64, decidedBy, reason string) error
+
+	// SetProviderWithdrawalID attaches the PSP payout id after approval.
+	SetProviderWithdrawalID(ctx context.Context, id int64, providerID string) error
+
 	// ListByUserID lists withdrawals for a user with pagination
 	ListByUserID(ctx context.Context, userID int64, filter ListFilter) (*ListResult[domain.Withdrawal], error)
+
+	// ListAll lists withdrawals across users (admin/ops use-case)
+	ListAll(ctx context.Context, filter ListFilter) (*ListResult[domain.Withdrawal], error)
 
 	// CountByUserIDStatus counts withdrawals by user and status
 	CountByUserIDStatus(ctx context.Context, userID int64, statuses []domain.WithdrawalStatus) (int64, error)

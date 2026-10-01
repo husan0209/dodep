@@ -20,11 +20,11 @@ import (
 
 // TestContainers holds the test container resources
 type TestContainers struct {
-	DB            *gorm.DB
-	RedisClient   *redis.Client
-	Cleanup       func()
-	IPNSecret     string
-	APIKey        string
+	DB          *gorm.DB
+	RedisClient *redis.Client
+	Cleanup     func()
+	IPNSecret   string
+	APIKey      string
 }
 
 // SetupTestContainers initializes PostgreSQL and Redis containers for testing
@@ -119,11 +119,11 @@ func runMigrations(db *gorm.DB) error {
 
 // MockNOWPaymentsClient is a mock implementation for integration tests
 type MockNOWPaymentsClient struct {
-	payments    map[string]*client.CreatePaymentResponse
-	payouts     map[string]*client.CreatePayoutResponse
-	ipnSecret   string
-	paymentID   int
-	payoutID    int
+	payments  map[string]*client.CreatePaymentResponse
+	payouts   map[string]*client.CreatePayoutResponse
+	ipnSecret string
+	paymentID int
+	payoutID  int
 }
 
 // NewMockNOWPaymentsClient creates a new mock client
@@ -139,7 +139,7 @@ func NewMockNOWPaymentsClient(ipnSecret string) *MockNOWPaymentsClient {
 func (m *MockNOWPaymentsClient) CreatePayment(ctx context.Context, req client.CreatePaymentRequest) (*client.CreatePaymentResponse, error) {
 	m.paymentID++
 	paymentID := fmt.Sprintf("np-payment-%d", m.paymentID)
-	
+
 	resp := &client.CreatePaymentResponse{
 		PaymentID:     paymentID,
 		PaymentStatus: "waiting",
@@ -151,7 +151,7 @@ func (m *MockNOWPaymentsClient) CreatePayment(ctx context.Context, req client.Cr
 		CreatedAt:     time.Now(),
 		ExpiresAt:     time.Now().Add(24 * time.Hour),
 	}
-	
+
 	m.payments[paymentID] = resp
 	return resp, nil
 }
@@ -160,7 +160,7 @@ func (m *MockNOWPaymentsClient) CreatePayment(ctx context.Context, req client.Cr
 func (m *MockNOWPaymentsClient) CreatePayout(ctx context.Context, req client.CreatePayoutRequest) (*client.CreatePayoutResponse, error) {
 	m.payoutID++
 	withdrawalID := fmt.Sprintf("np-withdrawal-%d", m.payoutID)
-	
+
 	resp := &client.CreatePayoutResponse{
 		WithdrawalID: withdrawalID,
 		Status:       "processing",
@@ -168,7 +168,7 @@ func (m *MockNOWPaymentsClient) CreatePayout(ctx context.Context, req client.Cre
 		Currency:     req.Currency,
 		Address:      req.Address,
 	}
-	
+
 	m.payouts[withdrawalID] = resp
 	return resp, nil
 }
@@ -222,12 +222,12 @@ func (m *MockWalletClient) GetBalance(ctx context.Context, userID int64, currenc
 	if !ok {
 		balance = decimal.Zero
 	}
-	
+
 	locked := decimal.Zero
 	if lockAmount, ok := m.locks[fmt.Sprintf("user:%d", userID)]; ok {
 		locked = lockAmount
 	}
-	
+
 	return &client.Balance{
 		Available: balance.Sub(locked),
 		Locked:    locked,
@@ -240,46 +240,44 @@ func (m *MockWalletClient) CreditWallet(ctx context.Context, req client.CreditRe
 	balance := m.balances[req.UserID]
 	newBalance := balance.Add(req.Amount)
 	m.balances[req.UserID] = newBalance
-	
+
 	return &client.CreditResult{
 		TransactionID: uuid.New().String(),
 		NewBalance:    newBalance,
 	}, nil
 }
 
-// LockFunds locks funds for withdrawal
+// LockFunds reserves funds for a withdrawal
 func (m *MockWalletClient) LockFunds(ctx context.Context, req client.LockRequest) (*client.LockResult, error) {
 	balance := m.balances[req.UserID]
 	if balance.LessThan(req.Amount) {
 		return nil, fmt.Errorf("insufficient balance")
 	}
-	
-	m.locks[fmt.Sprintf("user:%d", req.UserID)] = req.Amount
-	m.locks[req.IdempotencyKey] = req.Amount
-	
+
+	m.locks[req.Reference] = req.Amount
+	m.balances[req.UserID] = balance.Sub(req.Amount)
+
 	return &client.LockResult{
-		LockID:     req.IdempotencyKey,
+		LockID:     req.Reference,
 		NewBalance: balance.Sub(req.Amount),
 	}, nil
 }
 
-// UnlockFunds unlocks funds after failed withdrawal
-func (m *MockWalletClient) UnlockFunds(ctx context.Context, lockID string, idempotencyKey string) error {
-	delete(m.locks, lockID)
-	delete(m.locks, idempotencyKey)
+// UnlockFunds releases a reservation back to the available balance
+func (m *MockWalletClient) UnlockFunds(ctx context.Context, req client.UnlockRequest) error {
+	amount, ok := m.locks[req.Reference]
+	if !ok {
+		return nil // already released: compensation replays are no-ops
+	}
+	m.balances[req.UserID] = m.balances[req.UserID].Add(amount)
+	delete(m.locks, req.Reference)
 	return nil
 }
 
-// FinalizeDebit finalizes withdrawal
-func (m *MockWalletClient) FinalizeDebit(ctx context.Context, req client.FinalizeDebitRequest) (*client.DebitResult, error) {
-	// Remove locked amount and deduct from balance
-	lockKey := fmt.Sprintf("user:%d", req.UserID)
-	if locked, ok := m.locks[lockKey]; ok {
-		balance := m.balances[req.UserID]
-		m.balances[req.UserID] = balance.Sub(locked)
-		delete(m.locks, lockKey)
-	}
-	
+// SettleFunds books the reservation as a debit: the reserved amount already
+// left the available balance at LockFunds time, so only the lock is cleared.
+func (m *MockWalletClient) SettleFunds(ctx context.Context, req client.SettleRequest) (*client.DebitResult, error) {
+	delete(m.locks, req.Reference)
 	return &client.DebitResult{
 		TransactionID: uuid.New().String(),
 	}, nil

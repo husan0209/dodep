@@ -14,6 +14,25 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
+// ReviewConfig controls the risk-based manual-review policy.
+//
+// Withdrawals with fiat value at or above AutoApproveLimitUSD enter
+// `pending_review` (funds stay locked, no PSP payout) until a finance
+// operator approves or rejects them. Smaller withdrawals keep the
+// instant PSP flow.
+type ReviewConfig struct {
+	Enabled             bool
+	AutoApproveLimitUSD decimal.Decimal
+}
+
+// DefaultReviewConfig enables review with a $1000 auto-approve threshold.
+func DefaultReviewConfig() ReviewConfig {
+	return ReviewConfig{
+		Enabled:             true,
+		AutoApproveLimitUSD: decimal.NewFromInt(1000),
+	}
+}
+
 // WithdrawalService handles withdrawal business logic
 type WithdrawalService struct {
 	withdrawalRepo   repository.WithdrawalRepository
@@ -26,6 +45,7 @@ type WithdrawalService struct {
 	producer         *event.Producer
 	tracer           trace.Tracer
 	ipnCallbackURL   string
+	review           ReviewConfig
 }
 
 // NewWithdrawalService creates a new withdrawal service
@@ -40,6 +60,7 @@ func NewWithdrawalService(
 	producer *event.Producer,
 	tracer trace.Tracer,
 	ipnCallbackURL string,
+	review ReviewConfig,
 ) *WithdrawalService {
 	return &WithdrawalService{
 		withdrawalRepo:   withdrawalRepo,
@@ -52,6 +73,7 @@ func NewWithdrawalService(
 		producer:         producer,
 		tracer:           tracer,
 		ipnCallbackURL:   ipnCallbackURL,
+		review:           review,
 	}
 }
 
@@ -111,20 +133,34 @@ func (s *WithdrawalService) InitiateWithdrawal(ctx context.Context, req Initiate
 		return nil, fmt.Errorf("get exchange rate: %w", err)
 	}
 
-	// Check and lock funds
+	// The withdrawal UUID doubles as the wallet reservation reference, so the
+	// lock can always be released/settled later even after a crash between
+	// the wallet call and the database insert.
+	withdrawalUUID := uuid.New()
+	lockReference := WithdrawalLockReference(withdrawalUUID)
+
+	// Reserve funds (available -> locked)
 	lockResult, err := s.wallet.LockFunds(ctx, client.LockRequest{
-		UserID:         req.UserID,
-		Currency:       "USD",
-		Amount:         fiatAmount,
-		IdempotencyKey: req.IdempotencyKey,
+		UserID:        req.UserID,
+		Currency:      "USD",
+		Amount:        fiatAmount,
+		Reference:     lockReference,
+		ReferenceType: WithdrawalLockReferenceType,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("lock funds: %w", err)
 	}
 
-	// Create payout in NOWPayments
+	// Risk-based review: large withdrawals wait for a finance operator.
+	// Funds stay locked; no PSP payout exists yet.
+	if s.review.Enabled && fiatAmount.GreaterThanOrEqual(s.review.AutoApproveLimitUSD) {
+		return s.createReviewWithdrawal(ctx, req, withdrawalUUID, fiatAmount, lockResult.LockID)
+	}
+
+	// Create payout in NOWPayments. The provider gets the withdrawal UUID as
+	// its reference so IPN callbacks map 1:1 onto our withdrawal.
 	npResp, err := s.nowpayments.CreatePayout(ctx, client.CreatePayoutRequest{
-		WithdrawalID:   uuid.New().String(),
+		WithdrawalID:   withdrawalUUID.String(),
 		Address:        req.Address,
 		Currency:       req.Currency.NOWPaymentsCurrency(),
 		Amount:         req.Amount,
@@ -132,19 +168,19 @@ func (s *WithdrawalService) InitiateWithdrawal(ctx context.Context, req Initiate
 	})
 
 	if err != nil {
-		// Compensating transaction: unlock funds
-		if unlockErr := s.wallet.UnlockFunds(ctx, lockResult.LockID, req.IdempotencyKey+"_unlock"); unlockErr != nil {
+		// Compensating transaction: release the reservation
+		if unlockErr := s.unlockFunds(ctx, req.UserID, withdrawalUUID); unlockErr != nil {
 			log.Error().
 				Err(unlockErr).
-				Str("lock_id", lockResult.LockID).
-				Msg("Failed to unlock funds after payout failure")
+				Str("lock_reference", lockReference).
+				Msg("Failed to release funds after payout failure")
 		}
 		return nil, domain.ErrorProviderUnavailable("NOWPayments", err)
 	}
 
 	// Create withdrawal record
 	withdrawal := &domain.Withdrawal{
-		UUID:           uuid.New(),
+		UUID:           withdrawalUUID,
 		UserID:         req.UserID,
 		WithdrawalID:   npResp.WithdrawalID,
 		IdempotencyKey: req.IdempotencyKey,
@@ -153,18 +189,19 @@ func (s *WithdrawalService) InitiateWithdrawal(ctx context.Context, req Initiate
 		FiatCurrency:   "USD",
 		CryptoCurrency: string(req.Currency),
 		Address:        req.Address,
+		LockID:         lockResult.LockID,
 		Status:         domain.WithdrawalStatusProcessing,
 		IPAddress:      req.IPAddress,
 		UserAgent:      req.UserAgent,
 	}
 
 	if err := s.withdrawalRepo.Create(ctx, withdrawal); err != nil {
-		// Compensating transaction: unlock funds
-		if unlockErr := s.wallet.UnlockFunds(ctx, lockResult.LockID, req.IdempotencyKey+"_unlock"); unlockErr != nil {
+		// Compensating transaction: release the reservation
+		if unlockErr := s.unlockFunds(ctx, req.UserID, withdrawalUUID); unlockErr != nil {
 			log.Error().
 				Err(unlockErr).
-				Str("lock_id", lockResult.LockID).
-				Msg("Failed to unlock funds after withdrawal create failure")
+				Str("lock_reference", lockReference).
+				Msg("Failed to release funds after withdrawal create failure")
 		}
 		return nil, fmt.Errorf("create withdrawal: %w", err)
 	}
@@ -207,6 +244,17 @@ func (s *WithdrawalService) ListWithdrawals(ctx context.Context, req ListPayment
 	}
 
 	return s.withdrawalRepo.ListByUserID(ctx, req.UserID, filter)
+}
+
+// ListAllWithdrawals lists the cross-user review queue (admin/ops use-case).
+// cursor is an opaque keyset cursor from the previous page; "" starts at the
+// oldest pending request.
+func (s *WithdrawalService) ListAllWithdrawals(ctx context.Context, limit int, status, cursor string) (*repository.ListResult[domain.Withdrawal], error) {
+	return s.withdrawalRepo.ListAll(ctx, repository.ListFilter{
+		Limit:  limit,
+		Status: status,
+		Cursor: cursor,
+	})
 }
 
 // validateKYCLevel validates minimum KYC level for withdrawals
@@ -299,5 +347,318 @@ func (s *WithdrawalService) toResponse(withdrawal *domain.Withdrawal) *InitiateW
 		Currency:       withdrawal.CryptoCurrency,
 		Address:        withdrawal.Address,
 		Status:         string(withdrawal.Status),
+	}
+}
+
+// WithdrawalLockReferenceType scopes the wallet reservation for withdrawals.
+const WithdrawalLockReferenceType = "withdrawal"
+
+// WithdrawalLockReference returns the stable wallet reservation reference
+// for a withdrawal. It must stay derivable from the withdrawal UUID alone:
+// compensations (release on failure/rejection) can then run long after the
+// original process died.
+func WithdrawalLockReference(withdrawalUUID uuid.UUID) string {
+	return WithdrawalLockReferenceType + ":" + withdrawalUUID.String()
+}
+
+// unlockFunds releases the wallet reservation of a withdrawal.
+func (s *WithdrawalService) unlockFunds(ctx context.Context, userID int64, withdrawalUUID uuid.UUID) error {
+	return s.wallet.UnlockFunds(ctx, client.UnlockRequest{
+		UserID:        userID,
+		Reference:     WithdrawalLockReference(withdrawalUUID),
+		ReferenceType: WithdrawalLockReferenceType,
+	})
+}
+
+// ============ Manual review flow ============
+
+// createReviewWithdrawal persists a pending_review withdrawal. Funds are
+// already reserved; no PSP payout is created until approval.
+func (s *WithdrawalService) createReviewWithdrawal(
+	ctx context.Context,
+	req InitiateWithdrawalRequest,
+	withdrawalUUID uuid.UUID,
+	fiatAmount decimal.Decimal,
+	lockID string,
+) (*InitiateWithdrawalResponse, error) {
+	withdrawal := &domain.Withdrawal{
+		UUID:           withdrawalUUID,
+		UserID:         req.UserID,
+		WithdrawalID:   "",
+		IdempotencyKey: req.IdempotencyKey,
+		Amount:         req.Amount,
+		FiatAmount:     fiatAmount,
+		FiatCurrency:   "USD",
+		CryptoCurrency: string(req.Currency),
+		Address:        req.Address,
+		LockID:         lockID,
+		Status:         domain.WithdrawalStatusPendingReview,
+		IPAddress:      req.IPAddress,
+		UserAgent:      req.UserAgent,
+	}
+
+	if err := s.withdrawalRepo.Create(ctx, withdrawal); err != nil {
+		// Compensating transaction: release the reservation
+		if unlockErr := s.unlockFunds(ctx, req.UserID, withdrawalUUID); unlockErr != nil {
+			log.Error().
+				Err(unlockErr).
+				Str("lock_reference", WithdrawalLockReference(withdrawalUUID)).
+				Msg("Failed to release funds after review-withdrawal create failure")
+		}
+		return nil, fmt.Errorf("create review withdrawal: %w", err)
+	}
+
+	if _, err := s.dailyLimitsRepo.Increment(ctx, req.UserID, "withdrawal", fiatAmount); err != nil {
+		log.Warn().Err(err).Msg("Failed to track daily withdrawal limit")
+	}
+
+	s.publishAudit(ctx, withdrawal, "", string(withdrawal.Status), "withdrawal.review_requested")
+	s.publishReviewEvent(ctx, event.EventTypeWithdrawalReviewRequested, withdrawal, "", "")
+
+	log.Info().
+		Int64("user_id", req.UserID).
+		Str("withdrawal_uuid", withdrawal.UUID.String()).
+		Str("fiat_amount", fiatAmount.String()).
+		Msg("Withdrawal queued for manual review")
+
+	return s.toResponse(withdrawal), nil
+}
+
+// DecideWithdrawalRequest carries an operator decision.
+type DecideWithdrawalRequest struct {
+	// WithdrawalUUID identifies the withdrawal (v4 string).
+	WithdrawalUUID string
+	// AdminID is the operator identity (or "system" for policy decisions).
+	AdminID string
+	// IdempotencyKey scopes wallet-compensation retries (UUID).
+	IdempotencyKey string
+	// Reason is required for rejections, optional for approvals.
+	Reason string
+}
+
+// ApproveWithdrawal approves a pending_review withdrawal and executes the
+// PSP payout. Saga: claim (pending->approved) -> PSP payout -> processing.
+// On PSP failure funds are unlocked and the withdrawal is marked failed.
+// Repeats on an already-decided withdrawal return the current state.
+func (s *WithdrawalService) ApproveWithdrawal(ctx context.Context, req DecideWithdrawalRequest) (*domain.Withdrawal, error) {
+	if req.AdminID == "" {
+		return nil, domain.WithDetails(
+			fmt.Errorf("approved_by is required"),
+			domain.ErrCodeInvalidAmount,
+			map[string]interface{}{"field": "approved_by"},
+		)
+	}
+
+	w, err := s.withdrawalRepo.GetByUUID(ctx, req.WithdrawalUUID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Idempotent replay: a withdrawal already decided through review
+	// returns as-is. Instant-flow rows (no decision recorded) are NOT
+	// reviewable: approving them would be a no-op lie.
+	switch w.Status {
+	case domain.WithdrawalStatusApproved,
+		domain.WithdrawalStatusProcessing,
+		domain.WithdrawalStatusSending,
+		domain.WithdrawalStatusSent,
+		domain.WithdrawalStatusFinished:
+		if w.DecidedBy == "" {
+			break
+		}
+		return w, nil
+	case domain.WithdrawalStatusPendingReview:
+		// proceed below
+	default:
+		return nil, domain.ErrorInvalidStatusTransition(string(w.Status), string(domain.WithdrawalStatusApproved))
+	}
+
+	if w.Status != domain.WithdrawalStatusPendingReview {
+		return nil, domain.ErrorInvalidStatusTransition(string(w.Status), string(domain.WithdrawalStatusApproved))
+	}
+
+	// Atomic claim: exactly one approver wins the race; the loser reloads
+	// the winner's state and returns it (idempotent).
+	if err := s.withdrawalRepo.UpdateStatus(ctx, w.ID, domain.WithdrawalStatusPendingReview, domain.WithdrawalStatusApproved); err != nil {
+		if current, reloadErr := s.withdrawalRepo.GetByUUID(ctx, req.WithdrawalUUID); reloadErr == nil && current.Status != domain.WithdrawalStatusPendingReview {
+			return current, nil
+		}
+		return nil, err
+	}
+	if err := s.withdrawalRepo.RecordDecision(ctx, w.ID, req.AdminID, req.Reason); err != nil {
+		return nil, fmt.Errorf("record approval decision: %w", err)
+	}
+
+	// Execute the PSP payout (stable provider id = withdrawal UUID).
+	npResp, err := s.nowpayments.CreatePayout(ctx, client.CreatePayoutRequest{
+		WithdrawalID:   w.UUID.String(),
+		Address:        w.Address,
+		Currency:       domain.CryptoCurrency(w.CryptoCurrency).NOWPaymentsCurrency(),
+		Amount:         w.Amount,
+		IPNCallbackURL: s.getIPNCallbackURL(),
+	})
+	if err != nil {
+		// Compensating transaction: release the reservation, mark failed.
+		if unlockErr := s.unlockFunds(ctx, w.UserID, w.UUID); unlockErr != nil {
+			log.Error().
+				Err(unlockErr).
+				Str("lock_reference", WithdrawalLockReference(w.UUID)).
+				Msg("Failed to release funds after payout failure")
+		}
+		_ = s.withdrawalRepo.UpdateStatus(ctx, w.ID, domain.WithdrawalStatusApproved, domain.WithdrawalStatusFailed)
+		s.publishAudit(ctx, w, string(domain.WithdrawalStatusApproved), string(domain.WithdrawalStatusFailed), "withdrawal.approve_failed")
+		return nil, domain.ErrorProviderUnavailable("NOWPayments", err)
+	}
+
+	if err := s.withdrawalRepo.SetProviderWithdrawalID(ctx, w.ID, npResp.WithdrawalID); err != nil {
+		return nil, fmt.Errorf("attach provider payout id: %w", err)
+	}
+	if err := s.withdrawalRepo.UpdateStatus(ctx, w.ID, domain.WithdrawalStatusApproved, domain.WithdrawalStatusProcessing); err != nil {
+		return nil, fmt.Errorf("move approved withdrawal to processing: %w", err)
+	}
+
+	updated, err := s.withdrawalRepo.GetByUUID(ctx, req.WithdrawalUUID)
+	if err != nil {
+		return nil, err
+	}
+	s.publishAudit(ctx, updated, string(domain.WithdrawalStatusPendingReview), string(updated.Status), "withdrawal.approved")
+	s.publishReviewEvent(ctx, event.EventTypeWithdrawalApproved, updated, req.AdminID, "")
+
+	log.Info().
+		Int64("user_id", w.UserID).
+		Str("withdrawal_uuid", w.UUID.String()).
+		Str("approved_by", req.AdminID).
+		Msg("Withdrawal approved, payout executing")
+
+	return updated, nil
+}
+
+// RejectWithdrawal declines a pending_review withdrawal and releases the
+// locked funds. Unlock runs BEFORE the status flip so a crash between the
+// two is retried safely (wallet unlock is idempotent on the decision key).
+// Repeats on an already-rejected withdrawal return the current state.
+func (s *WithdrawalService) RejectWithdrawal(ctx context.Context, req DecideWithdrawalRequest) (*domain.Withdrawal, error) {
+	if req.AdminID == "" {
+		return nil, domain.WithDetails(
+			fmt.Errorf("rejected_by is required"),
+			domain.ErrCodeInvalidAmount,
+			map[string]interface{}{"field": "rejected_by"},
+		)
+	}
+	if req.Reason == "" {
+		return nil, domain.WithDetails(
+			fmt.Errorf("reason is required"),
+			domain.ErrCodeInvalidAmount,
+			map[string]interface{}{"field": "reason"},
+		)
+	}
+
+	w, err := s.withdrawalRepo.GetByUUID(ctx, req.WithdrawalUUID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Idempotent replay.
+	if w.Status == domain.WithdrawalStatusRejected {
+		return w, nil
+	}
+	if w.Status != domain.WithdrawalStatusPendingReview {
+		return nil, domain.ErrorInvalidStatusTransition(string(w.Status), string(domain.WithdrawalStatusRejected))
+	}
+
+	// Compensation first (idempotent), then the terminal flip.
+	if err := s.unlockFunds(ctx, w.UserID, w.UUID); err != nil {
+		return nil, fmt.Errorf("release reserved funds: %w", err)
+	}
+	if err := s.withdrawalRepo.UpdateStatus(ctx, w.ID, domain.WithdrawalStatusPendingReview, domain.WithdrawalStatusRejected); err != nil {
+		if current, reloadErr := s.withdrawalRepo.GetByUUID(ctx, req.WithdrawalUUID); reloadErr == nil && current.Status != domain.WithdrawalStatusPendingReview {
+			return current, nil
+		}
+		return nil, err
+	}
+	if err := s.withdrawalRepo.RecordDecision(ctx, w.ID, req.AdminID, req.Reason); err != nil {
+		return nil, fmt.Errorf("record rejection decision: %w", err)
+	}
+
+	updated, err := s.withdrawalRepo.GetByUUID(ctx, req.WithdrawalUUID)
+	if err != nil {
+		return nil, err
+	}
+	s.publishAudit(ctx, updated, string(domain.WithdrawalStatusPendingReview), string(updated.Status), "withdrawal.rejected")
+	s.publishReviewEvent(ctx, event.EventTypeWithdrawalRejected, updated, req.AdminID, req.Reason)
+
+	log.Info().
+		Int64("user_id", w.UserID).
+		Str("withdrawal_uuid", w.UUID.String()).
+		Str("rejected_by", req.AdminID).
+		Msg("Withdrawal rejected, funds released")
+
+	return updated, nil
+}
+
+// CancelWithdrawal lets the player cancel a withdrawal that has not been
+// sent to the PSP yet (pending_review). Funds are released first, then the
+// terminal flip — same crash-safe ordering as rejection.
+func (s *WithdrawalService) CancelWithdrawal(ctx context.Context, userID int64, withdrawalUUID string) (*domain.Withdrawal, error) {
+	w, err := s.withdrawalRepo.GetByUUID(ctx, withdrawalUUID)
+	if err != nil {
+		return nil, err
+	}
+	if w.UserID != userID {
+		return nil, domain.WithDetails(
+			fmt.Errorf("withdrawal belongs to another user"),
+			domain.ErrCodeWithdrawalNotFound,
+			map[string]interface{}{"withdrawal_uuid": withdrawalUUID},
+		)
+	}
+	if w.Status == domain.WithdrawalStatusCancelled {
+		return w, nil
+	}
+	if w.Status != domain.WithdrawalStatusPendingReview {
+		return nil, domain.ErrorInvalidStatusTransition(string(w.Status), string(domain.WithdrawalStatusCancelled))
+	}
+
+	if err := s.unlockFunds(ctx, w.UserID, w.UUID); err != nil {
+		return nil, fmt.Errorf("release reserved funds: %w", err)
+	}
+	if err := s.withdrawalRepo.UpdateStatus(ctx, w.ID, domain.WithdrawalStatusPendingReview, domain.WithdrawalStatusCancelled); err != nil {
+		return nil, err
+	}
+
+	updated, err := s.withdrawalRepo.GetByUUID(ctx, withdrawalUUID)
+	if err != nil {
+		return nil, err
+	}
+	s.publishAudit(ctx, updated, string(domain.WithdrawalStatusPendingReview), string(updated.Status), "withdrawal.cancelled")
+	return updated, nil
+}
+
+// publishReviewEvent emits review lifecycle events; broker failures are
+// logged but never fail the financial decision (outbox pattern: the DB
+// row is the source of truth).
+func (s *WithdrawalService) publishReviewEvent(ctx context.Context, eventType string, w *domain.Withdrawal, decidedBy, reason string) {
+	if s.producer == nil {
+		return
+	}
+	evt := event.NewWithdrawalReviewEvent(
+		eventType, w.UserID, w.UUID.String(), w.Amount, w.FiatAmount, w.CryptoCurrency, decidedBy, reason,
+	)
+	if err := s.producer.Publish(ctx, w.UUID.String(), evt); err != nil {
+		log.Warn().Err(err).Str("event_type", eventType).Msg("Failed to publish review event")
+	}
+}
+
+// publishAudit emits a status-change audit record.
+func (s *WithdrawalService) publishAudit(ctx context.Context, w *domain.Withdrawal, from, to, op string) {
+	if s.producer == nil {
+		return
+	}
+	evt := event.NewPaymentAuditEvent(w.UserID, op, w.UUID.String(), "withdrawal", w.UUID.String())
+	evt.PreviousStatus = from
+	evt.NewStatus = to
+	evt.Amount = &w.FiatAmount
+	evt.Currency = w.FiatCurrency
+	if err := s.producer.Publish(ctx, w.UUID.String(), evt); err != nil {
+		log.Warn().Err(err).Str("operation", op).Msg("Failed to publish audit event")
 	}
 }

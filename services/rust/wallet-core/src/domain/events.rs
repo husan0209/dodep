@@ -32,7 +32,7 @@ pub struct WalletCreatedEvent {
     pub event_id: Uuid,
     pub timestamp: DateTime<Utc>,
     pub wallet_id: Uuid,
-    pub user_id: Uuid,
+    pub user_id: i64,
     pub wallet_type: WalletType,
     pub currency: String,
 }
@@ -43,7 +43,7 @@ pub struct BalanceUpdatedEvent {
     pub event_id: Uuid,
     pub timestamp: DateTime<Utc>,
     pub wallet_id: Uuid,
-    pub user_id: Uuid,
+    pub user_id: i64,
     pub wallet_type: WalletType,
     pub previous_balance: Decimal,
     pub new_balance: Decimal,
@@ -57,9 +57,9 @@ pub struct FundLockedEvent {
     pub event_id: Uuid,
     pub timestamp: DateTime<Utc>,
     pub wallet_id: Uuid,
-    pub user_id: Uuid,
+    pub user_id: i64,
     pub amount: Decimal,
-    pub reference_id: Uuid,
+    pub reference_id: String,
     pub reference_type: String,
 }
 
@@ -69,9 +69,9 @@ pub struct FundUnlockedEvent {
     pub event_id: Uuid,
     pub timestamp: DateTime<Utc>,
     pub wallet_id: Uuid,
-    pub user_id: Uuid,
+    pub user_id: i64,
     pub amount: Decimal,
-    pub reference_id: Uuid,
+    pub reference_id: String,
     pub reference_type: String,
 }
 
@@ -81,14 +81,14 @@ pub struct TransactionCreatedEvent {
     pub event_id: Uuid,
     pub timestamp: DateTime<Utc>,
     pub transaction_id: Uuid,
-    pub user_id: Uuid,
+    pub user_id: i64,
     pub wallet_id: Uuid,
     pub wallet_type: WalletType,
     pub transaction_type: TransactionType,
     pub amount: Decimal,
     pub currency: String,
     pub status: TransactionStatus,
-    pub reference_id: Option<Uuid>,
+    pub reference_id: Option<String>,
     pub reference_type: Option<String>,
     pub idempotency_key: Option<String>,
 }
@@ -99,7 +99,7 @@ pub struct TransactionCompletedEvent {
     pub event_id: Uuid,
     pub timestamp: DateTime<Utc>,
     pub transaction_id: Uuid,
-    pub user_id: Uuid,
+    pub user_id: i64,
     pub wallet_id: Uuid,
     pub wallet_type: WalletType,
     pub transaction_type: TransactionType,
@@ -114,7 +114,7 @@ pub struct TransactionFailedEvent {
     pub event_id: Uuid,
     pub timestamp: DateTime<Utc>,
     pub transaction_id: Uuid,
-    pub user_id: Uuid,
+    pub user_id: i64,
     pub wallet_id: Uuid,
     pub wallet_type: WalletType,
     pub transaction_type: TransactionType,
@@ -126,7 +126,7 @@ pub struct TransactionFailedEvent {
 }
 
 impl WalletCreatedEvent {
-    pub fn new(wallet_id: Uuid, user_id: Uuid, wallet_type: WalletType, currency: String) -> Self {
+    pub fn new(wallet_id: Uuid, user_id: i64, wallet_type: WalletType, currency: String) -> Self {
         Self {
             event_id: Uuid::new_v4(),
             timestamp: Utc::now(),
@@ -141,7 +141,7 @@ impl WalletCreatedEvent {
 impl BalanceUpdatedEvent {
     pub fn new(
         wallet_id: Uuid,
-        user_id: Uuid,
+        user_id: i64,
         wallet_type: WalletType,
         previous_balance: Decimal,
         new_balance: Decimal,
@@ -164,9 +164,9 @@ impl BalanceUpdatedEvent {
 impl FundLockedEvent {
     pub fn new(
         wallet_id: Uuid,
-        user_id: Uuid,
+        user_id: i64,
         amount: Decimal,
-        reference_id: Uuid,
+        reference_id: String,
         reference_type: String,
     ) -> Self {
         Self {
@@ -184,9 +184,9 @@ impl FundLockedEvent {
 impl FundUnlockedEvent {
     pub fn new(
         wallet_id: Uuid,
-        user_id: Uuid,
+        user_id: i64,
         amount: Decimal,
-        reference_id: Uuid,
+        reference_id: String,
         reference_type: String,
     ) -> Self {
         Self {
@@ -204,14 +204,14 @@ impl FundUnlockedEvent {
 impl TransactionCreatedEvent {
     pub fn new(
         transaction_id: Uuid,
-        user_id: Uuid,
+        user_id: i64,
         wallet_id: Uuid,
         wallet_type: WalletType,
         transaction_type: TransactionType,
         amount: Decimal,
         currency: String,
         status: TransactionStatus,
-        reference_id: Option<Uuid>,
+        reference_id: Option<String>,
         reference_type: Option<String>,
         idempotency_key: Option<String>,
     ) -> Self {
@@ -236,7 +236,7 @@ impl TransactionCreatedEvent {
 impl TransactionCompletedEvent {
     pub fn new(
         transaction_id: Uuid,
-        user_id: Uuid,
+        user_id: i64,
         wallet_id: Uuid,
         wallet_type: WalletType,
         transaction_type: TransactionType,
@@ -261,7 +261,7 @@ impl TransactionCompletedEvent {
 impl TransactionFailedEvent {
     pub fn new(
         transaction_id: Uuid,
-        user_id: Uuid,
+        user_id: i64,
         wallet_id: Uuid,
         wallet_type: WalletType,
         transaction_type: TransactionType,

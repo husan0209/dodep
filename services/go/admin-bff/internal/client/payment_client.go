@@ -58,10 +58,15 @@ func (c *PaymentClient) ListDeposits(ctx context.Context, status commonv1.Transa
 	return resp.Deposits, resp.Pagination, nil
 }
 
-func (c *PaymentClient) ListWithdrawals(ctx context.Context, status commonv1.TransactionStatus, pageSize int32, cursor string) ([]*paymentv1.Withdrawal, *commonv1.PageResponse, error) {
+// ListWithdrawals returns one user's withdrawals. Omitting userID lists the
+// cross-user review queue used by the finance back office.
+func (c *PaymentClient) ListWithdrawals(ctx context.Context, userID int64, status commonv1.TransactionStatus, pageSize int32, cursor string) ([]*paymentv1.Withdrawal, *commonv1.PageResponse, error) {
 	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
 	req := &paymentv1.ListWithdrawalsRequest{Pagination: &commonv1.PageRequest{PageSize: pageSize, Cursor: cursor}}
+	if userID > 0 {
+		req.UserId = &commonv1.UserId{Value: strconv.FormatInt(userID, 10)}
+	}
 	if status != commonv1.TransactionStatus_TRANSACTION_STATUS_UNSPECIFIED {
 		req.Status = &status
 	}
@@ -103,4 +108,42 @@ func (c *PaymentClient) CancelWithdrawal(ctx context.Context, userID int64, id s
 		return fmt.Errorf("cancel withdrawal: %w", err)
 	}
 	return nil
+}
+
+// ApproveWithdrawal approves a pending_review withdrawal in Payment Service.
+// withdrawalUUID is the payment withdrawal UUID, adminID the operator identity.
+func (c *PaymentClient) ApproveWithdrawal(ctx context.Context, withdrawalUUID, adminID, idempotencyKey string) (*paymentv1.Withdrawal, error) {
+	ctx, cancel := context.WithTimeout(ctx, c.timeout)
+	defer cancel()
+	resp, err := c.client.ApproveWithdrawal(ctx, &paymentv1.ApproveWithdrawalRequest{
+		WithdrawalId:   withdrawalUUID,
+		ApprovedBy:     adminID,
+		IdempotencyKey: idempotencyKey,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("approve withdrawal: %w", err)
+	}
+	if resp.Error != nil && resp.Error.ErrorMessage != "" {
+		return nil, fmt.Errorf("approve withdrawal: %s", resp.Error.ErrorMessage)
+	}
+	return resp.Withdrawal, nil
+}
+
+// RejectWithdrawal rejects a pending_review withdrawal in Payment Service.
+func (c *PaymentClient) RejectWithdrawal(ctx context.Context, withdrawalUUID, adminID, reason, idempotencyKey string) (*paymentv1.Withdrawal, error) {
+	ctx, cancel := context.WithTimeout(ctx, c.timeout)
+	defer cancel()
+	resp, err := c.client.RejectWithdrawal(ctx, &paymentv1.RejectWithdrawalRequest{
+		WithdrawalId:   withdrawalUUID,
+		RejectedBy:     adminID,
+		Reason:         reason,
+		IdempotencyKey: idempotencyKey,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("reject withdrawal: %w", err)
+	}
+	if resp.Error != nil && resp.Error.ErrorMessage != "" {
+		return nil, fmt.Errorf("reject withdrawal: %s", resp.Error.ErrorMessage)
+	}
+	return resp.Withdrawal, nil
 }

@@ -38,6 +38,20 @@ impl WalletType {
     }
 }
 
+impl std::fmt::Display for WalletType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl std::str::FromStr for WalletType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        WalletType::from_str(s).ok_or_else(|| format!("unknown wallet_type: {s}"))
+    }
+}
+
 /// Transaction type
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Type)]
 #[sqlx(type_name = "transaction_type", rename_all = "snake_case")]

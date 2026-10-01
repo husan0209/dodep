@@ -12,6 +12,7 @@ pub struct Config {
     pub http: HttpConfig,
     pub metrics: MetricsConfig,
     pub tracing: TracingConfig,
+    pub kafka: KafkaConfig,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -86,6 +87,15 @@ pub struct TracingConfig {
     pub service_name: String,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct KafkaConfig {
+    pub brokers: String,
+    pub enabled: bool,
+    pub poll_interval_secs: u64,
+    pub batch_size: i64,
+    pub max_retries: i32,
+}
+
 impl Config {
     pub fn load() -> Result<Self, config::ConfigError> {
         // Load from .env file
@@ -130,6 +140,13 @@ impl Config {
             .set_default("tracing.otlp_endpoint", "http://localhost:4317")?
             .set_default("tracing.service_name", "wallet-core")?
             
+            // Redpanda/Kafka defaults (transactional outbox relay)
+            .set_default("kafka.brokers", "localhost:9092")?
+            .set_default("kafka.enabled", true)?
+            .set_default("kafka.poll_interval_secs", 5)?
+            .set_default("kafka.batch_size", 100)?
+            .set_default("kafka.max_retries", 10)?
+            
             // Override with environment variables
             .add_source(config::Environment::with_prefix("WALLET").separator("__"))
             .add_source(config::Environment::with_prefix("APP").separator("__"))
@@ -138,6 +155,7 @@ impl Config {
             .add_source(config::Environment::with_prefix("GRPC").separator("__"))
             .add_source(config::Environment::with_prefix("HTTP").separator("__"))
             .add_source(config::Environment::with_prefix("METRICS").separator("__"))
+            .add_source(config::Environment::with_prefix("KAFKA").separator("__"))
             .add_source(config::Environment::with_prefix("TRACING").separator("__"));
         
         config_builder.build()?.try_deserialize()

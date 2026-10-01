@@ -41,6 +41,14 @@ service PaymentService {
   // CancelWithdrawal cancels a pending withdrawal
   rpc CancelWithdrawal(CancelWithdrawalRequest) returns (CancelWithdrawalResponse);
 
+  // ApproveWithdrawal approves a withdrawal awaiting manual review.
+  // Executes the PSP payout. Idempotent: repeated calls return current state.
+  rpc ApproveWithdrawal(ApproveWithdrawalRequest) returns (ApproveWithdrawalResponse);
+
+  // RejectWithdrawal rejects a withdrawal awaiting manual review.
+  // Releases the locked funds. Idempotent: repeated calls return current state.
+  rpc RejectWithdrawal(RejectWithdrawalRequest) returns (RejectWithdrawalResponse);
+
   // GetPaymentMethod returns saved payment method details
   rpc GetPaymentMethod(GetPaymentMethodRequest) returns (GetPaymentMethodResponse);
 
@@ -180,6 +188,38 @@ message CancelWithdrawalRequest {
 
 message CancelWithdrawalResponse {
   bool success = 1;
+  common.v1.ErrorDetails error = 2;
+}
+
+// ============ Withdrawal Review (manual approval) ============
+
+message ApproveWithdrawalRequest {
+  // Withdrawal UUID (v4, as returned by RequestWithdrawal).
+  string withdrawal_id = 1;
+  // Admin/operator identity approving the withdrawal (never a player id).
+  string approved_by = 2;
+  // Idempotency key for the decision (UUID).
+  string idempotency_key = 3;
+}
+
+message ApproveWithdrawalResponse {
+  Withdrawal withdrawal = 1;
+  common.v1.ErrorDetails error = 2;
+}
+
+message RejectWithdrawalRequest {
+  // Withdrawal UUID (v4, as returned by RequestWithdrawal).
+  string withdrawal_id = 1;
+  // Admin/operator identity rejecting the withdrawal (never a player id).
+  string rejected_by = 2;
+  // Human-readable reason, shown to the player. Required.
+  string reason = 3;
+  // Idempotency key for the decision (UUID).
+  string idempotency_key = 4;
+}
+
+message RejectWithdrawalResponse {
+  Withdrawal withdrawal = 1;
   common.v1.ErrorDetails error = 2;
 }
 
