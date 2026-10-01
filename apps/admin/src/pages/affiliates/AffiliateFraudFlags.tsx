@@ -4,12 +4,19 @@ import {
   Select,
   Space,
   Tag,
+  Button,
+  Modal,
+  Input,
+  message,
 } from "antd";
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import DataTable from "@/components/common/DataTable";
 import { affiliatesService } from "@/services/affiliates.service";
 import { formatDate } from "@/utils/format";
+import { getErrorMessage } from "@/utils/errors";
+import { hasPermission } from "@/utils/permissions";
+import { useAuthStore } from "@/stores/authStore";
 import type { ColumnsType } from "antd/es/table";
 
 const { Title } = Typography;
@@ -45,11 +52,43 @@ export default function AffiliateFraudFlags() {
   const [page, setPage] = useState(1);
   const [pageSize] = useState(20);
   const [status, setStatus] = useState<string>("open");
+  const [actionModal, setActionModal] = useState<{
+    action: "resolve" | "dismiss";
+    id: string | null;
+  }>({ action: "resolve", id: null });
+  const [notes, setNotes] = useState("");
+  const queryClient = useQueryClient();
+  const { permissions } = useAuthStore();
+  const canReview = hasPermission(permissions, "affiliate.fraud.review");
 
   const { data, isLoading } = useQuery({
     queryKey: ["affiliate-fraud-flags", page, pageSize, status],
     queryFn: () =>
       affiliatesService.getFraudFlags({ status, page, page_size: pageSize }),
+  });
+
+  const resolveMutation = useMutation({
+    mutationFn: ({ id, note }: { id: string; note: string }) =>
+      affiliatesService.resolveFraudFlag(id, note),
+    onSuccess: () => {
+      message.success("Fraud flag marked as confirmed fraud");
+      queryClient.invalidateQueries({ queryKey: ["affiliate-fraud-flags"] });
+      setActionModal({ action: "resolve", id: null });
+      setNotes("");
+    },
+    onError: (error: unknown) => message.error(getErrorMessage(error)),
+  });
+
+  const dismissMutation = useMutation({
+    mutationFn: ({ id, note }: { id: string; note: string }) =>
+      affiliatesService.dismissFraudFlag(id, note),
+    onSuccess: () => {
+      message.success("Fraud flag dismissed as false positive");
+      queryClient.invalidateQueries({ queryKey: ["affiliate-fraud-flags"] });
+      setActionModal({ action: "dismiss", id: null });
+      setNotes("");
+    },
+    onError: (error: unknown) => message.error(getErrorMessage(error)),
   });
 
   const columns: ColumnsType<FraudFlag> = [
@@ -106,6 +145,49 @@ export default function AffiliateFraudFlags() {
           </Tag>
         )) : "—",
     },
+    {
+      title: "Reviewed",
+      dataIndex: "resolved_at",
+      width: 150,
+      render: (v: string | null, r: FraudFlag) =>
+        v ? (
+          <span>
+            {formatDate(v)}
+            {r.resolved_by ? ` by ${r.resolved_by}` : ""}
+          </span>
+        ) : (
+          "—"
+        ),
+    },
+    {
+      title: "Actions",
+      key: "actions",
+      width: 200,
+      render: (_, record) => {
+        // open / in_review are the only actionable states (backend enforces
+        // the same state machine and returns 409 for anything else).
+        if (!canReview) return "—";
+        if (!["open", "in_review"].includes(record.status)) return "—";
+        return (
+          <Space>
+            <Button
+              size="small"
+              type="primary"
+              danger
+              onClick={() => setActionModal({ action: "resolve", id: record.id })}
+            >
+              Confirm Fraud
+            </Button>
+            <Button
+              size="small"
+              onClick={() => setActionModal({ action: "dismiss", id: record.id })}
+            >
+              False Positive
+            </Button>
+          </Space>
+        );
+      },
+    },
   ];
 
   return (
@@ -140,6 +222,44 @@ export default function AffiliateFraudFlags() {
           onPageChange={(p) => setPage(p)}
         />
       </Card>
+
+      <Modal
+        title={
+          actionModal.action === "resolve"
+            ? "Confirm Fraud"
+            : "Dismiss as False Positive"
+        }
+        open={actionModal.id !== null}
+        onOk={() => {
+          if (!actionModal.id) return;
+          const payload = { id: actionModal.id, note: notes };
+          if (actionModal.action === "resolve") {
+            resolveMutation.mutate(payload);
+          } else {
+            dismissMutation.mutate(payload);
+          }
+        }}
+        onCancel={() => {
+          setActionModal({ action: "resolve", id: null });
+          setNotes("");
+        }}
+        confirmLoading={
+          resolveMutation.isPending || dismissMutation.isPending
+        }
+        okButtonProps={{ danger: actionModal.action === "resolve" }}
+        okText={actionModal.action === "resolve" ? "Confirm" : "Dismiss"}
+      >
+        <Input.TextArea
+          rows={3}
+          placeholder={
+            actionModal.action === "resolve"
+              ? "Investigation notes (required)..."
+              : "Reason for false positive (optional)..."
+          }
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+        />
+      </Modal>
     </div>
   );
 }

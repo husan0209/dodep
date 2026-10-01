@@ -82,13 +82,19 @@ func AdminAuth(jwtSecret string, db *pgxpool.Pool) fiber.Handler {
 
 func RequirePermission(perm string) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		perms, ok := c.Locals("permissions").([]interface{})
-		if !ok {
-			return c.Status(403).JSON(fiber.Map{"error": "forbidden"})
-		}
-		for _, p := range perms {
-			if p == perm {
-				return c.Next()
+		// Fail closed: any missing or malformed permission set denies access.
+		switch perms := c.Locals("permissions").(type) {
+		case []interface{}:
+			for _, p := range perms {
+				if s, ok := p.(string); ok && s == perm {
+					return c.Next()
+				}
+			}
+		case []string:
+			for _, s := range perms {
+				if s == perm {
+					return c.Next()
+				}
 			}
 		}
 		return c.Status(403).JSON(fiber.Map{"error": "permission denied"})

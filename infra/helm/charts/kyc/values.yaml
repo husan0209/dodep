@@ -30,10 +30,11 @@ securityContext:
 
 service:
   type: ClusterIP
-  httpPort: 8080
-  httpTargetPort: 8080
-  grpcPort: 9090
-  grpcTargetPort: 9090
+  # Keys must match service-chart base template (service.port/targetPort).
+  # CONVENTIONS.md: kyc HTTP 8089 / gRPC 50059. gRPC is pod-direct/mesh
+  # (base chart exposes a single HTTP port); see networkPolicy below.
+  port: 8089
+  targetPort: 8089
 
 ingress:
   enabled: true
@@ -73,7 +74,7 @@ nodeSelector:
 
 healthCheck:
   path: /health
-  port: 8080
+  port: 8089
   liveness:
     initialDelaySeconds: 10
     periodSeconds: 10
@@ -86,13 +87,15 @@ healthCheck:
     failureThreshold: 3
 
 env:
-  - name: GIN_MODE
-    value: "release"
   - name: APP_ENV
     valueFrom:
       configMapKeyRef:
         name: kyc-config
         key: app-env
+  - name: PORT
+    value: "8089"
+  - name: GRPC_PORT
+    value: "50059"
   - name: DATABASE_URL
     valueFrom:
       secretKeyRef:
@@ -108,11 +111,16 @@ env:
       configMapKeyRef:
         name: kyc-config
         key: redpanda-brokers
-  - name: JUMIO_API_TOKEN
+  - name: SUMSUB_API_KEY
     valueFrom:
       secretKeyRef:
         name: kyc-secrets
-        key: jumio-api-token
+        key: sumsub-api-key
+  - name: COMPLYADVANTAGE_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: kyc-secrets
+        key: complyadvantage-api-key
 
 podDisruptionBudget:
   enabled: true
@@ -130,9 +138,9 @@ networkPolicy:
               name: monitoring
       ports:
         - protocol: TCP
-          port: 8080
+          port: 8089
         - protocol: TCP
-          port: 9090
+          port: 50059
   egress:
     - to:
         - namespaceSelector:

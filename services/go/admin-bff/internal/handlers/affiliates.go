@@ -14,27 +14,16 @@ import (
 	"gorm.io/gorm"
 )
 
-func RegisterAffiliateRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger, auditSvc *service.AuditService) {
-	aff := router.Group("/affiliates")
-	aff.Get("", listAffiliates(db, log))
-	aff.Post("", createAffiliate(db, log, auditSvc))
-	// Static collection routes MUST be registered before "/:id" patterns
-	// to avoid Fiber matching them as ":id".
-	aff.Get("/payouts", listPayouts(db, log))
-	aff.Post("/payouts/:id/approve", approvePayout(db, log, auditSvc))
-	aff.Post("/payouts/:id/reject", rejectPayout(db, log, auditSvc))
-	aff.Get("/fraud-flags", listFraudFlags(db, log))
-	aff.Get("/:id", getAffiliate(db, log))
-	aff.Put("/:id", updateAffiliate(db, log, auditSvc))
-	aff.Post("/:id/approve", approveAffiliate(db, log, auditSvc))
-	aff.Post("/:id/suspend", suspendAffiliate(db, log, auditSvc))
-	aff.Put("/:id/commission-rate", updateCommissionRate(db, log, auditSvc))
-	aff.Get("/:id/players", listAffiliatePlayers(db, log))
-	aff.Get("/:id/stats", getAffiliateStats(db, log))
-	aff.Post("/:id/calculate-period", calculatePeriod(db, log, auditSvc))
-	aff.Get("/:id/postback-config", getPostbackConfig(db, log))
-	aff.Put("/:id/postback-config", updatePostbackConfig(db, log, auditSvc))
-}
+// Route registration and the reporting endpoints moved to their own files so
+// that concurrent agents editing affiliate CRUD cannot silently drop them:
+//
+//	affiliate_routes.go       — route table + permission matrix
+//	affiliate_reporting.go    — GET /:id/stats, GET /:id/players
+//	affiliate_payout_flow.go  — payout approve / reject / paid state machine
+//	affiliate_fraud_review.go — fraud flag resolve / dismiss
+//	affiliate_enrollment.go   — enrollment reject + affiliate id resolution
+//
+// This file keeps the affiliate profile CRUD only.
 
 func listAffiliates(db *gorm.DB, log *zap.Logger) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -331,17 +320,7 @@ func updateCommissionRate(db *gorm.DB, log *zap.Logger, auditSvc *service.AuditS
 	}
 }
 
-func listAffiliatePlayers(db *gorm.DB, log *zap.Logger) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{"data": []fiber.Map{}, "pagination": fiber.Map{"page": 1, "page_size": 20, "total": 0}})
-	}
-}
-
-func getAffiliateStats(db *gorm.DB, log *zap.Logger) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{"data": fiber.Map{"ngr": "0", "players": 0, "owed": "0"}})
-	}
-}
+// listAffiliatePlayers / getAffiliateStats moved to affiliate_reporting.go.
 
 func listPayouts(db *gorm.DB, log *zap.Logger) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -371,45 +350,8 @@ func listPayouts(db *gorm.DB, log *zap.Logger) fiber.Handler {
 	}
 }
 
-func approvePayout(db *gorm.DB, log *zap.Logger, auditSvc *service.AuditService) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		id := c.Params("id")
-		var body struct {
-			ProviderReference string `json:"provider_reference"`
-		}
-		if err := c.BodyParser(&body); err != nil {
-			body.ProviderReference = ""
-		}
-		if err := db.Model(&models.AffiliatePayout{}).Where("id = ?", id).Updates(map[string]interface{}{
-			"status": "approved", "provider_reference": body.ProviderReference, "updated_at": time.Now(),
-		}).Error; err != nil {
-			log.Error("approve payout failed", zap.Error(err))
-			return c.Status(500).JSON(fiber.Map{"error": "database error"})
-		}
-		logAudit(auditSvc, c, "affiliate.payout.approve", "affiliate_payout", id, fiber.Map{"provider_reference": body.ProviderReference})
-		return c.JSON(fiber.Map{"success": true})
-	}
-}
-
-func rejectPayout(db *gorm.DB, log *zap.Logger, auditSvc *service.AuditService) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		id := c.Params("id")
-		var body struct {
-			Reason string `json:"rejection_reason"`
-		}
-		if err := c.BodyParser(&body); err != nil {
-			return c.Status(400).JSON(fiber.Map{"error": "invalid body"})
-		}
-		if err := db.Model(&models.AffiliatePayout{}).Where("id = ?", id).Updates(map[string]interface{}{
-			"status": "rejected", "rejection_reason": body.Reason, "updated_at": time.Now(),
-		}).Error; err != nil {
-			log.Error("reject payout failed", zap.Error(err))
-			return c.Status(500).JSON(fiber.Map{"error": "database error"})
-		}
-		logAudit(auditSvc, c, "affiliate.payout.reject", "affiliate_payout", id, fiber.Map{"reason": body.Reason})
-		return c.JSON(fiber.Map{"success": true})
-	}
-}
+// approvePayout / rejectPayout moved to affiliate_payout_flow.go, where the
+// payout state machine (validPayoutTransitions) and the guarded transition live.
 
 func listFraudFlags(db *gorm.DB, log *zap.Logger) fiber.Handler {
 	return func(c *fiber.Ctx) error {

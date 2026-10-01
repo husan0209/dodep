@@ -138,22 +138,22 @@ const menuItems: MenuItem[] = [
     key: "/affiliates",
     icon: <TeamOutlined />,
     label: "Affiliates",
-    permission: "affiliate.manage",
+    permission: "affiliate.view",
     children: [
       {
         key: "/affiliates",
         label: "All Affiliates",
-        permission: "affiliate.manage",
+        permission: "affiliate.view",
       },
       {
         key: "/affiliates/payouts",
         label: "Payouts",
-        permission: "affiliate.manage",
+        permission: "affiliate.payout.approve",
       },
       {
         key: "/affiliates/fraud",
         label: "Fraud Flags",
-        permission: "affiliate.manage",
+        permission: "affiliate.fraud.review",
       },
     ],
   },

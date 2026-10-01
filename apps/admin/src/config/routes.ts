@@ -76,11 +76,11 @@ export const routeConfig: RouteConfig[] = [
     path: "/affiliates",
     label: "Affiliates",
     icon: "TeamOutlined",
-    permission: "affiliate.manage",
+    permission: "affiliate.view",
     children: [
-      { path: "/affiliates", label: "All Affiliates", permission: "affiliate.manage" },
-      { path: "/affiliates/payouts", label: "Payout Queue", permission: "affiliate.manage" },
-      { path: "/affiliates/fraud", label: "Fraud Flags", permission: "affiliate.manage" },
+      { path: "/affiliates", label: "All Affiliates", permission: "affiliate.view" },
+      { path: "/affiliates/payouts", label: "Payout Queue", permission: "affiliate.payout.approve" },
+      { path: "/affiliates/fraud", label: "Fraud Flags", permission: "affiliate.fraud.review" },
     ],
   },
   {

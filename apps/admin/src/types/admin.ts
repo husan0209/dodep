@@ -41,8 +41,15 @@ export type Permission =
   // Casino
   | "casino.manage"
   | "casino.rtp_config"
-  // Affiliate
+  // Affiliate (granular, tasks/задача.md — least privilege;
+  // affiliate.manage covers profile/plan management only and
+  // implies nothing else — checks are exact-match)
+  | "affiliate.view"
   | "affiliate.manage"
+  | "affiliate.approve"
+  | "affiliate.adjust"
+  | "affiliate.payout.approve"
+  | "affiliate.fraud.review"
   // CRM
   | "content.manage"
   | "crm.campaign"

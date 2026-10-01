@@ -5,6 +5,8 @@ import {
   Select,
   Button,
   Tag,
+  Modal,
+  Input,
   message,
 } from "antd";
 import { useState } from "react";
@@ -32,6 +34,11 @@ export default function Affiliates() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [status, setStatus] = useState<string>();
+  const [rejectModal, setRejectModal] = useState<{
+    open: boolean;
+    userId: string | null;
+  }>({ open: false, userId: null });
+  const [rejectNotes, setRejectNotes] = useState("");
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { permissions } = useAuthStore();
@@ -60,7 +67,19 @@ export default function Affiliates() {
     onError: (error: unknown) => message.error(getErrorMessage(error)),
   });
 
-  const canManage = hasPermission(permissions, "affiliate.manage");
+  const rejectMutation = useMutation({
+    mutationFn: ({ userId, notes }: { userId: string; notes: string }) =>
+      affiliatesService.rejectAffiliate(userId, notes),
+    onSuccess: () => {
+      message.success("Affiliate rejected");
+      queryClient.invalidateQueries({ queryKey: ["affiliates"] });
+      setRejectModal({ open: false, userId: null });
+      setRejectNotes("");
+    },
+    onError: (error: unknown) => message.error(getErrorMessage(error)),
+  });
+
+  const canApprove = hasPermission(permissions, "affiliate.approve");
 
   const columns: ColumnsType<Affiliate> = [
     {
@@ -103,7 +122,6 @@ export default function Affiliates() {
       key: "actions",
       width: 240,
       render: (_, record) => {
-        if (!canManage) return "—";
         return (
           <Space>
             <Button
@@ -112,7 +130,7 @@ export default function Affiliates() {
             >
               View
             </Button>
-            {record.status === "pending_review" && (
+            {canApprove && record.status === "pending_review" && (
               <Button
                 size="small"
                 type="primary"
@@ -122,7 +140,21 @@ export default function Affiliates() {
                 Approve
               </Button>
             )}
-            {record.status === "active" && (
+            {canApprove && record.status === "pending_review" && (
+              <Button
+                size="small"
+                danger
+                onClick={() =>
+                  setRejectModal({
+                    open: true,
+                    userId: String(record.user_id),
+                  })
+                }
+              >
+                Reject
+              </Button>
+            )}
+            {canApprove && record.status === "active" && (
               <Button
                 size="small"
                 danger
@@ -176,6 +208,32 @@ export default function Affiliates() {
           }}
         />
       </Card>
+
+      <Modal
+        title="Reject Affiliate Application"
+        open={rejectModal.open}
+        onOk={() =>
+          rejectModal.userId &&
+          rejectMutation.mutate({
+            userId: rejectModal.userId,
+            notes: rejectNotes,
+          })
+        }
+        onCancel={() => {
+          setRejectModal({ open: false, userId: null });
+          setRejectNotes("");
+        }}
+        confirmLoading={rejectMutation.isPending}
+        okButtonProps={{ danger: true }}
+        okText="Reject"
+      >
+        <Input.TextArea
+          rows={3}
+          placeholder="Review notes (required, stored in audit trail)..."
+          value={rejectNotes}
+          onChange={(e) => setRejectNotes(e.target.value)}
+        />
+      </Modal>
     </div>
   );
 }

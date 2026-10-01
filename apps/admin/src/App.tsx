@@ -208,7 +208,7 @@ function App() {
                 <Route
                   path="affiliates"
                   element={
-                    <ProtectedRoute permission="affiliate.manage">
+                    <ProtectedRoute permission="affiliate.view">
                       <Affiliates />
                     </ProtectedRoute>
                   }
@@ -216,7 +216,7 @@ function App() {
                 <Route
                   path="affiliates/:id"
                   element={
-                    <ProtectedRoute permission="affiliate.manage">
+                    <ProtectedRoute permission="affiliate.view">
                       <AffiliateDetail />
                     </ProtectedRoute>
                   }
@@ -224,7 +224,7 @@ function App() {
                 <Route
                   path="affiliates/payouts"
                   element={
-                    <ProtectedRoute permission="affiliate.manage">
+                    <ProtectedRoute permission="affiliate.payout.approve">
                       <AffiliatePayouts />
                     </ProtectedRoute>
                   }
@@ -232,7 +232,7 @@ function App() {
                 <Route
                   path="affiliates/fraud"
                   element={
-                    <ProtectedRoute permission="affiliate.manage">
+                    <ProtectedRoute permission="affiliate.fraud.review">
                       <AffiliateFraudFlags />
                     </ProtectedRoute>
                   }

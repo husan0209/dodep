@@ -65,6 +65,52 @@ export interface FraudFlag {
   created_at: string;
 }
 
+export interface AffiliateStats {
+  clicks: number;
+  registrations: number;
+  ftd_count: number;
+  players: number;
+  active_players: number;
+  ggr: string;
+  ngr: string;
+  commission_accrued: string;
+  commission_reversed: string;
+  commission_pending: string;
+  commission_available: string;
+  commission_paid: string;
+  owed: string;
+  open_fraud_flags: number;
+  click_to_reg_rate: number;
+  reg_to_ftd_rate: number;
+}
+
+/** Referred player is anonymised: `player_ref` is a stable pseudonymous id. */
+export interface AffiliatePlayerSummary {
+  player_ref: string;
+  attributed_at: string;
+  ftd_qualified: boolean;
+  ftd_at?: string | null;
+  ngr_amount: string;
+  commission_amount: string;
+}
+
+export type PostbackEvent =
+  | "registration"
+  | "ftd"
+  | "deposit"
+  | "redeposit";
+
+export type PostbackMethod = "GET" | "POST";
+
+export interface PostbackConfig {
+  event: PostbackEvent;
+  url: string;
+  method: PostbackMethod;
+  variables?: Record<string, string>;
+  retry_count?: number;
+  retry_backoff?: string;
+}
+
 export const affiliatesService = {
   async getAffiliates(params?: {
     status?: string;
@@ -127,6 +173,24 @@ export const affiliatesService = {
     );
   },
 
+  async getAffiliateStats(affiliateId: string, days?: number): Promise<AffiliateStats> {
+    const response = await apiClient.get<{ data: AffiliateStats }>(
+      `/admin/affiliates/${affiliateId}/stats`,
+      { params: days && days > 0 ? { days } : undefined },
+    );
+    return response.data.data;
+  },
+
+  async getAffiliatePlayers(
+    affiliateId: string,
+    params?: { page?: number; page_size?: number },
+  ): Promise<PaginatedResponse<AffiliatePlayerSummary>> {
+    const response = await apiClient.get<
+      PaginatedResponse<AffiliatePlayerSummary>
+    >(`/admin/affiliates/${affiliateId}/players`, { params });
+    return response.data;
+  },
+
   async getPayouts(params?: {
     status?: string;
     page?: number;
@@ -154,6 +218,13 @@ export const affiliatesService = {
     });
   },
 
+  /** Releases an approved payout to the partner (money movement step). */
+  async markPayoutPaid(payoutId: string, providerReference?: string): Promise<void> {
+    await apiClient.post(`/admin/affiliates/payouts/${payoutId}/paid`, {
+      provider_reference: providerReference || "",
+    });
+  },
+
   async getFraudFlags(params?: {
     status?: string;
     page?: number;
@@ -164,5 +235,33 @@ export const affiliatesService = {
       { params },
     );
     return response.data;
+  },
+
+  /** Confirmed fraud — notes are mandatory. */
+  async resolveFraudFlag(flagId: string, notes: string): Promise<void> {
+    await apiClient.post(`/admin/affiliates/fraud-flags/${flagId}/resolve`, {
+      notes,
+    });
+  },
+
+  /** False positive — notes optional. */
+  async dismissFraudFlag(flagId: string, notes?: string): Promise<void> {
+    await apiClient.post(`/admin/affiliates/fraud-flags/${flagId}/dismiss`, {
+      notes: notes || "",
+    });
+  },
+
+  async getPostbackConfigs(affiliateId: string): Promise<PostbackConfig[]> {
+    const response = await apiClient.get<{ data: PostbackConfig[] }>(
+      `/admin/affiliates/${affiliateId}/postback-config`,
+    );
+    return response.data.data ?? [];
+  },
+
+  async updatePostbackConfigs(
+    affiliateId: string,
+    configs: PostbackConfig[],
+  ): Promise<void> {
+    await apiClient.put(`/admin/affiliates/${affiliateId}/postback-config`, configs);
   },
 };

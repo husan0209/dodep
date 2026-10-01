@@ -46,9 +46,9 @@ networkPolicy:
               name: production
       ports:
         - protocol: TCP
-          port: 8080
+          port: 8089
         - protocol: TCP
-          port: 9090
+          port: 50059
   egress:
     - to:
         - namespaceSelector:
@@ -132,10 +132,12 @@ tolerations:
     effect: "NoSchedule"
 
 env:
-  - name: GIN_MODE
-    value: "release"
   - name: APP_ENV
     value: "production"
+  - name: PORT
+    value: "8089"
+  - name: GRPC_PORT
+    value: "50059"
   - name: DATABASE_URL
     valueFrom:
       secretKeyRef:
@@ -148,11 +150,16 @@ env:
         key: redis-url
   - name: REDPANDA_BROKERS
     value: "redpanda.data.svc.cluster.local:9092,redpanda.data.svc.cluster.local:9093,redpanda.data.svc.cluster.local:9094"
-  - name: JUMIO_API_TOKEN
+  - name: SUMSUB_API_KEY
     valueFrom:
       secretKeyRef:
         name: kyc-secrets-production
-        key: jumio-api-token
+        key: sumsub-api-key
+  - name: COMPLYADVANTAGE_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: kyc-secrets-production
+        key: complyadvantage-api-key
   - name: OTEL_EXPORTER_OTLP_ENDPOINT
     value: "http://otel-collector.monitoring.svc.cluster.local:4317"
   - name: OTEL_SERVICE_NAME

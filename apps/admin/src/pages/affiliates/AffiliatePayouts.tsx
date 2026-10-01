@@ -15,6 +15,8 @@ import DataTable from "@/components/common/DataTable";
 import { affiliatesService } from "@/services/affiliates.service";
 import { formatDate } from "@/utils/format";
 import { getErrorMessage } from "@/utils/errors";
+import { hasPermission } from "@/utils/permissions";
+import { useAuthStore } from "@/stores/authStore";
 import type { ColumnsType } from "antd/es/table";
 
 const { Title } = Typography;
@@ -41,6 +43,11 @@ const STATUS_COLORS: Record<string, string> = {
   failed: "red",
 };
 
+// Mirrors validPayoutTransitions in admin-bff (server enforces the same
+// machine and returns 409 on a mismatch — this only hides dead buttons).
+const REVIEWABLE_STATUSES = ["requested", "reviewing", "pending"];
+const PAYABLE_STATUSES = ["approved"];
+
 export default function AffiliatePayouts() {
   const [page, setPage] = useState(1);
   const [pageSize] = useState(20);
@@ -51,7 +58,17 @@ export default function AffiliatePayouts() {
   }>({ open: false, id: null });
   const [rejectReason, setRejectReason] = useState("");
   const [approveRef, setApproveRef] = useState("");
+  const [payModal, setPayModal] = useState<{
+    open: boolean;
+    id: string | null;
+  }>({ open: false, id: null });
+  const [payRef, setPayRef] = useState("");
   const queryClient = useQueryClient();
+  const { permissions } = useAuthStore();
+  const canApprovePayouts = hasPermission(
+    permissions,
+    "affiliate.payout.approve",
+  );
 
   const { data, isLoading } = useQuery({
     queryKey: ["affiliate-payouts", page, pageSize, status],
@@ -76,6 +93,18 @@ export default function AffiliatePayouts() {
       queryClient.invalidateQueries({ queryKey: ["affiliate-payouts"] });
       setRejectModal({ open: false, id: null });
       setRejectReason("");
+    },
+    onError: (error: unknown) => message.error(getErrorMessage(error)),
+  });
+
+  const markPaidMutation = useMutation({
+    mutationFn: ({ id, ref }: { id: string; ref: string }) =>
+      affiliatesService.markPayoutPaid(id, ref),
+    onSuccess: () => {
+      message.success("Payout marked as paid");
+      queryClient.invalidateQueries({ queryKey: ["affiliate-payouts"] });
+      setPayModal({ open: false, id: null });
+      setPayRef("");
     },
     onError: (error: unknown) => message.error(getErrorMessage(error)),
   });
@@ -115,26 +144,41 @@ export default function AffiliatePayouts() {
       key: "actions",
       width: 220,
       render: (_, record) => {
-        if (!["requested", "reviewing"].includes(record.status)) return "—";
+        if (!canApprovePayouts) return "—";
+        const isReviewable = REVIEWABLE_STATUSES.includes(record.status);
+        const isPayable = PAYABLE_STATUSES.includes(record.status);
+        if (!isReviewable && !isPayable) return "—";
         return (
           <Space>
-            <Button
-              size="small"
-              type="primary"
-              onClick={() =>
-                approveMutation.mutate({ id: record.id, ref: approveRef })
-              }
-              loading={approveMutation.isPending}
-            >
-              Approve
-            </Button>
-            <Button
-              size="small"
-              danger
-              onClick={() => setRejectModal({ open: true, id: record.id })}
-            >
-              Reject
-            </Button>
+            {isReviewable && (
+              <>
+                <Button
+                  size="small"
+                  type="primary"
+                  onClick={() =>
+                    approveMutation.mutate({ id: record.id, ref: approveRef })
+                  }
+                  loading={approveMutation.isPending}
+                >
+                  Approve
+                </Button>
+                <Button
+                  size="small"
+                  danger
+                  onClick={() => setRejectModal({ open: true, id: record.id })}
+                >
+                  Reject
+                </Button>
+              </>
+            )}
+            {isPayable && (
+              <Button
+                size="small"
+                onClick={() => setPayModal({ open: true, id: record.id })}
+              >
+                Mark Paid
+              </Button>
+            )}
           </Space>
         );
       },
@@ -196,6 +240,26 @@ export default function AffiliatePayouts() {
           placeholder="Reason for rejection..."
           value={rejectReason}
           onChange={(e) => setRejectReason(e.target.value)}
+        />
+      </Modal>
+
+      <Modal
+        title="Mark Payout as Paid"
+        open={payModal.open}
+        onOk={() =>
+          payModal.id && markPaidMutation.mutate({ id: payModal.id, ref: payRef })
+        }
+        onCancel={() => {
+          setPayModal({ open: false, id: null });
+          setPayRef("");
+        }}
+        confirmLoading={markPaidMutation.isPending}
+        okText="Confirm Paid"
+      >
+        <Input
+          placeholder="Provider / PSP transaction reference"
+          value={payRef}
+          onChange={(e) => setPayRef(e.target.value)}
         />
       </Modal>
     </div>
