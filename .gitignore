@@ -43,6 +43,12 @@ pnpm-debug.log*
 
 # Testing
 coverage/
+.coverage
+.coverage.*
+htmlcov/
+junit.xml
+bandit-results.json
+safety-results.json
 *.lcov
 .nyc_output/
 
