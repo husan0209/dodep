@@ -1,0 +1,173 @@
+# Affiliate Service Helm Chart Values
+# RevShare from NGR: affiliate_commission = max(0, NGR * commission_rate)
+# Ports per CONVENTIONS.md: 8090 (HTTP) / 50061 (gRPC)
+
+replicaCount: 2
+
+image:
+  repository: ghcr.io/opus-casino/affiliate
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+serviceAccount:
+  create: true
+  annotations:
+    eks.amazonaws.com/role-arn: ""
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+
+podSecurityContext:
+  fsGroup: 1000
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+service:
+  type: ClusterIP
+  httpPort: 8090
+  httpTargetPort: 8090
+  grpcPort: 50061
+  grpcTargetPort: 50061
+
+# Routing / disruption / network isolation are NOT Helm-rendered here.
+# They live as standalone manifests so ArgoCD can manage them independently
+# of a chart release (and so Istio stays the single source of routing truth):
+#   ingress          -> infra/k8s/istio/production/affiliate-routing.yaml
+#                       (VirtualService /r/* + /api/v1/affiliate -> :8090)
+#   podDisruptionBudget -> infra/k8s/production/affiliate-pdb.yaml
+#   networkPolicy    -> infra/k8s/production/affiliate-networkpolicy.yaml
+# This chart intentionally has NO ingress.yaml / pdb.yaml / networkpolicy.yaml
+# templates — adding them would create two competing owners for the same object.
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+  requests:
+    cpu: 250m
+    memory: 256Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 60
+  targetMemoryUtilizationPercentage: 70
+
+nodeSelector:
+  node-type: application
+
+healthCheck:
+  path: /health
+  port: 8090
+  liveness:
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readiness:
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+env:
+  - name: APP_ENV
+    valueFrom:
+      configMapKeyRef:
+        name: affiliate-config
+        key: app-env
+  - name: PORT
+    value: "8090"
+  - name: GRPC_PORT
+    value: "50061"
+  - name: DATABASE_URL
+    valueFrom:
+      secretKeyRef:
+        name: affiliate-secrets
+        key: database-url
+  - name: REDIS_ADDR
+    valueFrom:
+      secretKeyRef:
+        name: affiliate-secrets
+        key: redis-addr
+  - name: REDIS_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: affiliate-secrets
+        key: redis-password
+  - name: JWT_SECRET_KEY
+    valueFrom:
+      secretKeyRef:
+        name: affiliate-secrets
+        key: jwt-secret-key
+  - name: REDPANDA_BROKERS
+    valueFrom:
+      configMapKeyRef:
+        name: affiliate-config
+        key: redpanda-brokers
+  - name: CORS_ORIGINS
+    valueFrom:
+      configMapKeyRef:
+        name: affiliate-config
+        key: cors-origins
+  - name: HOLD_RELEASE_INTERVAL
+    valueFrom:
+      configMapKeyRef:
+        name: affiliate-config
+        key: hold-release-interval
+
+serviceMonitor:
+  # Disabled: service currently exposes only /health + /ready (see main.go).
+  # Enable once a /metrics endpoint lands; template is ready.
+  enabled: false
+  interval: 30s
+  scrapeTimeout: 10s
+  path: /metrics
+  port: http
+
+# Affiliate-specific settings (must match services/go/affiliate behavior)
+affiliate:
+  commission:
+    default_rate: "0.20"
+    hold_period_days: 30
+    min_payout_amount: "100"
+    approval_mode: manual
+    payout_schedule: monthly
+    negative_carryover_enabled: false
+  redpanda:
+    enabled: true
+    brokers: "redpanda-data:9092"
+    consumer_group: affiliate-service
+    # Consumed (see internal/consumer/ngr_consumer.go)
+    consume_topics:
+      - casino.rounds.settled
+      - betting.bets.settled
+      - affiliate.player.activity
+    # Produced (see internal/repository/gorm_repository.go outbox topics)
+    produce_topics:
+      - affiliate.enrollment.requested
+      - affiliate.enrollment.approved
+      - affiliate.enrollment.rejected
+      - affiliate.click.tracked
+      - affiliate.attribution.created
+      - affiliate.commission.accrued
+      - affiliate.commission.released
+      - affiliate.commission.reversed
+      - affiliate.payout.requested
+      - affiliate.payout.updated
+      - affiliate.payout.paid
+      - affiliate.payout.rejected
+      - affiliate.fraud.flagged
+      - affiliate.adjustment.created
+  tracking:
+    click_cookie_name: aff_click
+    click_cookie_ttl_days: 30
+    redirect_default: "/"
