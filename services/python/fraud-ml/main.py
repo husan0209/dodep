@@ -76,7 +76,7 @@ async def lifespan(app: FastAPI):
     app.state.consumer = None
     try:
         app.state.consumer = RedpandaConsumer(
-            brokers=settings.redpanda_brokers,
+            brokers=settings.redpanda_broker_list,
             fraud_detector=app.state.fraud_detector,
         )
         await app.state.consumer.start()

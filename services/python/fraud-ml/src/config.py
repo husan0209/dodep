@@ -58,8 +58,17 @@ class Settings(BaseSettings):
     # Model path
     model_path: str = "/app/models"
 
-    # Redpanda (for notifications)
-    redpanda_brokers: list[str] = ["localhost:9092"]
+    # Redpanda brokers (for notifications). Kept as a raw string: a
+    # list-typed field would make pydantic-settings JSON-decode the env
+    # value and fail on the CSV form used in CI.
+    redpanda_brokers: str = "localhost:9092"
+
+    @property
+    def redpanda_broker_list(self) -> list[str]:
+        """Kafka brokers as a list, from a CSV or JSON env value."""
+        from internal.config import parse_brokers
+
+        return parse_brokers(self.redpanda_brokers)
 
 
 settings = Settings()
