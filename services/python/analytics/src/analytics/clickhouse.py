@@ -23,7 +23,9 @@ class ClickHouseClient:
         host: str,
         port: int,
         username: str = "default",
-        password: str = "",
+        password: str = "",  # nosec B107 — not a secret: ClickHouse's default
+        # user ships with an empty password and the value is overridden from
+        # Settings (CLICKHOUSE_PASSWORD) in every real deployment.
     ) -> None:
         try:
             import clickhouse_connect
@@ -60,7 +62,7 @@ def get_client(
     host: str,
     port: int,
     username: str = "default",
-    password: str = "",
+    password: str = "",  # nosec B107 — see ClickHouseClient.__init__
 ) -> ClickHouseClient:
     """Process-wide singleton client (FastAPI lifespan creates it eagerly)."""
     global _client

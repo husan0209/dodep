@@ -252,13 +252,15 @@ def build_export_query(table: str) -> tuple[str, list[str]]:
     if table not in EXPORTABLE_TABLES or table not in date_columns:
         raise ValueError(f"table is not exportable: {table!r}")
     column = date_columns[table]
-    query = f"""
-        SELECT *
-        FROM {table}
-        WHERE {column} BETWEEN %(date_from)s AND %(date_to)s
-        ORDER BY {column} ASC
-        LIMIT %(limit)s
-    """
+    # table and column are interpolated because ClickHouse binds parameters
+    # for values only, never for identifiers. Both come from the literals
+    # above: `table` is rejected by the EXPORTABLE_TABLES check and `column`
+    # is read from date_columns. Every user-supplied value goes through a
+    # %(name)s placeholder, so no request data reaches the SQL text.
+    where = f"WHERE {column} BETWEEN %(date_from)s AND %(date_to)s"  # nosec B608
+    order = f"ORDER BY {column} ASC"  # nosec B608
+    source = f"FROM {table}"  # nosec B608
+    query = f"SELECT * {source} {where} {order} LIMIT %(limit)s"
     return query, ["date_from", "date_to", "limit"]
 
 
@@ -343,26 +345,18 @@ def build_earnings_report_query(
         conditions.append("affiliate_id = %(affiliate_id)s")
         params.append("affiliate_id")
     where = " AND ".join(conditions)
-    query = f"""
-        SELECT
-            earning_id,
-            affiliate_id,
-            referred_user_id,
-            source_type,
-            period_start,
-            period_end,
-            ggr_amount,
-            ngr_amount,
-            commission_rate,
-            commission_amount,
-            status,
-            hold_until,
-            created_at
-        FROM affiliate_earnings
-        WHERE {where}
-        ORDER BY period_start DESC
-        LIMIT %(limit)s OFFSET %(offset)s
-    """
+    # `where` is a join of constant predicate strings picked by which filters
+    # were supplied — no request data reaches the SQL text, and every bound
+    # value travels through a %(name)s placeholder.
+    filter_sql = f"WHERE {where}"  # nosec B608
+    query = (
+        "SELECT earning_id, affiliate_id, referred_user_id, source_type, "  # nosec B608
+        "period_start, period_end, ggr_amount, ngr_amount, commission_rate, "
+        "commission_amount, status, hold_until, created_at "
+        "FROM affiliate_earnings "
+        + filter_sql
+        + " ORDER BY period_start DESC LIMIT %(limit)s OFFSET %(offset)s"
+    )
     return query, params + ["limit", "offset"]
 
 

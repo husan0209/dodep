@@ -110,6 +110,36 @@ class TestQueryBuilders(unittest.TestCase):
             with self.assertRaises(ValueError, msg=bad):
                 rep.build_earnings_report_query(status=bad)
 
+    def test_every_exportable_table_selects_from_its_own_date_column(self):
+        """The export query is assembled from fragments, so pin the shape.
+
+        Each table has its own date column, and both the table name and the
+        column are interpolated (ClickHouse cannot bind identifiers). Pin
+        the fragment assembly so a refactor cannot drop a placeholder or
+        point one table at another's column.
+        """
+        expected = {
+            "affiliate_earnings": "created_at",
+            "affiliate_payouts": "created_at",
+            "referred_player_activity": "activity_date",
+            "affiliate_daily_aggregates": "report_date",
+        }
+        for table, column in expected.items():
+            query, params = rep.build_export_query(table)
+            self.assertIn(f"FROM {table}", query, table)
+            self.assertIn(f"{column} BETWEEN %(date_from)s AND %(date_to)s", query, table)
+            self.assertIn(f"ORDER BY {column} ASC", query, table)
+            self.assertIn("LIMIT %(limit)s", query, table)
+            self.assertNotIn("%()s", query, table)
+            # Only the three bound values may appear as placeholders.
+            for name in ("date_from", "date_to", "limit"):
+                self.assertIn(f"%({name})s", query, f"{table}/{name}")
+            self.assertEqual(params, ["date_from", "date_to", "limit"], table)
+
+    def test_export_query_has_no_double_space_from_fragment_join(self):
+        query, _ = rep.build_export_query("affiliate_earnings")
+        self.assertNotIn("  ", query, "fragments must join with single spaces")
+
     def test_range_queries_use_between(self):
         for builder in (rep.build_platform_totals_query, rep.build_top_affiliates_range_query):
             query, params = builder()
