@@ -112,6 +112,16 @@ class ProfileScreen extends ConsumerWidget {
             _buildMenuItem(Icons.person_outline, 'Личные данные', () {}),
             _buildMenuItem(Icons.security, 'Безопасность', () {}),
             _buildMenuItem(Icons.notifications_outlined, 'Уведомления', () {}),
+            _buildMenuItem(
+              Icons.group_outlined,
+              'Партнёрская программа',
+              () => context.go('/affiliate'),
+            ),
+            _buildMenuItem(
+              Icons.shield_outlined,
+              'Ответственная игра',
+              () => context.go('/responsible-gambling'),
+            ),
             _buildMenuItem(Icons.help_outline, 'Помощь', () {}),
             _buildMenuItem(Icons.description_outlined, 'Документы', () {}),
             const SizedBox(height: 24),

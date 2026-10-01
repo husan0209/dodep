@@ -1,0 +1,330 @@
+name: CI - Go RG Service
+
+# RG Service pipeline: lint -> test -> security -> image build (generic
+# Dockerfile.go) -> Trivy -> helm lint/render -> deploy to dev.
+#
+# Notes:
+# - GO_VERSION is 1.24: grpc v1.80 (via libs/proto) requires go >= 1.24.
+# - `go mod vendor` runs before the image build because go.mod replaces
+#   github.com/opus-casino/proto with ../../libs/proto, which lives outside
+#   the docker build context (services/go/rg). Vendoring keeps the generic
+#   Dockerfile untouched (CONVENTIONS.md NEVER-9).
+# - `helm dependency update` is required: the rg chart depends on the local
+#   service-chart via file://, which helm only resolves after update.
+# - Ports asserted below come from services/go/rg/internal/config/config.go
+#   (8091 HTTP / 50062 gRPC).
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'services/go/rg/**'
+      - 'infra/helm/charts/rg/**'
+      - 'infra/helm/charts/service-chart/**'
+      - 'infra/docker/Dockerfile.go'
+      - 'libs/proto/rg/**'
+      - 'tools/testing/k6/scenarios/rg-service.js'
+      - '.github/workflows/ci-go-rg.yml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'services/go/rg/**'
+      - 'infra/helm/charts/rg/**'
+      - 'infra/helm/charts/service-chart/**'
+      - 'infra/docker/Dockerfile.go'
+      - 'libs/proto/rg/**'
+      - 'tools/testing/k6/scenarios/rg-service.js'
+      - '.github/workflows/ci-go-rg.yml'
+
+env:
+  GO_VERSION: '1.24'
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: opus-casino
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint RG Service
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: services/go/rg/go.sum
+
+      - name: Check gofmt
+        run: |
+          cd services/go/rg
+          test -z "$(gofmt -l .)" || (echo "gofmt diff:" && gofmt -d . && exit 1)
+
+      - name: Check go vet
+        run: |
+          cd services/go/rg
+          go vet ./...
+
+      - name: Install golangci-lint (pinned)
+        run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.1.0
+
+      - name: Lint RG Service
+        run: |
+          cd services/go/rg
+          golangci-lint run ./...
+
+  test:
+    name: Test RG Service
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: lint
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: opus_casino_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: services/go/rg/go.sum
+
+      - name: Test RG Service
+        run: |
+          cd services/go/rg
+          go test -race -coverprofile=coverage.out ./...
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/opus_casino_test?sslmode=disable
+          REDIS_ADDR: localhost:6379
+          JWT_SECRET_KEY: test-secret-key-for-ci-only
+          APP_ENV: test
+
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rg-coverage
+          path: services/go/rg/coverage.out
+
+      - name: Upload Coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files: services/go/rg/coverage.out
+          flags: rg
+          name: rg-coverage
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
+
+  security:
+    name: Security Scan RG
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: lint
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Run govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          cd services/go/rg
+          govulncheck ./...
+
+  build:
+    name: Build and Push RG Image
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [test, security]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: services/go/rg/go.sum
+
+      - name: Vendor dependencies for Docker build
+        run: |
+          cd services/go/rg
+          go mod vendor
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push RG Service
+        uses: docker/build-push-action@v6
+        with:
+          context: services/go/rg
+          file: infra/docker/Dockerfile.go
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/rg:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/rg:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/rg:${{ github.sha }}
+          format: 'sarif'
+          output: 'trivy-results-rg.sarif'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '1'
+
+      - name: Upload Trivy scan results
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results-rg.sarif'
+
+  helm-lint:
+    name: Helm Lint and Render RG Chart
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: lint
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: v3.13.0
+
+      - name: Lint RG chart
+        run: helm lint infra/helm/charts/rg
+
+      - name: Render and assert key values
+        run: |
+          helm dependency update infra/helm/charts/rg >/dev/null
+          helm template rg infra/helm/charts/rg \
+            --namespace platform \
+            --set image.tag=test > /tmp/rg-rendered.yaml
+          grep -q "containerPort: 8091" /tmp/rg-rendered.yaml
+          grep -q "containerPort: 50062" /tmp/rg-rendered.yaml
+          grep -q "name: grpc" /tmp/rg-rendered.yaml
+          grep -q "JWT_SECRET_KEY" /tmp/rg-rendered.yaml
+          # Production overlay must keep the public ingress limited to the
+          # player cabinet: /admin/rg must never be exposed publicly.
+          helm template rg infra/helm/charts/rg \
+            --namespace platform \
+            -f infra/helm/charts/rg/values-production.yaml \
+            > /tmp/rg-rendered-prod.yaml
+          grep -q "path: /api/v1/rg" /tmp/rg-rendered-prod.yaml
+          if grep -q "path: /admin/rg" /tmp/rg-rendered-prod.yaml; then
+            echo "/admin/rg must not be routed through the public ingress"
+            exit 1
+          fi
+          if grep -q "GIN_MODE" /tmp/rg-rendered.yaml; then
+            echo "GIN_MODE must not be rendered (service is Fiber, NEVER-8)"
+            exit 1
+          fi
+          if grep -q "containerPort: 8080" /tmp/rg-rendered.yaml; then
+            echo "stale 8080 port rendered"
+            exit 1
+          fi
+
+  deploy-dev:
+    name: Deploy RG to Dev
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [build, helm-lint]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: dev
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: v3.13.0
+
+      - name: Configure kubectl
+        uses: azure/k8s-set-context@v3
+        with:
+          method: kubeconfig
+          kubeconfig: ${{ secrets.KUBE_CONFIG_DEV }}
+
+      - name: Deploy RG Service
+        run: |
+          helm dependency update infra/helm/charts/rg >/dev/null
+          helm upgrade --install rg infra/helm/charts/rg \
+            --namespace platform-dev \
+            --set image.tag=${{ github.sha }} \
+            --wait --timeout 5m
+
+      - name: Run smoke tests
+        run: |
+          kubectl wait --for=condition=available deployment/rg -n platform-dev --timeout=120s
+
+          # Health checks (ports from services/go/rg/internal/config/config.go)
+          kubectl port-forward svc/rg 18091:8091 -n platform-dev &
+          PF_PID=$!
+          sleep 5
+          curl -f http://localhost:18091/health
+          curl -f http://localhost:18091/ready
+
+          # The enforcement gate must never fail open and never 5xx.
+          # Without a token it must answer 401 (unauthenticated), not 500.
+          code=$(curl -s -o /dev/null -w '%{http_code}' \
+            -X POST http://localhost:18091/api/v1/rg/check \
+            -H 'Content-Type: application/json' \
+            -d '{"channel":"bet","amount":"10.00","currency":"USD"}')
+          echo "unauthenticated gate status: $code"
+          if [ "$code" != "401" ]; then
+            echo "expected 401 from the RG gate without a token, got $code"
+            kill $PF_PID
+            exit 1
+          fi
+          kill $PF_PID
