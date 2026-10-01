@@ -1,0 +1,421 @@
+name: CI - Go Bonus Service
+
+# Bonus Service pipeline: lint -> test (unit + testcontainers integration)
+# -> security -> image build (generic Dockerfile.go) -> Trivy -> helm lint/
+# render check -> deploy to dev.
+#
+# Notes:
+# - GO_VERSION is 1.25: the CVE-fixed dependency set (pgx v5.9.2) requires
+#   go >= 1.25, and the patched 1.25.x patch releases also clear the standard
+#   library advisories govulncheck reports.
+# - `go mod vendor` runs before the image build because go.mod replaces
+#   github.com/opus-casino/proto with ../../../libs/proto, which lives
+#   outside the docker build context (services/go/bonus). Vendoring keeps
+#   the generic Dockerfile untouched (CONVENTIONS.md NEVER-9).
+# - `helm dependency update` is required: the bonus chart depends on the
+#   local service-chart via file://, which helm only resolves after update.
+# - The `protos` job is mandatory: libs/proto/gen is gitignored on purpose
+#   (libs/proto/.gitignore), so a clean checkout has no generated Go stubs
+#   and `go vet`/`go build` cannot resolve github.com/opus-casino/proto/gen/go/*.
+#   It runs the documented `make -C libs/proto gen-go` once and shares the
+#   result as an artifact with every Go job.
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'services/go/bonus/**'
+      - 'infra/helm/charts/bonus/**'
+      - 'infra/helm/charts/service-chart/**'
+      - 'infra/docker/Dockerfile.go'
+      - 'libs/proto/bonus/**'
+      - '.github/workflows/ci-go-bonus.yml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'services/go/bonus/**'
+      - 'infra/helm/charts/bonus/**'
+      - 'infra/helm/charts/service-chart/**'
+      - 'infra/docker/Dockerfile.go'
+      - 'libs/proto/bonus/**'
+      - '.github/workflows/ci-go-bonus.yml'
+
+env:
+  GO_VERSION: '1.25'
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: opus-casino
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  protos:
+    name: Generate Protobuf Stubs (Go)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # buf is pinned, not "latest": remote plugin resolution must be
+      # reproducible for a build gate. The release archive unpacks to
+      # buf/bin/buf, hence the explicit install of that path.
+      - name: Install buf (pinned)
+        run: |
+          BUF_VERSION=1.73.0
+          curl -fsSL -o /tmp/buf.tar.gz \
+            "https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/buf-Linux-x86_64.tar.gz"
+          sudo tar -xzf /tmp/buf.tar.gz -C /tmp
+          sudo install -m 0755 /tmp/buf/bin/buf /usr/local/bin/buf
+          buf --version
+
+      # Same target the Makefile documents for local development. buf runs the
+      # remote plugins pinned in libs/proto/buf.gen.yaml (protocolbuffers/go,
+      # grpc/go) and the managed go_package_prefix makes the import paths match
+      # github.com/opus-casino/proto/gen/go/...
+      - name: Generate Go stubs
+        run: make -C libs/proto gen-go
+
+      - name: Assert the stubs the bonus service imports exist
+        run: |
+          test -f libs/proto/gen/go/bonus/v1/bonus.pb.go
+          test -f libs/proto/gen/go/bonus/v1/bonus_grpc.pb.go
+          test -f libs/proto/gen/go/wallet/v1/wallet.pb.go
+          test -f libs/proto/gen/go/common/v1/money.pb.go
+          test -f libs/proto/gen/go/common/v1/error.pb.go
+
+      - name: Upload generated stubs
+        uses: actions/upload-artifact@v4
+        with:
+          name: proto-go-stubs
+          path: libs/proto/gen/go
+          retention-days: 1
+
+  lint:
+    name: Lint Bonus Service
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: protos
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: services/go/bonus/go.sum
+
+      - name: Download generated protobuf stubs
+        uses: actions/download-artifact@v4
+        with:
+          name: proto-go-stubs
+          path: libs/proto/gen/go
+
+      - name: Check gofmt
+        run: |
+          cd services/go/bonus
+          test -z "$(gofmt -l .)" || (echo "gofmt diff:" && gofmt -d . && exit 1)
+
+      - name: Check go vet
+        run: |
+          cd services/go/bonus
+          go vet ./...
+
+      - name: Install golangci-lint (pinned)
+        run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.1.0
+
+      - name: Lint Bonus Service
+        run: |
+          cd services/go/bonus
+          golangci-lint run ./...
+
+  test:
+    name: Test Bonus Service
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: lint
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: opus_casino_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: services/go/bonus/go.sum
+
+      - name: Download generated protobuf stubs
+        uses: actions/download-artifact@v4
+        with:
+          name: proto-go-stubs
+          path: libs/proto/gen/go
+
+      - name: Test Bonus Service (unit + testcontainers integration)
+        run: |
+          cd services/go/bonus
+          go test -race -coverprofile=coverage.out ./...
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/opus_casino_test?sslmode=disable
+          REDIS_ADDR: localhost:6379
+          JWT_SECRET_KEY: test-secret-key-for-ci-only
+          APP_ENV: test
+
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bonus-coverage
+          path: services/go/bonus/coverage.out
+
+      - name: Upload Coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files: services/go/bonus/coverage.out
+          flags: bonus
+          name: bonus-coverage
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
+
+  security:
+    name: Security Scan Bonus
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: lint
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Download generated protobuf stubs
+        uses: actions/download-artifact@v4
+        with:
+          name: proto-go-stubs
+          path: libs/proto/gen/go
+
+      - name: Run govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          cd services/go/bonus
+          govulncheck ./...
+
+  build:
+    name: Build and Push Bonus Image
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [test, security]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: services/go/bonus/go.sum
+
+      - name: Download generated protobuf stubs
+        uses: actions/download-artifact@v4
+        with:
+          name: proto-go-stubs
+          path: libs/proto/gen/go
+
+      - name: Vendor dependencies for Docker build
+        run: |
+          cd services/go/bonus
+          go mod vendor
+          # The vendored proto packages come from the ../../../libs/proto
+          # replace target; fail fast if the stubs were not restored.
+          test -d vendor/github.com/opus-casino/proto/gen/go/bonus/v1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Bonus Service
+        uses: docker/build-push-action@v6
+        with:
+          context: services/go/bonus
+          file: infra/docker/Dockerfile.go
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/bonus:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/bonus:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/bonus:${{ github.sha }}
+          format: 'sarif'
+          output: 'trivy-results-bonus.sarif'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '1'
+
+      - name: Upload Trivy scan results
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results-bonus.sarif'
+
+  helm-lint:
+    name: Helm Lint and Render Bonus Chart
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: lint
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: v3.13.0
+
+      # The chart depends on the local service-chart via file://, so the
+      # dependency must be resolved before lint can resolve the templates.
+      - name: Resolve chart dependencies
+        run: helm dependency update infra/helm/charts/bonus
+
+      - name: Lint Bonus chart
+        run: helm lint infra/helm/charts/bonus
+
+      - name: Render and assert key values
+        run: |
+          helm template bonus infra/helm/charts/bonus \
+            --namespace platform \
+            --set image.tag=test > /tmp/bonus-rendered.yaml
+          grep -q "containerPort: 8088" /tmp/bonus-rendered.yaml
+          grep -q "containerPort: 50056" /tmp/bonus-rendered.yaml
+          grep -q "name: grpc" /tmp/bonus-rendered.yaml
+          grep -q "name: metrics" /tmp/bonus-rendered.yaml
+          grep -q "WALLET_GRPC_ADDR" /tmp/bonus-rendered.yaml
+          grep -q "JWT_SECRET_KEY" /tmp/bonus-rendered.yaml
+          if grep -q "GIN_MODE" /tmp/bonus-rendered.yaml; then
+            echo "GIN_MODE must not be rendered (service is Fiber, NEVER-8)"
+            exit 1
+          fi
+          if grep -q "containerPort: 8080" /tmp/bonus-rendered.yaml; then
+            echo "stale 8080 port rendered"
+            exit 1
+          fi
+
+  k6-smoke:
+    name: k6 Performance Gate (Bonus)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [test]
+    # Runs only when a target is configured (dev/staging base URL + token),
+    # so forks and PRs from outside do not fail on a missing environment.
+    if: ${{ vars.BONUS_K6_BASE_URL != '' && github.ref == 'refs/heads/main' }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # k6 runs from its official image instead of a job container: the
+      # grafana/k6 image is Alpine-based and cannot execute the Node-based
+      # actions/* steps. `--network host` lets the container reach a
+      # cluster-internal dev URL; for an external URL drop the flag.
+      - name: Run k6 partner-cabinet scenario
+        run: |
+          docker run --rm -i --network host \
+            -v "$PWD:/scripts" -w /scripts \
+            -e BASE_URL="${{ vars.BONUS_K6_BASE_URL }}" \
+            -e ACCESS_TOKEN="${{ secrets.BONUS_K6_ACCESS_TOKEN }}" \
+            -e TEST_BONUS_ID="${{ vars.BONUS_K6_BONUS_ID }}" \
+            grafana/k6:latest \
+            run tools/testing/k6/scenarios/bonus-service.js
+
+      - name: Upload k6 summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bonus-k6-summary
+          path: bonus-summary.json
+
+  deploy-dev:
+    name: Deploy Bonus to Dev
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [build, helm-lint]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: dev
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: v3.13.0
+
+      - name: Configure kubectl
+        uses: azure/k8s-set-context@v3
+        with:
+          method: kubeconfig
+          kubeconfig: ${{ secrets.KUBE_CONFIG_DEV }}
+
+      - name: Deploy Bonus Service
+        run: |
+          helm dependency update infra/helm/charts/bonus >/dev/null
+          helm upgrade --install bonus infra/helm/charts/bonus \
+            --namespace platform-dev \
+            --set image.tag=${{ github.sha }} \
+            --wait --timeout 5m
+
+      - name: Run smoke tests
+        run: |
+          kubectl wait --for=condition=available deployment/bonus -n platform-dev --timeout=120s
+
+          # Health checks (ports 8088 per CONVENTIONS.md)
+          kubectl port-forward svc/bonus 18088:8088 -n platform-dev &
+          PF_PID=$!
+          sleep 5
+          curl -f http://localhost:18088/health
+          curl -f http://localhost:18088/ready
+          curl -fs http://localhost:18088/metrics | grep -q "bonus_http_requests_total" \
+            || (echo "metrics exposition missing bonus_* series" && exit 1)
+          kill $PF_PID

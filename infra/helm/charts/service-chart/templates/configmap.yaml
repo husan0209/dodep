@@ -5,7 +5,23 @@ metadata:
   labels:
     {{- include "service-chart.labels" . | nindent 4 }}
 data:
-  app-env: {{ .Values.env | dig "APP_ENV" "production" | quote }}
+  {{- /*
+    `env` is a list of {name, value} entries everywhere (that is the shape the
+    deployment template iterates and the shape service-chart documents), while
+    the APP_ENV lookup below assumed a map. `dig` on a list fails the render,
+    so APP_ENV is looked up per shape and falls back to "production".
+  */}}
+  {{- $appEnv := "production" }}
+  {{- if kindIs "map" .Values.env }}
+  {{- $appEnv = dig "APP_ENV" "production" .Values.env }}
+  {{- else }}
+  {{- range .Values.env }}
+  {{- if and (eq .name "APP_ENV") .value }}
+  {{- $appEnv = .value }}
+  {{- end }}
+  {{- end }}
+  {{- end }}
+  app-env: {{ $appEnv | quote }}
   {{- range $key, $value := .Values.configMap }}
   {{ $key }}: {{ $value | quote }}
   {{- end }}
