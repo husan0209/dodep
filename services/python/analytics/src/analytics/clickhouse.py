@@ -65,9 +65,7 @@ def get_client(
     """Process-wide singleton client (FastAPI lifespan creates it eagerly)."""
     global _client
     if _client is None:
-        _client = ClickHouseClient(
-            host=host, port=port, username=username, password=password
-        )
+        _client = ClickHouseClient(host=host, port=port, username=username, password=password)
     return _client
 
 

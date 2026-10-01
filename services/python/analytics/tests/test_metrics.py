@@ -23,7 +23,9 @@ class TestNormalizeRoute(unittest.TestCase):
 
     def test_uuid_collapsed(self):
         self.assertEqual(
-            normalize_route("/api/v1/analytics/affiliate/9b2f4c1a-3d4e-4f5a-8b6c-7d8e9f0a1b2c/summary"),
+            normalize_route(
+                "/api/v1/analytics/affiliate/9b2f4c1a-3d4e-4f5a-8b6c-7d8e9f0a1b2c/summary"
+            ),
             "/api/v1/analytics/affiliate/:param/summary",
         )
 
@@ -57,12 +59,12 @@ class TestRegistry(unittest.TestCase):
         )
         # Cumulative buckets: both fast requests <= 0.01, one <= 0.005.
         self.assertIn(
-            'analytics_http_request_duration_seconds_bucket'
+            "analytics_http_request_duration_seconds_bucket"
             '{method="GET",route="/health",le="0.005"} 1',
             text,
         )
         self.assertIn(
-            'analytics_http_request_duration_seconds_bucket'
+            "analytics_http_request_duration_seconds_bucket"
             '{method="GET",route="/health",le="+Inf"} 3',
             text,
         )

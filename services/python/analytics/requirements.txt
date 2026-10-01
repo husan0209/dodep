@@ -9,6 +9,14 @@ pydantic-settings==2.1.0
 clickhouse-connect==0.7.1
 
 # Testing / CI
-pytest==8.0.0
-pytest-asyncio==0.23.4
-httpx==0.26.0
+# pytest itself is installed by the CI job (pip install pytest pytest-cov
+# pytest-asyncio). It is pinned here only so the image build resolves, and
+# deliberately left loose so it cannot conflict with the CI-installed
+# version. An earlier `pytest==8.0.0` + `pytest-asyncio==0.23.4` pair here
+# was unsatisfiable on its own (pytest-asyncio 0.23.x requires pytest<8) and
+# made `pip install -r requirements.txt` fail for this service.
+# The suite itself is stdlib `unittest` and needs none of these at runtime;
+# they exist only so `pytest` can collect and measure it.
+pytest>=8.0.0
+pytest-cov>=4.1.0
+httpx>=0.26.0

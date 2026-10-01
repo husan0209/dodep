@@ -81,7 +81,7 @@ class TestCsvChunks(unittest.TestCase):
         self.assertEqual(parsed[1], ['a,b"c', "line1"])
 
     def test_injection_survives_the_round_trip_escaped(self):
-        rows = [{"name": "=HYPERLINK(\"http://evil\",\"click\")"}]
+        rows = [{"name": '=HYPERLINK("http://evil","click")'}]
         text = list(_csv_chunks(rows))[0]
         parsed = list(csv.reader(io.StringIO(text)))
         self.assertTrue(parsed[1][0].startswith("'="), parsed[1][0])
