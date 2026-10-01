@@ -189,10 +189,16 @@ jobs:
       - name: Run pip-audit
         working-directory: services/python/${{ matrix.service }}
         run: |
+          # -r is required. Without it pip-audit audits the *ambient*
+          # environment, which on a fresh runner is just pip-audit and its
+          # own dependencies — so the job reported vulnerabilities in the
+          # scanner instead of in the service, and never looked at the
+          # service's own pins at all.
+          #
           # exit 0 = clean, 1 = vulnerabilities found. Anything else is a
-          # real failure (tool/db error) and must not pass silently.
+          # real failure (tool/db/resolution error) and must not pass silently.
           set +e
-          pip-audit --format json --output pip-audit.json
+          pip-audit -r requirements.txt --format json --output pip-audit.json
           status=$?
           set -e
           if [ "$status" -ne 0 ] && [ "$status" -ne 1 ]; then
