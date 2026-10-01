@@ -33,6 +33,23 @@ depends on the app's own `NEXT_PUBLIC_*` API bases:
   Deterministic payloads, zero shared state. Spec routes are registered
   after the default layer, so they take priority.
 
+### Assert against the base branch, not against a worktree
+
+Specs must cover the UI that exists on the branch they are merged into.
+An earlier version of `affiliate.spec.ts` asserted an enrollment CTA and a
+payout-request form that only existed in someone's uncommitted working
+copy. It passed locally and failed on CI, because CI checks out `main`.
+
+The symptom is worth recognising: a spec that fails only in CI, on the
+same commit, usually means it was written against unmerged code rather
+than a flaky selector. Check what the base branch actually renders before
+debugging the locator.
+
+Payloads use sentinel values (`777.11`, `SENTINEL-ESP-01`, …) that appear
+nowhere in the component's hardcoded fallbacks. Asserting the sentinels is
+what proves the panel is API-driven rather than still showing its static
+defaults.
+
 ## Run locally
 
 ```bash

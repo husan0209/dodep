@@ -176,18 +176,38 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install safety
-        run: pip install safety
+      # `safety` 3.x moved its vulnerability database behind a paid Safety
+      # account: unauthenticated `safety check` aborts with exit 64 and
+      # prompts for an interactive login, so this job could never pass in CI
+      # (it was failing for every Python service, not just this change).
+      # pip-audit needs no credentials and is already the scanner used by
+      # .github/actions/security-scan, so this keeps one tool for Python
+      # dependencies across the repo.
+      - name: Install pip-audit
+        run: pip install pip-audit
 
-      - name: Run safety check
+      - name: Run pip-audit
         working-directory: services/python/${{ matrix.service }}
-        run: safety check --json > safety-results.json
+        run: |
+          # exit 0 = clean, 1 = vulnerabilities found. Anything else is a
+          # real failure (tool/db error) and must not pass silently.
+          set +e
+          pip-audit --format json --output pip-audit.json
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ] && [ "$status" -ne 1 ]; then
+            echo "pip-audit failed with exit code $status"
+            exit "$status"
+          fi
+          exit "$status"
 
-      - name: Upload safety results
+      - name: Upload pip-audit results
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: safety-results-${{ matrix.service }}
-          path: safety-results.json
+          name: pip-audit-results-${{ matrix.service }}
+          path: services/python/${{ matrix.service }}/pip-audit.json
+          retention-days: 30
 
       - name: Run bandit
         run: pip install bandit

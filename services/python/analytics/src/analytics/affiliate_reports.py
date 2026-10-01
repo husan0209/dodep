@@ -17,9 +17,9 @@ dependency, this module never writes to them):
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
-from typing import Any, Optional
+from typing import Any
 
 # Tables whose export is allowed via the CSV export endpoint.
 # Anything else is rejected (defense in depth: no arbitrary table reads).
@@ -59,7 +59,9 @@ def validate_date_range(date_from: str, date_to: str) -> tuple[date, date]:
         raise ValueError("date_from must not be after date_to")
     if (end - start).days > MAX_RANGE_DAYS:
         raise ValueError(f"date range must not exceed {MAX_RANGE_DAYS} days")
-    if end > date.today() + timedelta(days=1):
+    # UTC, not local: ClickHouse partitions by server (UTC) date, so a
+    # local-time "today" would shift the allowed boundary with the host TZ.
+    if end > datetime.now(UTC).date() + timedelta(days=1):
         raise ValueError("date_to must not be in the future")
     return start, end
 
@@ -316,13 +318,13 @@ def summarize_earnings_by_status(rows: list[dict]) -> dict:
         try:
             amount = Decimal(str(row.get("commission_amount") or "0"))
         except (InvalidOperation, ValueError, TypeError):
-            amount = Decimal("0")
-        totals[status] = totals.get(status, Decimal("0")) + amount
+            amount = Decimal(0)
+        totals[status] = totals.get(status, Decimal(0)) + amount
     return {status: decimal_str(amount) for status, amount in sorted(totals.items())}
 
 
 def build_earnings_report_query(
-    status: Optional[str] = None, affiliate_id: Optional[str] = None
+    status: str | None = None, affiliate_id: str | None = None
 ) -> tuple[str, list[str]]:
     """Paginated earnings report with optional status/affiliate filters.
 

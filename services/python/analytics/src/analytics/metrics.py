@@ -17,7 +17,8 @@ from __future__ import annotations
 import re
 import threading
 import time
-from typing import Optional
+from collections.abc import Callable
+from typing import Self
 
 # Default histogram buckets (seconds), aligned with architecture-overview.
 BUCKETS = (0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0)
@@ -154,11 +155,11 @@ registry = MetricsRegistry()
 class Timer:
     """Context manager measuring elapsed seconds (injectable clock for tests)."""
 
-    def __init__(self, clock: Optional[callable] = None) -> None:  # type: ignore[valid-type]
+    def __init__(self, clock: Callable[[], float] | None = None) -> None:
         self._clock = clock or time.monotonic
         self.elapsed = 0.0
 
-    def __enter__(self) -> "Timer":
+    def __enter__(self) -> Self:
         self._start = self._clock()
         return self
 

@@ -2,18 +2,66 @@
 Analytics Service - Data analytics and reporting
 """
 
+import csv
+import io
 import logging
+from collections.abc import Iterator
 from contextlib import asynccontextmanager
+from decimal import Decimal, InvalidOperation
+from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse, StreamingResponse
 from pydantic_settings import BaseSettings
 
 from analytics import affiliate_reports as rep
-from analytics.clickhouse import ClickHouseUnavailable, get_client
+from analytics.clickhouse import ClickHouseUnavailableError, get_client
 from analytics.metrics import Timer, normalize_route, registry
 
 logger = logging.getLogger(__name__)
+
+# Characters that make a spreadsheet treat a cell as a formula rather than
+# text. Affiliate names and campaign labels are attacker-influenced, so an
+# unescaped "=cmd|..." would execute when an analyst opens the export.
+_FORMULA_TRIGGERS = frozenset("=+-@")
+
+
+def _csv_cell(value: Any) -> str:
+    """Render one CSV field, neutralising spreadsheet formula injection.
+
+    ClickHouse returns Decimal columns as strings, so a negative amount
+    arrives as ``"-3.00"``. Escaping that would turn a real figure into
+    text and break SUM/AVERAGE in the analyst's spreadsheet, so a value
+    that is entirely numeric is left alone even though it starts with
+    ``-``. Only non-numeric text gets the ``'`` prefix that forces Excel
+    and LibreOffice to treat it as a literal.
+
+    The check looks past leading whitespace and control characters: both
+    spreadsheets trim those before evaluating a cell.
+    """
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        stripped = value.lstrip(" \t\r\n")
+        if stripped[:1] in _FORMULA_TRIGGERS:
+            try:
+                Decimal(stripped)
+            except InvalidOperation:
+                return f"'{value}"
+    return str(value)
+
+
+def _csv_chunks(rows: list[dict[str, Any]]) -> Iterator[str]:
+    """Yield RFC 4180 CSV text for a list of ClickHouse rows."""
+    if not rows:
+        return
+    header = list(rows[0].keys())
+    buffer = io.StringIO()
+    writer = csv.writer(buffer, lineterminator="\n")
+    writer.writerow(header)
+    for row in rows:
+        writer.writerow([_csv_cell(row.get(column)) for column in header])
+    yield buffer.getvalue()
 
 
 class Settings(BaseSettings):
@@ -101,7 +149,7 @@ async def get_reports(
         start, end = rep.validate_date_range(date_from, date_to)
         query, _ = rep.build_earnings_report_query(status=status, affiliate_id=affiliate_id)
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     limit = rep.clamp_limit(limit)
     offset = rep.clamp_offset(offset)
     # Fetch one extra row to compute has_more without an expensive COUNT.
@@ -117,8 +165,8 @@ async def get_reports(
                 "offset": offset,
             },
         )
-    except ClickHouseUnavailable as exc:
-        raise HTTPException(status_code=503, detail=str(exc))
+    except ClickHouseUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     has_more = len(rows) > limit
     return {
         "data": [rep.map_earning_row(r) for r in rows[:limit]],
@@ -135,7 +183,7 @@ async def get_dashboard(
     try:
         start, end = rep.validate_date_range(date_from, date_to)
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     totals_query, _ = rep.build_platform_totals_query()
     range_top_query, _ = rep.build_top_affiliates_range_query()
     params = {"date_from": str(start), "date_to": str(end)}
@@ -146,8 +194,8 @@ async def get_dashboard(
             range_top_query,
             {"date_from": str(start), "date_to": str(end), "limit": 5},
         )
-    except ClickHouseUnavailable as exc:
-        raise HTTPException(status_code=503, detail=str(exc))
+    except ClickHouseUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     totals = rep.map_totals_row(total_rows[0]) if total_rows else rep.map_totals_row({})
     funnel = rep.map_funnel_row(
         {
@@ -182,8 +230,8 @@ def _ch():
             username=settings.clickhouse_username,
             password=settings.clickhouse_password,
         )
-    except ClickHouseUnavailable as exc:
-        raise HTTPException(status_code=503, detail=str(exc))
+    except ClickHouseUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @app.get("/api/v1/analytics/affiliate/{affiliate_id}/summary")
@@ -196,15 +244,15 @@ async def affiliate_summary(
     try:
         start, end = rep.validate_date_range(date_from, date_to)
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     query, _ = rep.build_daily_summary_query()
     try:
         rows = _ch().fetch_all(
             query,
             {"affiliate_id": affiliate_id, "date_from": str(start), "date_to": str(end)},
         )
-    except ClickHouseUnavailable as exc:
-        raise HTTPException(status_code=503, detail=str(exc))
+    except ClickHouseUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     return {"data": [rep.map_summary_row(r) for r in rows]}
 
 
@@ -215,8 +263,8 @@ async def affiliate_funnel(affiliate_id: str, days: int = 7):
     query, _ = rep.build_funnel_query()
     try:
         rows = _ch().fetch_all(query, {"affiliate_id": affiliate_id, "days": days})
-    except ClickHouseUnavailable as exc:
-        raise HTTPException(status_code=503, detail=str(exc))
+    except ClickHouseUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     if not rows:
         return {"data": rep.map_funnel_row({})}
     return {"data": rep.map_funnel_row(rows[0])}
@@ -229,8 +277,8 @@ async def affiliate_ngr_trend(affiliate_id: str, days: int = 30):
     query, _ = rep.build_ngr_trend_query()
     try:
         rows = _ch().fetch_all(query, {"affiliate_id": affiliate_id, "days": days})
-    except ClickHouseUnavailable as exc:
-        raise HTTPException(status_code=503, detail=str(exc))
+    except ClickHouseUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     return {
         "data": [
             {
@@ -251,8 +299,8 @@ async def affiliate_ltv(affiliate_id: str, limit: int = 100):
     query, _ = rep.build_ltv_query()
     try:
         rows = _ch().fetch_all(query, {"affiliate_id": affiliate_id, "limit": limit})
-    except ClickHouseUnavailable as exc:
-        raise HTTPException(status_code=503, detail=str(exc))
+    except ClickHouseUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     return {
         "data": [
             {
@@ -274,8 +322,8 @@ async def top_affiliates(days: int = 30, limit: int = 100):
     query, _ = rep.build_top_affiliates_query()
     try:
         rows = _ch().fetch_all(query, {"days": days, "limit": limit})
-    except ClickHouseUnavailable as exc:
-        raise HTTPException(status_code=503, detail=str(exc))
+    except ClickHouseUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     return {"data": [rep.map_top_affiliates_row(r) for r in rows]}
 
 
@@ -286,8 +334,8 @@ async def payout_aging(limit: int = 100):
     query, _ = rep.build_payout_aging_query()
     try:
         rows = _ch().fetch_all(query, {"limit": limit})
-    except ClickHouseUnavailable as exc:
-        raise HTTPException(status_code=503, detail=str(exc))
+    except ClickHouseUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     return {
         "data": [
             {
@@ -316,26 +364,18 @@ async def export_table(
         start, end = rep.validate_date_range(date_from, date_to)
         query, _ = rep.build_export_query(table)
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     limit = rep.clamp_limit(limit, default=10000)
     try:
         rows = _ch().fetch_all(
             query, {"date_from": str(start), "date_to": str(end), "limit": limit}
         )
-    except ClickHouseUnavailable as exc:
-        raise HTTPException(status_code=503, detail=str(exc))
-
-    def generate():
-        if not rows:
-            return
-        header = list(rows[0].keys())
-        yield ",".join(header) + "\n"
-        for row in rows:
-            yield ",".join('"' + str(v).replace('"', '""') + '"' for v in (row.get(k) for k in header)) + "\n"
+    except ClickHouseUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     filename = f"{table}_{start}_{end}.csv"
     return StreamingResponse(
-        generate(),
+        _csv_chunks(rows),
         media_type="text/csv",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

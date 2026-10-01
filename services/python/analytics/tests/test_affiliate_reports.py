@@ -4,8 +4,8 @@ Stdlib only (``unittest``) — no fastapi/pytest/clickhouse-connect needed.
 Run: ``py -m unittest discover -s tests -v`` from the service directory.
 """
 
-import sys
 import os
+import sys
 import unittest
 from datetime import date
 from decimal import Decimal
@@ -100,7 +100,10 @@ class TestQueryBuilders(unittest.TestCase):
         query, params = rep.build_earnings_report_query(status="paid", affiliate_id="aff-1")
         self.assertIn("status = %(status)s", query)
         self.assertIn("affiliate_id = %(affiliate_id)s", query)
-        self.assertEqual(params, ["date_from", "date_to", "status", "affiliate_id", "limit", "offset"])
+        self.assertEqual(
+            params,
+            ["date_from", "date_to", "status", "affiliate_id", "limit", "offset"],
+        )
 
     def test_earnings_report_bad_status(self):
         for bad in ("hacked", "PAID", "", "paid OR 1=1"):

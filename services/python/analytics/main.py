@@ -10,6 +10,6 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
-from analytics.main import app  # noqa: E402,F401
+from analytics.main import app
 
 __all__ = ["app"]

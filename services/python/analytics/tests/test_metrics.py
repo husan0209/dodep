@@ -3,8 +3,8 @@
 Run: ``py -m unittest discover -s tests -v`` from the service directory.
 """
 
-import sys
 import os
+import sys
 import threading
 import unittest
 
@@ -16,7 +16,10 @@ from analytics.metrics import MetricsRegistry, Timer, normalize_route
 class TestNormalizeRoute(unittest.TestCase):
     def test_static_path(self):
         self.assertEqual(normalize_route("/health"), "/health")
-        self.assertEqual(normalize_route("/api/v1/analytics/affiliates/top"), "/api/v1/analytics/affiliates/top")
+        self.assertEqual(
+            normalize_route("/api/v1/analytics/affiliates/top"),
+            "/api/v1/analytics/affiliates/top",
+        )
 
     def test_uuid_collapsed(self):
         self.assertEqual(
@@ -54,11 +57,13 @@ class TestRegistry(unittest.TestCase):
         )
         # Cumulative buckets: both fast requests <= 0.01, one <= 0.005.
         self.assertIn(
-            'analytics_http_request_duration_seconds_bucket{method="GET",route="/health",le="0.005"} 1',
+            'analytics_http_request_duration_seconds_bucket'
+            '{method="GET",route="/health",le="0.005"} 1',
             text,
         )
         self.assertIn(
-            'analytics_http_request_duration_seconds_bucket{method="GET",route="/health",le="+Inf"} 3',
+            'analytics_http_request_duration_seconds_bucket'
+            '{method="GET",route="/health",le="+Inf"} 3',
             text,
         )
         self.assertIn(
