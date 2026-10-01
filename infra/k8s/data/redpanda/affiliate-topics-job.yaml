@@ -1,0 +1,84 @@
+# Job: Create Affiliate Redpanda topics
+# Standalone file — does NOT edit redpanda.yaml (shared topic Job).
+# Topic names are ground-truthed from code:
+#   produced: internal/repository/gorm_repository.go (appendOutboxTx calls)
+#   consumed: internal/consumer/ngr_consumer.go (affiliate.player.activity;
+#             casino/betting upstream topics are owned by their lanes)
+# Sizing: operational class (8 partitions, replicas 3, 7d retention,
+# min.insync.replicas=2), mirroring users.*/notifications.* in redpanda.yaml.
+# Affiliate volumes are orders of magnitude below bets/payments.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: redpanda-create-affiliate-topics
+  namespace: data
+  labels:
+    app: redpanda
+    component: topic-setup
+    domain: affiliate
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: redpanda
+        component: topic-setup
+        domain: affiliate
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: create-affiliate-topics
+          image: docker.redpanda.com/redpandadata/redpanda:v23.3.18
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -e
+              echo "Waiting for Redpanda cluster to be ready..."
+              until rpk cluster info --brokers redpanda-0.redpanda.data.svc.cluster.local:9092,redpanda-1.redpanda.data.svc.cluster.local:9092,redpanda-2.redpanda.data.svc.cluster.local:9092 2>/dev/null; do
+                sleep 5
+              done
+              echo "Cluster ready, creating affiliate topics..."
+
+              BROKERS="redpanda-0.redpanda.data.svc.cluster.local:9092,redpanda-1.redpanda.data.svc.cluster.local:9092,redpanda-2.redpanda.data.svc.cluster.local:9092"
+
+              # NOTE: `|| true` per topic (unlike the base Job) makes this
+              # manifest rerun-safe: re-apply never fails on existing topics.
+              create_topic() {
+                rpk topic create "$1" \
+                  --brokers "$BROKERS" \
+                  --partitions 8 \
+                  --replicas 3 \
+                  -c retention.ms=604800000 \
+                  -c min.insync.replicas=2 \
+                  -c cleanup.policy=delete \
+                  -c compression.type=zstd || true
+              }
+
+              # Enrollment lifecycle
+              create_topic affiliate.enrollment.requested
+              create_topic affiliate.enrollment.approved
+              create_topic affiliate.enrollment.rejected
+
+              # Tracking + attribution
+              create_topic affiliate.click.tracked
+              create_topic affiliate.attribution.created
+              create_topic affiliate.player.activity
+
+              # Commission engine (accrue -> release | reverse)
+              create_topic affiliate.commission.accrued
+              create_topic affiliate.commission.released
+              create_topic affiliate.commission.reversed
+
+              # Payout orchestration (dedicated flow, NOT player withdrawals)
+              create_topic affiliate.payout.requested
+              create_topic affiliate.payout.updated
+              create_topic affiliate.payout.paid
+              create_topic affiliate.payout.rejected
+
+              # Risk + manual corrections
+              create_topic affiliate.fraud.flagged
+              create_topic affiliate.adjustment.created
+
+              echo "Affiliate topics reconciled."
+              rpk topic list --brokers "$BROKERS" | grep "^affiliate\." || true

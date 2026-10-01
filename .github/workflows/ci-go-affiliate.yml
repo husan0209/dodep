@@ -1,0 +1,225 @@
+name: CI - Go Affiliate Service
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'services/go/affiliate/**'
+      - 'infra/helm/charts/affiliate/**'
+      - 'libs/proto/affiliate/**'
+      - '.github/workflows/ci-go-affiliate.yml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'services/go/affiliate/**'
+      - 'infra/helm/charts/affiliate/**'
+      - 'libs/proto/affiliate/**'
+      - '.github/workflows/ci-go-affiliate.yml'
+
+env:
+  GO_VERSION: '1.22'
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: opus-casino
+
+jobs:
+  lint:
+    name: Lint Affiliate Service
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: services/go/affiliate/go.sum
+
+      - name: Install golangci-lint
+        uses: golangci/golangci-lint-action@v4
+        with:
+          version: latest
+          working-directory: services/go/affiliate
+
+      - name: Lint Affiliate Service
+        run: |
+          cd services/go/affiliate
+          golangci-lint run ./...
+
+      - name: Check gofmt
+        run: |
+          cd services/go/affiliate
+          test -z "$(gofmt -l .)"
+
+      - name: Check go vet
+        run: |
+          cd services/go/affiliate
+          go vet ./...
+
+  test:
+    name: Test Affiliate Service
+    runs-on: ubuntu-latest
+    needs: lint
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: opus_casino_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: services/go/affiliate/go.sum
+
+      - name: Test Affiliate Service
+        run: |
+          cd services/go/affiliate
+          go test -v -race -coverprofile=coverage.out ./...
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/opus_casino_test?sslmode=disable
+          REDIS_ADDR: localhost:6379
+          JWT_SECRET_KEY: test-secret-key-for-ci-only
+          APP_ENV: test
+
+      - name: Upload Coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files: services/go/affiliate/coverage.out
+          flags: affiliate
+          name: affiliate-coverage
+
+  security:
+    name: Security Scan Affiliate
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Run govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          cd services/go/affiliate
+          govulncheck ./...
+
+  build:
+    name: Build and Push Affiliate Image
+    runs-on: ubuntu-latest
+    needs: [test, security]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Affiliate Service
+        uses: docker/build-push-action@v5
+        with:
+          context: services/go/affiliate
+          file: infra/docker/Dockerfile.go
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/affiliate:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/affiliate:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
+          build-args: |
+            VERSION=${{ github.sha }}
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/affiliate:${{ github.sha }}
+          format: 'sarif'
+          output: 'trivy-results-affiliate.sarif'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '1'
+
+      - name: Upload Trivy scan results
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results-affiliate.sarif'
+
+  deploy-dev:
+    name: Deploy Affiliate to Dev
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: dev
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: v3.13.0
+
+      - name: Configure kubectl
+        uses: azure/k8s-set-context@v3
+        with:
+          method: kubeconfig
+          kubeconfig: ${{ secrets.KUBE_CONFIG_DEV }}
+
+      - name: Deploy Affiliate Service
+        run: |
+          helm upgrade --install affiliate infra/helm/charts/affiliate \
+            --namespace platform-dev \
+            --set image.tag=${{ github.sha }} \
+            --wait --timeout 5m
+
+      - name: Run smoke tests
+        run: |
+          kubectl wait --for=condition=available deployment/affiliate -n platform-dev --timeout=120s
+
+          # Health checks (ports 8090 per CONVENTIONS.md)
+          kubectl port-forward svc/affiliate 18090:8090 -n platform-dev &
+          PF_PID=$!
+          sleep 5
+          curl -f http://localhost:18090/health
+          curl -f http://localhost:18090/ready
+          kill $PF_PID
