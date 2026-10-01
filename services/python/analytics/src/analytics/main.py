@@ -2,13 +2,8 @@
 Analytics Service - Data analytics and reporting
 """
 
-import csv
-import io
 import logging
-from collections.abc import Iterator
 from contextlib import asynccontextmanager
-from decimal import Decimal, InvalidOperation
-from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse, StreamingResponse
@@ -16,52 +11,10 @@ from pydantic_settings import BaseSettings
 
 from analytics import affiliate_reports as rep
 from analytics.clickhouse import ClickHouseUnavailableError, get_client
+from analytics.csv_export import csv_chunks
 from analytics.metrics import Timer, normalize_route, registry
 
 logger = logging.getLogger(__name__)
-
-# Characters that make a spreadsheet treat a cell as a formula rather than
-# text. Affiliate names and campaign labels are attacker-influenced, so an
-# unescaped "=cmd|..." would execute when an analyst opens the export.
-_FORMULA_TRIGGERS = frozenset("=+-@")
-
-
-def _csv_cell(value: Any) -> str:
-    """Render one CSV field, neutralising spreadsheet formula injection.
-
-    ClickHouse returns Decimal columns as strings, so a negative amount
-    arrives as ``"-3.00"``. Escaping that would turn a real figure into
-    text and break SUM/AVERAGE in the analyst's spreadsheet, so a value
-    that is entirely numeric is left alone even though it starts with
-    ``-``. Only non-numeric text gets the ``'`` prefix that forces Excel
-    and LibreOffice to treat it as a literal.
-
-    The check looks past leading whitespace and control characters: both
-    spreadsheets trim those before evaluating a cell.
-    """
-    if value is None:
-        return ""
-    if isinstance(value, str):
-        stripped = value.lstrip(" \t\r\n")
-        if stripped[:1] in _FORMULA_TRIGGERS:
-            try:
-                Decimal(stripped)
-            except InvalidOperation:
-                return f"'{value}"
-    return str(value)
-
-
-def _csv_chunks(rows: list[dict[str, Any]]) -> Iterator[str]:
-    """Yield RFC 4180 CSV text for a list of ClickHouse rows."""
-    if not rows:
-        return
-    header = list(rows[0].keys())
-    buffer = io.StringIO()
-    writer = csv.writer(buffer, lineterminator="\n")
-    writer.writerow(header)
-    for row in rows:
-        writer.writerow([_csv_cell(row.get(column)) for column in header])
-    yield buffer.getvalue()
 
 
 class Settings(BaseSettings):
@@ -375,7 +328,7 @@ async def export_table(
 
     filename = f"{table}_{start}_{end}.csv"
     return StreamingResponse(
-        _csv_chunks(rows),
+        csv_chunks(rows),
         media_type="text/csv",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
