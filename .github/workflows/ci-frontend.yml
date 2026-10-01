@@ -57,8 +57,12 @@ jobs:
       - name: Run ESLint
         run: npm run lint
 
+      # `npm run format -- --check` expands to `prettier --write . --check`,
+      # which contradicts itself (mutually exclusive flags). Call the binary
+      # directly with the check-only intent.
       - name: Run Prettier
-        run: npm run format -- --check
+        working-directory: apps/web
+        run: npx --no-install prettier --check .
 
   # ==========================================================================
   # Type Check
@@ -81,8 +85,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Must run inside apps/web: there is no tsconfig.json at the repo root, and
+      # `tsc` with neither a project nor input files prints its own help text
+      # and exits 1. --no-install additionally prevents npx from reaching for a
+      # registry package when the local binary is missing.
       - name: Run TypeScript check
-        run: npx tsc --noEmit
+        working-directory: apps/web
+        run: npx --no-install tsc --noEmit
 
   # ==========================================================================
   # Test

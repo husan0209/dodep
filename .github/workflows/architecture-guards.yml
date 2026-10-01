@@ -66,14 +66,28 @@ jobs:
       # ──────────────────────────────────────────────────────────────
       # G3: Запрет захардкоженных секретов
       # ──────────────────────────────────────────────────────────────
+      # Файлы исключаются осознанно:
+      #   .github/workflows/architecture-guards.yml — сам guard содержит
+      #     искомые строки как литералы в команде grep и матчит себя;
+      #   каталоги с документацией (.agents, .claude, .continue, .factory) —
+      #     примеры ключей в справочных материалах, а не рабочие секреты.
       - name: "G3: No hardcoded secrets or private keys"
         run: |
           echo "Проверка G3: отсутствие захардкоженных приватных ключей..."
-          if grep -rn "BEGIN RSA PRIVATE KEY" . 2>/dev/null | grep -v ".git"; then
+          EXCLUDES=(
+            --exclude-dir=.git
+            --exclude-dir=node_modules
+            --exclude-dir=.agents
+            --exclude-dir=.claude
+            --exclude-dir=.continue
+            --exclude-dir=.factory
+            --exclude=architecture-guards.yml
+          )
+          if grep -rn "${EXCLUDES[@]}" -e "BEGIN RSA PRIVATE KEY" . ; then
             echo "❌ Обнаружен приватный ключ в репозитории!"
             exit 1
           fi
-          if grep -rn "BEGIN OPENSSH PRIVATE KEY" . 2>/dev/null | grep -v ".git"; then
+          if grep -rn "${EXCLUDES[@]}" -e "BEGIN OPENSSH PRIVATE KEY" . ; then
             echo "❌ Обнаружен SSH приватный ключ в репозитории!"
             exit 1
           fi
