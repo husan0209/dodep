@@ -72,24 +72,58 @@ PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" \
       applied_at TIMESTAMPTZ DEFAULT NOW()
     );"
 
-# Apply each migration file in sorted order
-for f in $(ls "$MIGRATIONS_PG"/*.sql 2>/dev/null | sort); do
+# Apply each migration file in version order.
+#
+# Two defects are fixed here:
+#
+# 1. `ls *.sql | sort` also picked up rollback scripts (*.down.sql). Because
+#    "014_payments_core.down.sql" sorts BEFORE "014_payments_core.sql", the
+#    runner executed DROP TABLE payments/withdrawals immediately before the
+#    CREATE that defines them. Rollback scripts are never applied here.
+#
+# 2. psql without ON_ERROR_STOP exits 0 even when a statement fails, so broken
+#    migrations were recorded in schema_migrations and silently skipped on
+#    every later run. Failures now abort the run and are NOT recorded.
+#
+# Ordering is by filename, which keeps duplicate version prefixes (010, 011,
+# 022 …) in a deterministic, name-based order. Duplicate prefixes are a
+# pre-existing repo condition — verify the resulting order by hand when adding
+# a migration that depends on an earlier one.
+pg_files() {
+  ls "$1"/*.sql 2>/dev/null \
+    | grep -v '\.down\.sql$' \
+    | awk -F/ '{print $NF"\t"$0}' \
+    | sort -t"$(printf '\t')" -k1,1 \
+    | cut -f2-
+}
+
+for f in $(pg_files "$MIGRATIONS_PG"); do
   filename=$(basename "$f")
+
   already=$(PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" \
     -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc \
     "SELECT COUNT(*) FROM schema_migrations WHERE filename='$filename'")
 
   if [ "$already" = "1" ]; then
     echo "  [skip]    $filename"
-  else
-    echo "  [apply]   $filename"
-    PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" \
-      -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f "$f"
-    PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" \
-      -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c \
-      "INSERT INTO schema_migrations (filename) VALUES ('$filename') ON CONFLICT DO NOTHING;"
-    echo "  [done]    $filename"
+    continue
   fi
+
+  echo "  [apply]   $filename"
+  if ! PGPASSWORD="$POSTGRES_PASSWORD" psql -v ON_ERROR_STOP=1 \
+       -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" \
+       -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f "$f"; then
+    echo ""
+    echo "  ✗ FAILED: $filename"
+    echo "    Not recorded in schema_migrations — fix and re-run to retry."
+    exit 1
+  fi
+
+  PGPASSWORD="$POSTGRES_PASSWORD" psql -v ON_ERROR_STOP=1 \
+    -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" \
+    -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c \
+    "INSERT INTO schema_migrations (filename) VALUES ('$filename') ON CONFLICT DO NOTHING;"
+  echo "  [done]    $filename"
 done
 
 # ── Wait for ClickHouse ────────────────────────────────────────────────
@@ -109,13 +143,18 @@ if [ -n "$CLICKHOUSE_PASSWORD" ]; then
   CH_AUTH="--user $CLICKHOUSE_USER --password $CLICKHOUSE_PASSWORD"
 fi
 
-for f in $(ls "$MIGRATIONS_CH"/*.sql 2>/dev/null | sort); do
+# ClickHouse DDL is idempotent (CREATE ... IF NOT EXISTS / ON CLUSTER), so it is
+# re-applied on every run rather than tracked in schema_migrations.
+for f in $(pg_files "$MIGRATIONS_CH"); do
   filename=$(basename "$f")
   echo "  [apply]   $filename (ClickHouse — idempotent DDL)"
-  curl -sf \
+  if ! curl -sf \
     "http://$CLICKHOUSE_HOST:$CLICKHOUSE_PORT/" \
     --user "$CLICKHOUSE_USER:$CLICKHOUSE_PASSWORD" \
-    --data-binary @"$f" > /dev/null
+    --data-binary @"$f" > /dev/null; then
+    echo "  ✗ FAILED: $filename"
+    exit 1
+  fi
   echo "  [done]    $filename"
 done
 

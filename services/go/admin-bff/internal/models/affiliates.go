@@ -4,6 +4,11 @@ import (
 	"time"
 )
 
+// Admin-side affiliate record (013_admin_bff.sql). Renamed to admin_affiliates
+// by libs/migrations/postgresql/020_affiliate_admin_bff_split.sql so that the
+// affiliate_profiles namespace stays owned by affiliate-service alone.
+// This table carries admin-only deal terms (deal_type, cpa_amount,
+// postback_configs) that are not part of the RevShare-from-NGR model.
 type Affiliate struct {
 	ID                  string            `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
 	UserID              string            `gorm:"type:varchar(36);not null;index" json:"user_id"`
@@ -21,6 +26,8 @@ type Affiliate struct {
 	UpdatedAt           time.Time         `gorm:"not null;default:now()" json:"updated_at"`
 }
 
+func (Affiliate) TableName() string { return "admin_affiliates" }
+
 type PostbackConfig struct {
 	Event         string            `json:"event"`
 	URL           string            `json:"url"`
@@ -30,6 +37,12 @@ type PostbackConfig struct {
 	RetryBackoff  string            `json:"retry_backoff"`
 }
 
+// Admin-side payout record (013_admin_bff.sql), renamed to
+// admin_affiliate_payouts by 020_affiliate_admin_bff_split.sql.
+//
+// NOT the affiliate-service payout: that table (UUID affiliate_id, method_id,
+// idempotency_key, NUMERIC(18,8)) is pinned separately in affiliate_stats.go as
+// AffiliatePayoutAmount. The two namespaces must never be mixed.
 type AffiliatePayout struct {
 	ID               string    `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
 	AffiliateID      string    `gorm:"type:varchar(36);not null;index" json:"affiliate_id"`
@@ -44,6 +57,11 @@ type AffiliatePayout struct {
 	UpdatedAt        time.Time `gorm:"not null;default:now()" json:"updated_at"`
 }
 
+func (AffiliatePayout) TableName() string { return "admin_affiliate_payouts" }
+
+// Admin-side fraud flag (013_admin_bff.sql), renamed to admin_fraud_flags by
+// 020_affiliate_admin_bff_split.sql. Distinct from affiliate-service's
+// affiliate_fraud_flags, which is written by the automatic anti-fraud engine.
 type FraudFlag struct {
 	ID          string    `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
 	AffiliateID string    `gorm:"type:varchar(36);not null;index" json:"affiliate_id"`
@@ -55,6 +73,11 @@ type FraudFlag struct {
 	ResolvedAt  *time.Time `json:"resolved_at,omitempty"`
 	CreatedAt   time.Time `gorm:"not null;default:now()" json:"created_at"`
 }
+
+func (FraudFlag) TableName() string { return "admin_fraud_flags" }
+
+// Admin-side postback log (013_admin_bff.sql), renamed to
+// admin_postback_logs by 020_affiliate_admin_bff_split.sql.
 
 type PostbackLog struct {
 	ID          string    `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
@@ -69,3 +92,5 @@ type PostbackLog struct {
 	SentAt      time.Time `gorm:"not null;default:now()" json:"sent_at"`
 	CreatedAt   time.Time `gorm:"not null;default:now()" json:"created_at"`
 }
+
+func (PostbackLog) TableName() string { return "admin_postback_logs" }
