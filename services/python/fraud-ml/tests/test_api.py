@@ -256,7 +256,7 @@ class TestServiceProbes:
         assert resp.status_code == 503
         assert resp.json()["status"] == "not_ready"
 
-    def test_app_starts_without_clickhouse_and_kafka(self, monkeypatch):
+    def test_app_starts_without_clickhouse_and_kafka(self, monkeypatch, tmp_path):
         """
         Full lifespan runs with both backing services unavailable.
 
@@ -273,6 +273,8 @@ class TestServiceProbes:
 
         monkeypatch.setattr(ch_module.ClickHouseClient, "__init__", boom)
         monkeypatch.setattr(consumer_module, "Consumer", boom)
+        # The default model path (/app/models) is not writable on CI runners.
+        monkeypatch.setattr(main.settings, "model_path", str(tmp_path / "models"))
 
         with TestClient(main.app) as client:
             # Readiness depends only on the detector, not on the bus/store.
