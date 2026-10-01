@@ -37,18 +37,6 @@ spec:
             - name: http
               containerPort: {{ .Values.service.targetPort }}
               protocol: TCP
-            {{- if .Values.service.grpcPort }}
-            - name: grpc
-              containerPort: {{ .Values.service.grpcTargetPort | default .Values.service.grpcPort }}
-              protocol: TCP
-            {{- end }}
-            {{- if .Values.service.extraPorts }}
-            {{- range .Values.service.extraPorts }}
-            - name: {{ .name }}
-              containerPort: {{ .containerPort }}
-              protocol: TCP
-            {{- end }}
-            {{- end }}
           {{- if .Values.healthCheck }}
           livenessProbe:
             httpGet:

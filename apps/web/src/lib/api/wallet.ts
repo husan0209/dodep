@@ -1,4 +1,5 @@
 import { api } from "./client";
+import { assertPositiveMoney } from "./money";
 
 export interface WalletBalance {
   user_id: number;
@@ -23,14 +24,18 @@ export interface Transaction {
   metadata?: Record<string, unknown>;
 }
 
+/**
+ * Amounts are decimal strings (NUMERIC(18,8)), never JS numbers —
+ * see CONVENTIONS NEVER-6.
+ */
 export interface DepositRequest {
-  amount: number;
+  amount: string;
   method: string;
   currency?: string;
 }
 
 export interface WithdrawRequest {
-  amount: number;
+  amount: string;
   method: string;
   currency?: string;
 }
@@ -54,9 +59,17 @@ export const walletApi = {
   getTransactions: (filters?: TransactionFilters) =>
     api.get<Transaction[]>("/api/v1/wallet/transactions", filters as Record<string, string>),
 
-  deposit: (data: DepositRequest) =>
-    api.post<{ deposit_id: string; url?: string }>("/api/v1/wallet/deposit", data),
+  // async so validation errors surface as rejections, not sync throws.
+  deposit: async (data: DepositRequest) =>
+    api.post<{ deposit_id: string; url?: string }>("/api/v1/wallet/deposit", {
+      ...data,
+      // Guard: a float must never reach the wire.
+      amount: assertPositiveMoney(data.amount, "deposit.amount"),
+    }),
 
-  withdraw: (data: WithdrawRequest) =>
-    api.post<{ withdrawal_id: string }>("/api/v1/wallet/withdraw", data),
+  withdraw: async (data: WithdrawRequest) =>
+    api.post<{ withdrawal_id: string }>("/api/v1/wallet/withdraw", {
+      ...data,
+      amount: assertPositiveMoney(data.amount, "withdraw.amount"),
+    }),
 };

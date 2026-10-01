@@ -15,17 +15,5 @@ spec:
       targetPort: {{ .Values.service.targetPort }}
       protocol: TCP
       name: http
-    {{- if .Values.service.grpcPort }}
-    - port: {{ .Values.service.grpcPort }}
-      targetPort: {{ .Values.service.grpcTargetPort | default .Values.service.grpcPort }}
-      protocol: TCP
-      name: grpc
-    {{- end }}
-    {{- range .Values.service.extraPorts }}
-    - port: {{ .port }}
-      targetPort: {{ .targetPort }}
-      protocol: TCP
-      name: {{ .name }}
-    {{- end }}
   selector:
     {{- include "service-chart.selectorLabels" . | nindent 4 }}

@@ -1,17 +1,20 @@
 import { api } from "./client";
+import { assertMoney, assertPositiveMoney } from "./money";
 
 export interface Selection {
   event_id: number;
   market_id: number;
   outcome_id: number;
-  odds: number;
+  /** Decimal string (e.g. "1.85"), never a float. */
+  odds: string;
   outcome_name: string;
 }
 
 export interface PlaceBetRequest {
   bet_type: "single" | "accumulator" | "system";
   selections: Selection[];
-  stake: number;
+  /** Stake as decimal string (NUMERIC(18,8)) — CONVENTIONS NEVER-6. */
+  stake: string;
   currency: string;
   accept_odds_changes: "none" | "higher" | "any";
   idempotency_key: string;
@@ -41,8 +44,17 @@ export interface BetFilters {
 }
 
 export const betsApi = {
-  placeBet: (data: PlaceBetRequest) =>
-    api.post<Bet>("/api/v1/bets", data),
+  placeBet: async (data: PlaceBetRequest) =>
+    api.post<Bet>("/api/v1/bets", {
+      ...data,
+      // Guards: stake must be a positive decimal string and every odds
+      // value must be a decimal string — floats never reach the wire.
+      stake: assertPositiveMoney(data.stake, "bet.stake"),
+      selections: data.selections.map((selection, index) => ({
+        ...selection,
+        odds: assertMoney(selection.odds, `bet.selections[${index}].odds`),
+      })),
+    }),
 
   getActive: () =>
     api.get<Bet[]>("/api/v1/bets/active"),
