@@ -35,85 +35,90 @@ type CasinoGame struct {
 }
 
 type CasinoProvider struct {
-	ID                     string            `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
-	ExternalID             string            `gorm:"type:varchar(100);not null;uniqueIndex" json:"external_id"`
-	Name                   string            `gorm:"type:varchar(255);not null" json:"name"`
-	LogoURL                string            `gorm:"type:varchar(512)" json:"logo_url"`
-	Description            string            `gorm:"type:text" json:"description"`
-	IntegrationType        string            `gorm:"type:varchar(50);not null;default:'direct'" json:"integration_type"`
-	IsActive               bool              `gorm:"not null;default:true" json:"is_active"`
-	GamesCount             int32             `gorm:"not null;default:0" json:"games_count"`
-	SupportedCurrencies    []string          `gorm:"type:text[]" json:"supported_currencies"`
-	RestrictedCountries    []string          `gorm:"type:text[]" json:"restricted_countries"`
-	RevenueSharePct        float64           `gorm:"not null;default:0" json:"revenue_share_pct"`
-	SettlementCurrency     string            `gorm:"type:varchar(3);not null;default:'USD'" json:"settlement_currency"`
-	APICredentialsEncrypted *string          `gorm:"type:text" json:"api_credentials_encrypted,omitempty"`
-	Metadata               map[string]string `gorm:"type:jsonb;not null;default:'{}'" json:"metadata"`
-	CreatedAt              time.Time         `gorm:"not null;default:now()" json:"created_at"`
-	UpdatedAt              time.Time         `gorm:"not null;default:now()" json:"updated_at"`
+	ID                  string   `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
+	ExternalID          string   `gorm:"type:varchar(100);not null;uniqueIndex" json:"external_id"`
+	Name                string   `gorm:"type:varchar(255);not null" json:"name"`
+	LogoURL             string   `gorm:"type:varchar(512)" json:"logo_url"`
+	Description         string   `gorm:"type:text" json:"description"`
+	IntegrationType     string   `gorm:"type:varchar(50);not null;default:'direct'" json:"integration_type"`
+	IsActive            bool     `gorm:"not null;default:true" json:"is_active"`
+	GamesCount          int32    `gorm:"not null;default:0" json:"games_count"`
+	SupportedCurrencies []string `gorm:"type:text[]" json:"supported_currencies"`
+	RestrictedCountries []string `gorm:"type:text[]" json:"restricted_countries"`
+	// Provider revenue share as a percent (95.00 = 95%). Stored as NUMERIC(5,2)
+	// per libs/migrations/postgresql/013_admin_bff.sql, never float (CONVENTIONS
+	// NEVER-6). Range 0..100, enforced by parsePercent in handlers.
+	RevenueSharePct         string            `gorm:"type:numeric(5,2);not null;default:0" json:"revenue_share_pct"`
+	SettlementCurrency      string            `gorm:"type:varchar(3);not null;default:'USD'" json:"settlement_currency"`
+	APICredentialsEncrypted *string           `gorm:"type:text" json:"api_credentials_encrypted,omitempty"`
+	Metadata                map[string]string `gorm:"type:jsonb;not null;default:'{}'" json:"metadata"`
+	CreatedAt               time.Time         `gorm:"not null;default:now()" json:"created_at"`
+	UpdatedAt               time.Time         `gorm:"not null;default:now()" json:"updated_at"`
 }
 
 type RtpConfig struct {
+	ID             string     `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
+	GameID         *string    `gorm:"type:varchar(100);index" json:"game_id,omitempty"`
+	ProviderID     *string    `gorm:"type:varchar(100);index" json:"provider_id,omitempty"`
+	PlayerGroup    string     `gorm:"type:varchar(50);not null;default:'default'" json:"player_group"`
+	TargetRtp      float64    `gorm:"not null;default:96.0" json:"target_rtp"`
+	ImpactEstimate *float64   `gorm:"type:numeric(5,2)" json:"impact_estimate,omitempty"`
+	OverrideBy     *string    `gorm:"type:varchar(36)" json:"override_by,omitempty"`
+	OverrideAt     *time.Time `json:"override_at,omitempty"`
+	ConfirmedBy    *string    `gorm:"type:varchar(36)" json:"confirmed_by,omitempty"`
+	ConfirmedAt    *time.Time `json:"confirmed_at,omitempty"`
+	CreatedAt      time.Time  `gorm:"not null;default:now()" json:"created_at"`
+	UpdatedAt      time.Time  `gorm:"not null;default:now()" json:"updated_at"`
+}
+
+type JackpotPool struct {
+	ID            string   `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
+	Name          string   `gorm:"type:varchar(255);not null" json:"name"`
+	Type          string   `gorm:"type:varchar(50);not null" json:"type"`
+	GameIDs       []string `gorm:"type:text[]" json:"game_ids"`
+	EligibleGames []string `gorm:"type:text[]" json:"eligible_games"`
+	SeedAmount    string   `gorm:"type:numeric(18,2);not null" json:"seed_amount"`
+	CurrentAmount string   `gorm:"type:numeric(18,2);not null" json:"current_amount"`
+	Currency      string   `gorm:"type:varchar(3);not null" json:"currency"`
+	// Jackpot contribution as a percent (1.50 = 1.5%). NUMERIC(5,2) per
+	// 013_admin_bff.sql addendum; never float (CONVENTIONS NEVER-6).
+	ContributionPct  string         `gorm:"type:numeric(5,2);not null;default:0" json:"contribution_pct"`
+	SeedValue        string         `gorm:"type:numeric(18,2);not null" json:"seed_value"`
+	DailyDropsConfig map[string]any `gorm:"type:jsonb;not null;default:'{}'" json:"daily_drops_config"`
+	IsActive         bool           `gorm:"not null;default:true" json:"is_active"`
+	CreatedAt        time.Time      `gorm:"not null;default:now()" json:"created_at"`
+	UpdatedAt        time.Time      `gorm:"not null;default:now()" json:"updated_at"`
+}
+
+type ProviderSettlement struct {
 	ID            string     `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
-	GameID        *string    `gorm:"type:varchar(100);index" json:"game_id,omitempty"`
-	ProviderID    *string    `gorm:"type:varchar(100);index" json:"provider_id,omitempty"`
-	PlayerGroup   string     `gorm:"type:varchar(50);not null;default:'default'" json:"player_group"`
-	TargetRtp     float64    `gorm:"not null;default:96.0" json:"target_rtp"`
-	ImpactEstimate *float64  `gorm:"type:numeric(5,2)" json:"impact_estimate,omitempty"`
-	OverrideBy    *string    `gorm:"type:varchar(36)" json:"override_by,omitempty"`
-	OverrideAt    *time.Time `json:"override_at,omitempty"`
-	ConfirmedBy   *string    `gorm:"type:varchar(36)" json:"confirmed_by,omitempty"`
-	ConfirmedAt   *time.Time `json:"confirmed_at,omitempty"`
+	ProviderID    string     `gorm:"type:varchar(100);not null;index" json:"provider_id"`
+	PeriodStart   time.Time  `gorm:"not null" json:"period_start"`
+	PeriodEnd     time.Time  `gorm:"not null" json:"period_end"`
+	Currency      string     `gorm:"type:varchar(3);not null" json:"currency"`
+	GGR           string     `gorm:"type:numeric(18,2);not null" json:"ggr"`
+	RevenueShare  string     `gorm:"type:numeric(18,2);not null" json:"revenue_share"`
+	Status        string     `gorm:"type:varchar(20);not null;default:'pending'" json:"status"`
+	InvoiceNumber *string    `gorm:"type:varchar(100)" json:"invoice_number,omitempty"`
+	PaidAt        *time.Time `json:"paid_at,omitempty"`
 	CreatedAt     time.Time  `gorm:"not null;default:now()" json:"created_at"`
 	UpdatedAt     time.Time  `gorm:"not null;default:now()" json:"updated_at"`
 }
 
-type JackpotPool struct {
-	ID                string         `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
-	Name              string         `gorm:"type:varchar(255);not null" json:"name"`
-	Type              string         `gorm:"type:varchar(50);not null" json:"type"`
-	GameIDs           []string       `gorm:"type:text[]" json:"game_ids"`
-	EligibleGames     []string       `gorm:"type:text[]" json:"eligible_games"`
-	SeedAmount        string         `gorm:"type:numeric(18,2);not null" json:"seed_amount"`
-	CurrentAmount     string         `gorm:"type:numeric(18,2);not null" json:"current_amount"`
-	Currency          string         `gorm:"type:varchar(3);not null" json:"currency"`
-	ContributionPct   float64        `gorm:"not null;default:0" json:"contribution_pct"`
-	SeedValue         string         `gorm:"type:numeric(18,2);not null" json:"seed_value"`
-	DailyDropsConfig  map[string]any `gorm:"type:jsonb;not null;default:'{}'" json:"daily_drops_config"`
-	IsActive          bool           `gorm:"not null;default:true" json:"is_active"`
-	CreatedAt         time.Time      `gorm:"not null;default:now()" json:"created_at"`
-	UpdatedAt         time.Time      `gorm:"not null;default:now()" json:"updated_at"`
-}
-
-type ProviderSettlement struct {
-	ID              string    `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
-	ProviderID      string    `gorm:"type:varchar(100);not null;index" json:"provider_id"`
-	PeriodStart     time.Time `gorm:"not null" json:"period_start"`
-	PeriodEnd       time.Time `gorm:"not null" json:"period_end"`
-	Currency        string    `gorm:"type:varchar(3);not null" json:"currency"`
-	GGR             string    `gorm:"type:numeric(18,2);not null" json:"ggr"`
-	RevenueShare    string    `gorm:"type:numeric(18,2);not null" json:"revenue_share"`
-	Status          string    `gorm:"type:varchar(20);not null;default:'pending'" json:"status"`
-	InvoiceNumber   *string   `gorm:"type:varchar(100)" json:"invoice_number,omitempty"`
-	PaidAt          *time.Time `json:"paid_at,omitempty"`
-	CreatedAt       time.Time `gorm:"not null;default:now()" json:"created_at"`
-	UpdatedAt       time.Time `gorm:"not null;default:now()" json:"updated_at"`
-}
-
 // RtpAuditLog tracks every RTP change with before/after snapshot for compliance.
 type RtpAuditLog struct {
-	ID           string     `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
-	GameID       *string    `gorm:"type:varchar(100);index" json:"game_id,omitempty"`
-	ProviderID   *string    `gorm:"type:varchar(100);index" json:"provider_id,omitempty"`
-	PlayerGroup  string     `gorm:"type:varchar(50);not null" json:"player_group"`
-	BeforeRtp    float64    `gorm:"not null" json:"before_rtp"`
-	AfterRtp     float64    `gorm:"not null" json:"after_rtp"`
-	ImpactEstimate *float64 `gorm:"type:numeric(5,2)" json:"impact_estimate,omitempty"`
-	ChangedBy    string     `gorm:"type:varchar(36);not null" json:"changed_by"`
-	ConfirmedBy  *string    `gorm:"type:varchar(36)" json:"confirmed_by,omitempty"`
-	ConfirmedAt  *time.Time `json:"confirmed_at,omitempty"`
-	Reason       string     `gorm:"type:text" json:"reason"`
-	CreatedAt    time.Time  `gorm:"not null;default:now()" json:"created_at"`
+	ID             string     `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
+	GameID         *string    `gorm:"type:varchar(100);index" json:"game_id,omitempty"`
+	ProviderID     *string    `gorm:"type:varchar(100);index" json:"provider_id,omitempty"`
+	PlayerGroup    string     `gorm:"type:varchar(50);not null" json:"player_group"`
+	BeforeRtp      float64    `gorm:"not null" json:"before_rtp"`
+	AfterRtp       float64    `gorm:"not null" json:"after_rtp"`
+	ImpactEstimate *float64   `gorm:"type:numeric(5,2)" json:"impact_estimate,omitempty"`
+	ChangedBy      string     `gorm:"type:varchar(36);not null" json:"changed_by"`
+	ConfirmedBy    *string    `gorm:"type:varchar(36)" json:"confirmed_by,omitempty"`
+	ConfirmedAt    *time.Time `json:"confirmed_at,omitempty"`
+	Reason         string     `gorm:"type:text" json:"reason"`
+	CreatedAt      time.Time  `gorm:"not null;default:now()" json:"created_at"`
 }
 
 // CasinoGameSession tracks a player session in a casino game.

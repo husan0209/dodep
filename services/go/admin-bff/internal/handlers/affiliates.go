@@ -1,12 +1,15 @@
 package handlers
 
 import (
+	"fmt"
 	"math"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/opus-casino/admin-bff/internal/models"
 	"github.com/opus-casino/admin-bff/internal/service"
+	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -84,7 +87,18 @@ func createAffiliate(db *gorm.DB, log *zap.Logger, auditSvc *service.AuditServic
 		if err := c.BodyParser(&aff); err != nil {
 			return c.Status(400).JSON(fiber.Map{"error": "invalid body"})
 		}
+		// Server-controlled fields: never trust client-supplied identity,
+		// status, or timestamps. Unknown JSON keys (e.g. legacy
+		// sub_affiliate_* — out of MVP scope) are ignored by the parser.
+		aff.ID = ""
 		aff.Status = "pending"
+		if strings.TrimSpace(aff.RevenueSharePct) != "" {
+			rate, err := parseCommissionRate(aff.RevenueSharePct)
+			if err != nil {
+				return c.Status(400).JSON(fiber.Map{"error": err.Error()})
+			}
+			aff.RevenueSharePct = rate
+		}
 		aff.CreatedAt = time.Now()
 		aff.UpdatedAt = time.Now()
 		if err := db.Create(&aff).Error; err != nil {
@@ -96,6 +110,131 @@ func createAffiliate(db *gorm.DB, log *zap.Logger, auditSvc *service.AuditServic
 	}
 }
 
+// parseCommissionRate validates a commission rate fraction given as a decimal
+// string ("0.20" = 20%) and returns its canonical form. Accepted range is
+// 0..1 inclusive, mirroring chk_affiliate_commission_rate in the
+// affiliate-service migrations. NEVER parse money-adjacent rates as float64
+// (CONVENTIONS NEVER-6).
+func parseCommissionRate(raw string) (string, error) {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		return "", fmt.Errorf("commission rate is required")
+	}
+	d, err := decimal.NewFromString(s)
+	if err != nil {
+		return "", fmt.Errorf("invalid commission rate: must be a decimal string like \"0.20\"")
+	}
+	if d.IsNegative() || d.GreaterThan(decimal.NewFromInt(1)) {
+		return "", fmt.Errorf("commission rate must be between 0 and 1")
+	}
+	return d.String(), nil
+}
+
+// parseMoneyAmount validates a non-negative decimal money string.
+func parseMoneyAmount(raw string) (string, error) {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		return "", fmt.Errorf("amount is required")
+	}
+	d, err := decimal.NewFromString(s)
+	if err != nil {
+		return "", fmt.Errorf("invalid amount: must be a decimal string")
+	}
+	if d.IsNegative() {
+		return "", fmt.Errorf("amount must not be negative")
+	}
+	return d.String(), nil
+}
+
+// affiliateUpdatableFields is the allowlist for PUT /affiliates/:id.
+// Mass-assignment of any other column (id, status, created_at, …) is rejected
+// by dropping the key — status transitions go through dedicated endpoints.
+var affiliateUpdatableFields = map[string]bool{
+	"deal_type":         true,
+	"revenue_share_pct": true,
+	"hold_period_days":  true,
+	"min_payout_amount": true,
+	"currency":          true,
+}
+
+func sanitizeAffiliateUpdates(body map[string]interface{}) (map[string]interface{}, error) {
+	updates := make(map[string]interface{}, len(body))
+	for k, v := range body {
+		if !affiliateUpdatableFields[k] {
+			continue
+		}
+		switch k {
+		case "revenue_share_pct":
+			rate, err := commissionRateFromAny(v)
+			if err != nil {
+				return nil, err
+			}
+			updates[k] = rate
+		case "hold_period_days":
+			days, err := wholeDaysFromAny(v)
+			if err != nil {
+				return nil, err
+			}
+			updates[k] = days
+		case "min_payout_amount":
+			amount, err := moneyFromAny(v)
+			if err != nil {
+				return nil, err
+			}
+			updates[k] = amount
+		case "currency":
+			cur, ok := v.(string)
+			if !ok || len(strings.TrimSpace(cur)) != 3 {
+				return nil, fmt.Errorf("currency must be a 3-letter code")
+			}
+			updates[k] = strings.ToUpper(strings.TrimSpace(cur))
+		default:
+			updates[k] = v
+		}
+	}
+	return updates, nil
+}
+
+// commissionRateFromAny accepts the canonical decimal string and, for
+// backward compatibility with older callers, JSON numbers.
+func commissionRateFromAny(v interface{}) (string, error) {
+	switch t := v.(type) {
+	case string:
+		return parseCommissionRate(t)
+	case float64:
+		return parseCommissionRate(strings.TrimSpace(decimal.NewFromFloat(t).String()))
+	default:
+		return "", fmt.Errorf("commission rate must be a decimal string like \"0.20\"")
+	}
+}
+
+func moneyFromAny(v interface{}) (string, error) {
+	switch t := v.(type) {
+	case string:
+		return parseMoneyAmount(t)
+	case float64:
+		return parseMoneyAmount(strings.TrimSpace(decimal.NewFromFloat(t).String()))
+	default:
+		return "", fmt.Errorf("amount must be a decimal string")
+	}
+}
+
+func wholeDaysFromAny(v interface{}) (int, error) {
+	var f float64
+	switch t := v.(type) {
+	case float64:
+		f = t
+	case int:
+		return t, nil
+	default:
+		return 0, fmt.Errorf("hold_period_days must be a whole number")
+	}
+	if f < 0 || f != math.Trunc(f) {
+		return 0, fmt.Errorf("hold_period_days must be a non-negative whole number")
+	}
+	return int(f), nil
+}
+
 func updateAffiliate(db *gorm.DB, log *zap.Logger, auditSvc *service.AuditService) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		id := c.Params("id")
@@ -103,14 +242,21 @@ func updateAffiliate(db *gorm.DB, log *zap.Logger, auditSvc *service.AuditServic
 		if err := c.BodyParser(&body); err != nil {
 			return c.Status(400).JSON(fiber.Map{"error": "invalid body"})
 		}
+		updates, err := sanitizeAffiliateUpdates(body)
+		if err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": err.Error()})
+		}
+		if len(updates) == 0 {
+			return c.Status(400).JSON(fiber.Map{"error": "no updatable fields provided"})
+		}
 		var before models.Affiliate
 		db.First(&before, "id = ?", id)
-		body["updated_at"] = time.Now()
-		if err := db.Model(&models.Affiliate{}).Where("id = ?", id).Updates(body).Error; err != nil {
+		updates["updated_at"] = time.Now()
+		if err := db.Model(&models.Affiliate{}).Where("id = ?", id).Updates(updates).Error; err != nil {
 			log.Error("update affiliate failed", zap.Error(err))
 			return c.Status(500).JSON(fiber.Map{"error": "database error"})
 		}
-		logAudit(auditSvc, c, "affiliate.update", "affiliate", id, fiber.Map{"before": before, "after": body})
+		logAudit(auditSvc, c, "affiliate.update", "affiliate", id, fiber.Map{"before": before, "after": updates})
 		return c.JSON(fiber.Map{"success": true})
 	}
 }
@@ -119,16 +265,22 @@ func approveAffiliate(db *gorm.DB, log *zap.Logger, auditSvc *service.AuditServi
 	return func(c *fiber.Ctx) error {
 		id := c.Params("id")
 		var body struct {
-			CommissionRate  *float64 `json:"commission_rate,omitempty"`
-			HoldPeriodDays  *int     `json:"hold_period_days,omitempty"`
-			MinPayoutAmount *string  `json:"min_payout_amount,omitempty"`
-			Currency        *string  `json:"currency,omitempty"`
+			CommissionRate  *string `json:"commission_rate,omitempty"`
+			HoldPeriodDays  *int    `json:"hold_period_days,omitempty"`
+			MinPayoutAmount *string `json:"min_payout_amount,omitempty"`
+			Currency        *string `json:"currency,omitempty"`
 		}
 		if err := c.BodyParser(&body); err != nil {
 			return c.Status(400).JSON(fiber.Map{"error": "invalid body"})
 		}
 		updates := map[string]interface{}{"status": "active", "updated_at": time.Now()}
-		if body.CommissionRate != nil { updates["revenue_share_pct"] = *body.CommissionRate }
+		if body.CommissionRate != nil {
+			rate, err := parseCommissionRate(*body.CommissionRate)
+			if err != nil {
+				return c.Status(400).JSON(fiber.Map{"error": err.Error()})
+			}
+			updates["revenue_share_pct"] = rate
+		}
 		if body.HoldPeriodDays != nil { updates["hold_period_days"] = *body.HoldPeriodDays }
 		if body.MinPayoutAmount != nil { updates["min_payout_amount"] = *body.MinPayoutAmount }
 		if body.Currency != nil { updates["currency"] = *body.Currency }
@@ -159,18 +311,22 @@ func updateCommissionRate(db *gorm.DB, log *zap.Logger, auditSvc *service.AuditS
 	return func(c *fiber.Ctx) error {
 		id := c.Params("id")
 		var body struct {
-			Rate float64 `json:"commission_rate"`
+			Rate string `json:"commission_rate"`
 		}
 		if err := c.BodyParser(&body); err != nil {
 			return c.Status(400).JSON(fiber.Map{"error": "invalid body"})
 		}
+		rate, err := parseCommissionRate(body.Rate)
+		if err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": err.Error()})
+		}
 		if err := db.Model(&models.Affiliate{}).Where("id = ?", id).Updates(map[string]interface{}{
-			"revenue_share_pct": body.Rate, "updated_at": time.Now(),
+			"revenue_share_pct": rate, "updated_at": time.Now(),
 		}).Error; err != nil {
 			log.Error("update commission rate failed", zap.Error(err))
 			return c.Status(500).JSON(fiber.Map{"error": "database error"})
 		}
-		logAudit(auditSvc, c, "affiliate.commission_rate.update", "affiliate", id, fiber.Map{"rate": body.Rate})
+		logAudit(auditSvc, c, "affiliate.commission_rate.update", "affiliate", id, fiber.Map{"rate": rate})
 		return c.JSON(fiber.Map{"success": true})
 	}
 }
