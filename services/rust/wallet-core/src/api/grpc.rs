@@ -25,7 +25,7 @@ impl WalletGrpcService {
         let wallet_repo = Arc::new(WalletRepository::new(state.db_pool.clone()));
         let transaction_repo = Arc::new(TransactionRepository::new(state.db_pool.clone()));
         let ledger_repo = Arc::new(LedgerRepository::new(state.db_pool.clone()));
-        let lock_repo = Arc::new(LockRepository::new(state.db_pool.clone()));
+        let lock_repo = Arc::new(LockRepository::new());
         let outbox_repo = Arc::new(OutboxRepository::new(state.db_pool.clone()));
         let idempotency = Arc::new(IdempotencyService::new(
             state.redis_client.clone(),
@@ -69,18 +69,22 @@ impl WalletCoreService for WalletGrpcService {
     ) -> Result<Response<GetBalanceResponse>, Status> {
         let req = request.into_inner();
         
-        let user_id = parse_uuid(&req.user_id)
-            .map_err(|_| Status::invalid_argument("Invalid user_id"))?;
+        let user_id = parse_user_id(&req.user_id)
+            .map_err(|e| Status::invalid_argument(e))?;
         
-        let wallet_type = parse_wallet_type(common_proto::WalletType::from_i32(req.wallet_type).ok_or_else(|| Status::invalid_argument("Invalid wallet_type"))?)?;
+        let wallet_type = parse_wallet_type_from_i32(req.wallet_type)?;
         
         match self.wallet_service.get_balance(user_id, wallet_type).await {
             Ok(balance) => {
                 let response = GetBalanceResponse {
-                    available: Some(money_from_decimal(balance.available, "USD")),
-                    locked: Some(money_from_decimal(balance.locked, "USD")),
-                    bonus: Some(money_from_decimal(balance.bonus, "USD")),
+                    balance: Some(common_proto::Balance {
+                        available: Some(money_from_decimal(balance.available, "USD")),
+                        locked: Some(money_from_decimal(balance.locked, "USD")),
+                        bonus: Some(money_from_decimal(balance.bonus, "USD")),
+                        total: Some(money_from_decimal(balance.available + balance.locked + balance.bonus, "USD")),
+                    }),
                     version: 0,
+                    updated_at: Some(dt_to_timestamp(chrono::Utc::now())),
                 };
                 Ok(Response::new(response))
             }
@@ -95,8 +99,8 @@ impl WalletCoreService for WalletGrpcService {
     ) -> Result<Response<GetWalletsResponse>, Status> {
         let req = request.into_inner();
         
-        let user_id = parse_uuid(&req.user_id)
-            .map_err(|_| Status::invalid_argument("Invalid user_id"))?;
+        let user_id = parse_user_id(&req.user_id)
+            .map_err(|e| Status::invalid_argument(e))?;
         
         // Get all wallets for user
         let wallets = self.wallet_service
@@ -118,16 +122,16 @@ impl WalletCoreService for WalletGrpcService {
     ) -> Result<Response<CreditResponse>, Status> {
         let req = request.into_inner();
         
-        let user_id = parse_uuid(&req.user_id)
-            .map_err(|_| Status::invalid_argument("Invalid user_id"))?;
+        let user_id = parse_user_id(&req.user_id)
+            .map_err(|e| Status::invalid_argument(e))?;
         
-        let wallet_type = parse_wallet_type(common_proto::WalletType::from_i32(req.wallet_type).ok_or_else(|| Status::invalid_argument("Invalid wallet_type"))?)?;
+        let wallet_type = parse_wallet_type_from_i32(req.wallet_type)?;
         
         let amount = parse_money(&req.amount)
             .map_err(|_| Status::invalid_argument("Invalid amount"))?;
         
-        let reference_id = Uuid::parse_str(&req.reference_id)
-            .map_err(|_| Status::invalid_argument("Invalid reference_id"))?;
+        let reference_id = parse_reference_id(&req.reference_id)
+            .map_err(|e| Status::invalid_argument(e))?;
         
         match self.wallet_service.credit(
             user_id,
@@ -136,7 +140,7 @@ impl WalletCoreService for WalletGrpcService {
             "USD",
             reference_id,
             req.reference_type.as_str(),
-            Some(req.idempotency_key),
+            &req.idempotency_key,
         ).await {
             Ok(txn) => {
                 let response = CreditResponse {
@@ -156,16 +160,16 @@ impl WalletCoreService for WalletGrpcService {
     ) -> Result<Response<DebitResponse>, Status> {
         let req = request.into_inner();
         
-        let user_id = parse_uuid(&req.user_id)
-            .map_err(|_| Status::invalid_argument("Invalid user_id"))?;
+        let user_id = parse_user_id(&req.user_id)
+            .map_err(|e| Status::invalid_argument(e))?;
         
-        let wallet_type = parse_wallet_type(common_proto::WalletType::from_i32(req.wallet_type).ok_or_else(|| Status::invalid_argument("Invalid wallet_type"))?)?;
+        let wallet_type = parse_wallet_type_from_i32(req.wallet_type)?;
         
         let amount = parse_money(&req.amount)
             .map_err(|_| Status::invalid_argument("Invalid amount"))?;
         
-        let reference_id = Uuid::parse_str(&req.reference_id)
-            .map_err(|_| Status::invalid_argument("Invalid reference_id"))?;
+        let reference_id = parse_reference_id(&req.reference_id)
+            .map_err(|e| Status::invalid_argument(e))?;
         
         match self.wallet_service.debit(
             user_id,
@@ -174,7 +178,7 @@ impl WalletCoreService for WalletGrpcService {
             "USD",
             reference_id,
             req.reference_type.as_str(),
-            Some(req.idempotency_key),
+            &req.idempotency_key,
         ).await {
             Ok(txn) => {
                 let response = DebitResponse {
@@ -197,23 +201,25 @@ impl WalletCoreService for WalletGrpcService {
     ) -> Result<Response<LockResponse>, Status> {
         let req = request.into_inner();
         
-        let user_id = parse_uuid(&req.user_id)
-            .map_err(|_| Status::invalid_argument("Invalid user_id"))?;
+        let user_id = parse_user_id(&req.user_id)
+            .map_err(|e| Status::invalid_argument(e))?;
         
-        let wallet_type = parse_wallet_type(common_proto::WalletType::from_i32(req.wallet_type).ok_or_else(|| Status::invalid_argument("Invalid wallet_type"))?)?;
+        let wallet_type = parse_wallet_type_from_i32(req.wallet_type)?;
         
         let amount = parse_money(&req.amount)
             .map_err(|_| Status::invalid_argument("Invalid amount"))?;
         
-        let reference_id = Uuid::parse_str(&req.reference_id)
-            .map_err(|_| Status::invalid_argument("Invalid reference_id"))?;
+        let reference_id = parse_reference_id(&req.reference_id)
+            .map_err(|e| Status::invalid_argument(e))?;
+        
+        let reference_type = parse_reference_type(&req.reference_type, "lock");
         
         match self.wallet_service.lock(
             user_id,
             wallet_type,
             amount,
             reference_id,
-            Some(req.idempotency_key),
+            reference_type,
         ).await {
             Ok(lock) => {
                 let response = LockResponse {
@@ -221,11 +227,15 @@ impl WalletCoreService for WalletGrpcService {
                     new_available: None,
                     new_locked: None,
                     error: None,
+                    lock_id: lock.id.to_string(),
                 };
                 Ok(Response::new(response))
             }
             Err(WalletError::InsufficientAvailableBalance { .. }) => {
                 Err(Status::failed_precondition("Insufficient balance"))
+            }
+            Err(WalletError::LockReferenceExists(_)) | Err(WalletError::AlreadyExists { .. }) => {
+                Err(Status::already_exists("Lock reference already exists"))
             }
             Err(e) => Err(Status::internal(e.to_string())),
         }
@@ -237,14 +247,15 @@ impl WalletCoreService for WalletGrpcService {
     ) -> Result<Response<UnlockResponse>, Status> {
         let req = request.into_inner();
         
-        let user_id = parse_uuid(&req.user_id)
-            .map_err(|_| Status::invalid_argument("Invalid user_id"))?;
+        let user_id = parse_user_id(&req.user_id)
+            .map_err(|e| Status::invalid_argument(e))?;
         
-        let reference_id = Uuid::parse_str(&req.reference_id)
-            .map_err(|_| Status::invalid_argument("Invalid reference_id"))?;
+        let reference_id = parse_reference_id(&req.reference_id)
+            .map_err(|e| Status::invalid_argument(e))?;
+        let reference_type = parse_reference_type(&req.reference_type, "lock");
         
-        match self.wallet_service.unlock(user_id, reference_id).await {
-            Ok(_) => {
+        match self.wallet_service.unlock(user_id, reference_type, reference_id).await {
+            Ok(_released) => {
                 let response = UnlockResponse {
                     success: true,
                     new_available: None,
@@ -256,6 +267,67 @@ impl WalletCoreService for WalletGrpcService {
             Err(WalletError::LockReferenceNotFound(_)) => {
                 Err(Status::not_found("Lock not found"))
             }
+            // Compensation replays are expected: the lock is already terminal,
+            // so the money is safe. Report success instead of an error.
+            Err(WalletError::LockAlreadySettled(_)) => {
+                let response = UnlockResponse {
+                    success: true,
+                    new_available: None,
+                    new_locked: None,
+                    error: None,
+                };
+                Ok(Response::new(response))
+            }
+            Err(WalletError::LockOwnershipMismatch { .. }) => {
+                Err(Status::permission_denied("Lock belongs to another user"))
+            }
+            Err(e) => Err(Status::internal(e.to_string())),
+        }
+    }
+    
+    async fn consume_lock(
+        &self,
+        request: Request<ConsumeLockRequest>,
+    ) -> Result<Response<ConsumeLockResponse>, Status> {
+        let req = request.into_inner();
+        
+        let user_id = parse_user_id(&req.user_id)
+            .map_err(|e| Status::invalid_argument(e))?;
+        let reference_id = parse_reference_id(&req.reference_id)
+            .map_err(|e| Status::invalid_argument(e))?;
+        let reference_type = parse_reference_type(&req.reference_type, "lock");
+        if req.idempotency_key.trim().is_empty() {
+            return Err(Status::invalid_argument("idempotency_key is required"));
+        }
+        let description = match req.description.trim() {
+            "" => None,
+            other => Some(other.to_string()),
+        };
+        
+        match self.wallet_service.consume_lock(
+            user_id,
+            reference_type,
+            reference_id,
+            req.idempotency_key.clone(),
+            description,
+        ).await {
+            Ok(txn) => {
+                let response = ConsumeLockResponse {
+                    success: true,
+                    transaction: Some(transaction_to_proto(&txn)),
+                    error: None,
+                };
+                Ok(Response::new(response))
+            }
+            Err(WalletError::LockReferenceNotFound(_)) => {
+                Err(Status::not_found("Lock not found"))
+            }
+            Err(WalletError::LockOwnershipMismatch { .. }) => {
+                Err(Status::permission_denied("Lock belongs to another user"))
+            }
+            Err(WalletError::LockAlreadySettled(_)) => {
+                Err(Status::failed_precondition("Lock already settled"))
+            }
             Err(e) => Err(Status::internal(e.to_string())),
         }
     }
@@ -266,17 +338,17 @@ impl WalletCoreService for WalletGrpcService {
     ) -> Result<Response<TransferResponse>, Status> {
         let req = request.into_inner();
         
-        let user_id = parse_uuid(&req.user_id)
-            .map_err(|_| Status::invalid_argument("Invalid user_id"))?;
+        let user_id = parse_user_id(&req.user_id)
+            .map_err(|e| Status::invalid_argument(e))?;
         
-        let from_wallet_type = parse_wallet_type(common_proto::WalletType::from_i32(req.from_wallet).ok_or_else(|| Status::invalid_argument("Invalid from_wallet"))?)?;
-        let to_wallet_type = parse_wallet_type(common_proto::WalletType::from_i32(req.to_wallet).ok_or_else(|| Status::invalid_argument("Invalid to_wallet"))?)?;
+        let from_wallet_type = parse_wallet_type_from_i32(req.from_wallet)?;
+        let to_wallet_type = parse_wallet_type_from_i32(req.to_wallet)?;
         
         let amount = parse_money(&req.amount)
             .map_err(|_| Status::invalid_argument("Invalid amount"))?;
         
-        let reference_id = Uuid::parse_str(&req.reference_id)
-            .map_err(|_| Status::invalid_argument("Invalid reference_id"))?;
+        let reference_id = parse_reference_id(&req.reference_id)
+            .map_err(|e| Status::invalid_argument(e))?;
         
         match self.wallet_service.transfer(
             user_id,
@@ -305,8 +377,8 @@ impl WalletCoreService for WalletGrpcService {
     ) -> Result<Response<GetTransactionsResponse>, Status> {
         let req = request.into_inner();
         
-        let user_id = parse_uuid(&req.user_id)
-            .map_err(|_| Status::invalid_argument("Invalid user_id"))?;
+        let user_id = parse_user_id(&req.user_id)
+            .map_err(|e| Status::invalid_argument(e))?;
         
         let (limit, offset) = match req.pagination {
             Some(p) => {
@@ -326,8 +398,11 @@ impl WalletCoreService for WalletGrpcService {
             transactions: transactions.iter().map(transaction_to_proto).collect(),
             pagination: Some(common_proto::PageResponse {
                 next_cursor: (offset + limit).to_string(),
+                prev_cursor: String::new(),
                 has_more: transactions.len() as i64 == limit,
-                total_count: 0,
+                total_count: Some(0),
+                current_page: None,
+                total_pages: None,
             }),
         };
         
@@ -363,14 +438,45 @@ impl WalletCoreService for WalletGrpcService {
 
 // Helper functions
 
-fn parse_uuid(proto: &Option<UserId>) -> Result<Uuid, String> {
-    proto
+/// Platform users are identified by `users.id` (BIGINT). Callers send the
+/// decimal form in `common.v1.UserId`, e.g. "42".
+fn parse_user_id(proto: &Option<UserId>) -> Result<i64, String> {
+    let raw = proto
         .as_ref()
-        .and_then(|id| Uuid::parse_str(&id.value).ok())
-        .ok_or_else(|| "Invalid UUID".to_string())
+        .map(|id| id.value.trim())
+        .filter(|v| !v.is_empty())
+        .ok_or_else(|| "user_id is required".to_string())?;
+    raw.parse::<i64>()
+        .ok()
+        .filter(|id| *id > 0)
+        .ok_or_else(|| format!("Invalid user_id: {raw} (expected a positive integer)"))
 }
 
-fn parse_wallet_type(proto: common_proto::WalletType) -> Result<WalletType, String> {
+/// Business references belong to the calling service and are opaque to
+/// wallet-core; they are not necessarily UUIDs.
+fn parse_reference_id(proto: &str) -> Result<String, String> {
+    let trimmed = proto.trim();
+    if trimmed.is_empty() {
+        return Err("reference_id is required".to_string());
+    }
+    if trimmed.len() > 255 {
+        return Err("reference_id must be at most 255 characters".to_string());
+    }
+    Ok(trimmed.to_string())
+}
+
+fn parse_reference_type(proto: &str, fallback: &str) -> String {
+    let trimmed = proto.trim();
+    if trimmed.is_empty() {
+        fallback.to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+fn parse_wallet_type_from_i32(val: i32) -> Result<WalletType, Status> {
+    let proto = common_proto::WalletType::try_from(val)
+        .map_err(|_| Status::invalid_argument("Invalid wallet_type"))?;
     match proto {
         common_proto::WalletType::Unspecified => Ok(WalletType::Main),
         common_proto::WalletType::Main => Ok(WalletType::Main),
@@ -434,7 +540,7 @@ fn transaction_to_proto(txn: &Transaction) -> common_proto::Transaction {
         wallet_type: wallet_type_to_proto(txn.wallet_type) as i32,
         amount: Some(money_from_decimal(txn.amount, &txn.currency)),
         r#type: transaction_type_to_proto(txn.transaction_type) as i32,
-        reference_id: txn.reference_id.map(|id| id.to_string()).unwrap_or_default(),
+        reference_id: txn.reference_id.clone().unwrap_or_default(),
         reference_type: txn.reference_type.clone().unwrap_or_default(),
         idempotency_key: txn.idempotency_key.clone().unwrap_or_default(),
         created_at: Some(dt_to_timestamp(txn.created_at)),
@@ -455,13 +561,14 @@ fn transaction_type_to_proto(t: TransactionType) -> common_proto::TransactionTyp
         TransactionType::BonusCredit => common_proto::TransactionType::BonusCredit,
         TransactionType::BonusDebit => common_proto::TransactionType::BonusDebit,
         TransactionType::Transfer => common_proto::TransactionType::Transfer,
-        TransactionType::Adjustment => common_proto::TransactionType::Adjustment,
+        TransactionType::Adjustment | TransactionType::Fee => common_proto::TransactionType::Adjustment,
     }
 }
 
 fn transaction_status_to_proto(s: &TransactionStatus) -> common_proto::TransactionStatus {
     match s {
         TransactionStatus::Pending => common_proto::TransactionStatus::Pending,
+        TransactionStatus::Processing => common_proto::TransactionStatus::Processing,
         TransactionStatus::Completed => common_proto::TransactionStatus::Completed,
         TransactionStatus::Failed => common_proto::TransactionStatus::Failed,
         TransactionStatus::Cancelled => common_proto::TransactionStatus::Cancelled,

@@ -50,7 +50,7 @@ async fn health_check(State(state): State<Arc<AppState>>) -> impl IntoResponse {
 /// Readiness check handler
 async fn readiness_check(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     // Check if service is ready to accept traffic
-    let ready = state.db_pool.is_connected();
+    let ready = !state.db_pool.is_closed();
     
     if ready {
         (StatusCode::OK, Json(json!({"ready": true})))

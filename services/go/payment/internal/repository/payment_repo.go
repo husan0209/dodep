@@ -182,7 +182,55 @@ func (r *paymentRepo) ListByUserID(ctx context.Context, userID int64, filter Lis
 
 	var nextCursor string
 	if hasMore && len(payments) > 0 {
-		nextCursor = encodePaymentCursor(payments[len(payments)-1])
+		last := payments[len(payments)-1]
+		nextCursor = encodePaymentCursorFrom(last.ID, last.CreatedAt)
+	}
+
+	return &ListResult[domain.Payment]{
+		Items:      payments,
+		NextCursor: nextCursor,
+		HasMore:    hasMore,
+	}, nil
+}
+
+// ListAll lists payments across users (admin/ops use-case).
+// The status filter matches the payment status column verbatim.
+func (r *paymentRepo) ListAll(ctx context.Context, filter ListFilter) (*ListResult[domain.Payment], error) {
+	if filter.Limit <= 0 {
+		filter.Limit = 20
+	}
+	if filter.Limit > 100 {
+		filter.Limit = 100
+	}
+
+	query := r.db.WithContext(ctx).Order("created_at DESC")
+
+	if filter.Status != "" {
+		query = query.Where("status = ?", filter.Status)
+	}
+
+	if filter.Cursor != "" {
+		cursor, err := decodePaymentCursor(filter.Cursor)
+		if err == nil {
+			query = query.Where("created_at < ? OR (created_at = ? AND id < ?)", cursor.CreatedAt, cursor.CreatedAt, cursor.ID)
+		}
+	}
+
+	var payments []domain.Payment
+	result := query.Limit(filter.Limit + 1).Find(&payments)
+	if result.Error != nil {
+		return nil, fmt.Errorf("list all payments: %w", result.Error)
+	}
+
+	hasMore := len(payments) > filter.Limit
+	if hasMore {
+		payments = payments[:filter.Limit]
+	}
+
+	var nextCursor string
+	if hasMore && len(payments) > 0 {
+		last := payments[len(payments)-1]
+		nextCursor = encodePaymentCursorFrom(last.ID, last.CreatedAt)
 	}
 
 	return &ListResult[domain.Payment]{
@@ -225,12 +273,12 @@ func decodePaymentCursor(encoded string) (*paymentCursor, error) {
 	return &cursor, nil
 }
 
-func encodePaymentCursor(payment domain.Payment) string {
-	cursor := paymentCursor{
-		ID:        payment.ID,
-		CreatedAt: payment.CreatedAt,
-	}
-
+func encodePaymentCursor(cursor paymentCursor) string {
 	data, _ := json.Marshal(cursor)
 	return base64.URLEncoding.EncodeToString(data)
+}
+
+// encodePaymentCursorFrom builds the keyset cursor pointing at a row.
+func encodePaymentCursorFrom(id int64, createdAt time.Time) string {
+	return encodePaymentCursor(paymentCursor{ID: id, CreatedAt: createdAt})
 }

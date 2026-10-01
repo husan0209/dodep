@@ -1,15 +1,17 @@
 import {
-  Card,
-  Typography,
-  Space,
-  Select,
+  Alert,
   Button,
-  Modal,
+  Card,
+  Empty,
   Input,
+  Modal,
+  Select,
+  Space,
+  Typography,
   message,
 } from "antd";
-import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import DataTable from "@/components/common/DataTable";
 import StatusTag from "@/components/common/StatusTag";
 import MoneyDisplay from "@/components/common/MoneyDisplay";
@@ -24,10 +26,19 @@ import type { Withdrawal } from "@/types/finance";
 
 const { Title } = Typography;
 
+const PAGE_SIZE = 20;
+
+/**
+ * Withdrawal review queue.
+ *
+ * The queue is read from Payment Service with a keyset cursor, so paging is
+ * "next / previous" instead of page numbers: approving a request cannot make
+ * rows shift between pages. Only `pending_review` rows can be decided — the
+ * funds are reserved in the wallet and no provider payout exists yet.
+ */
 export default function Withdrawals() {
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
   const [status, setStatus] = useState<string>();
+  const [cursorStack, setCursorStack] = useState<string[]>([]);
   const [rejectModal, setRejectModal] = useState<{
     open: boolean;
     id: string | null;
@@ -36,101 +47,141 @@ export default function Withdrawals() {
   const queryClient = useQueryClient();
   const { permissions } = useAuthStore();
 
-  const { data, isLoading } = useQuery({
-    queryKey: ["withdrawals", page, pageSize, status],
+  const cursor = cursorStack[cursorStack.length - 1] ?? "";
+  const pageNumber = cursorStack.length + 1;
+
+  const { data, isLoading, isError, error, isFetching } = useQuery({
+    queryKey: ["withdrawals", status, cursor],
     queryFn: () =>
-      financeService.getWithdrawals({ page, page_size: pageSize, status }),
+      financeService.getWithdrawals({
+        status,
+        page_size: PAGE_SIZE,
+        page_token: cursor || undefined,
+      }),
   });
+
+  const refresh = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ["withdrawals"] });
+  }, [queryClient]);
 
   const approveMutation = useMutation({
     mutationFn: (id: string) => financeService.approveWithdrawal(id),
-    onSuccess: () => {
-      message.success("Withdrawal approved");
-      queryClient.invalidateQueries({ queryKey: ["withdrawals"] });
+    onSuccess: (w) => {
+      message.success(`Withdrawal approved, payout ${w.status.toLowerCase()}`);
+      refresh();
     },
-    onError: (error: unknown) => message.error(getErrorMessage(error)),
+    onError: (err: unknown) => message.error(getErrorMessage(err)),
   });
 
   const rejectMutation = useMutation({
     mutationFn: ({ id, reason }: { id: string; reason: string }) =>
       financeService.rejectWithdrawal(id, reason),
     onSuccess: () => {
-      message.success("Withdrawal rejected");
-      queryClient.invalidateQueries({ queryKey: ["withdrawals"] });
+      message.success("Withdrawal rejected, funds released");
+      refresh();
       setRejectModal({ open: false, id: null });
       setRejectReason("");
     },
-    onError: (error: unknown) => message.error(getErrorMessage(error)),
+    onError: (err: unknown) => message.error(getErrorMessage(err)),
   });
 
   const canApprove = hasPermission(permissions, "withdrawal.approve_small");
+  const isDecidable = (s: Withdrawal["status"]) => s === "pending_review";
 
-  const columns: ColumnsType<Withdrawal> = [
-    {
-      title: "ID",
-      dataIndex: "id",
-      width: 80,
-      render: (v: string) => v.slice(0, 8),
-    },
-    {
-      title: "User ID",
-      dataIndex: "user_id",
-      width: 80,
-      render: (v: string) => v.slice(0, 8),
-    },
-    {
-      title: "Amount",
-      dataIndex: "amount",
-      render: (v: string, r: any) => (
-        <MoneyDisplay amount={v} currency={r.currency_code as string} />
-      ),
-    },
-    { title: "Method", dataIndex: "method" },
-    {
-      title: "Status",
-      dataIndex: "status",
-      render: (v: string) => (
-        <StatusTag status={v} config={WITHDRAWAL_STATUSES} />
-      ),
-    },
-    {
-      title: "Created",
-      dataIndex: "created_at",
-      render: (v: string) => formatDate(v),
-    },
-    {
-      title: "Reviewed By",
-      dataIndex: "reviewed_by",
-      render: (v: string) => v || "—",
-    },
-    {
-      title: "Actions",
-      key: "actions",
-      width: 200,
-      render: (_, record) => {
-        if (record.status !== "pending" || !canApprove) return "—";
-        return (
-          <Space>
-            <Button
-              size="small"
-              type="primary"
-              onClick={() => approveMutation.mutate(record.id)}
-              loading={approveMutation.isPending}
-            >
-              Approve
-            </Button>
-            <Button
-              size="small"
-              danger
-              onClick={() => setRejectModal({ open: true, id: record.id })}
-            >
-              Reject
-            </Button>
-          </Space>
-        );
+  const columns: ColumnsType<Withdrawal> = useMemo(
+    () => [
+      {
+        title: "ID",
+        dataIndex: "id",
+        width: 90,
+        render: (v: string) => v.slice(0, 8),
       },
-    },
-  ];
+      {
+        title: "User",
+        dataIndex: "user_id",
+        width: 90,
+        render: (v: string) => v.slice(0, 8),
+      },
+      {
+        title: "Amount",
+        dataIndex: "amount",
+        render: (v: string, r: Withdrawal) => (
+          <MoneyDisplay amount={v} currency={r.currency_code} />
+        ),
+      },
+      {
+        title: "Status",
+        dataIndex: "status",
+        width: 160,
+        render: (v: string) => (
+          <StatusTag status={v} config={WITHDRAWAL_STATUSES} />
+        ),
+      },
+      {
+        title: "Destination",
+        dataIndex: "destination",
+        ellipsis: true,
+        render: (v: string) =>
+          v ? (
+            <Typography.Text copyable={{ text: v }}>
+              {v.length > 18 ? `${v.slice(0, 8)}…${v.slice(-6)}` : v}
+            </Typography.Text>
+          ) : (
+            "—"
+          ),
+      },
+      {
+        title: "Payout Ref",
+        dataIndex: "psp_reference",
+        width: 130,
+        render: (v: string) => (v ? <Typography.Text copyable>{v}</Typography.Text> : "—"),
+      },
+      {
+        title: "Created",
+        dataIndex: "created_at",
+        width: 170,
+        render: (v: string) => formatDate(v),
+      },
+      {
+        title: "Decided By",
+        dataIndex: "reviewed_by",
+        width: 140,
+        render: (v: string) => v || "—",
+      },
+      {
+        title: "Actions",
+        key: "actions",
+        width: 190,
+        fixed: "right",
+        render: (_, record) => {
+          if (!isDecidable(record.status) || !canApprove) return "—";
+          return (
+            <Space>
+              <Button
+                size="small"
+                type="primary"
+                onClick={() => approveMutation.mutate(record.id)}
+                loading={approveMutation.isPending}
+              >
+                Approve
+              </Button>
+              <Button
+                size="small"
+                danger
+                onClick={() => setRejectModal({ open: true, id: record.id })}
+              >
+                Reject
+              </Button>
+            </Space>
+          );
+        },
+      },
+    ],
+    [approveMutation, canApprove, rejectMutation],
+  );
+
+  const hasMore = data?.pagination.has_more ?? false;
+  const rows = data?.data ?? [];
 
   return (
     <div>
@@ -138,34 +189,58 @@ export default function Withdrawals() {
         Withdrawals
       </Title>
       <Card>
-        <Space style={{ marginBottom: 16 }}>
+        <Space style={{ marginBottom: 16 }} wrap>
           <Select
             placeholder="Status"
             allowClear
-            style={{ width: 160 }}
+            style={{ width: 200 }}
             value={status}
             onChange={(val) => {
               setStatus(val);
-              setPage(1);
+              setCursorStack([]);
             }}
             options={Object.entries(WITHDRAWAL_STATUSES).map(([key, val]) => ({
               label: val.label,
               value: key,
             }))}
           />
+          <Typography.Text type="secondary">
+            Page {pageNumber}
+          </Typography.Text>
+          <Button
+            disabled={cursorStack.length === 0}
+            onClick={() => setCursorStack((s) => s.slice(0, -1))}
+          >
+            Previous
+          </Button>
+          <Button
+            disabled={!hasMore}
+            loading={isFetching}
+            onClick={() =>
+              setCursorStack((s) => [...s, data?.pagination.next_cursor ?? ""])
+            }
+          >
+            Next
+          </Button>
         </Space>
-        <DataTable
-          data={data?.data || []}
-          columns={columns}
-          loading={isLoading}
-          total={data?.pagination.total || 0}
-          page={page}
-          pageSize={pageSize}
-          onPageChange={(p, ps) => {
-            setPage(p);
-            setPageSize(ps);
-          }}
-        />
+
+        {isError ? (
+          <Alert
+            type="error"
+            showIcon
+            message="Failed to load withdrawals"
+            description={getErrorMessage(error)}
+          />
+        ) : rows.length === 0 && !isLoading ? (
+          <Empty description="No withdrawals match the filter" />
+        ) : (
+          <DataTable
+            data={rows}
+            columns={columns}
+            loading={isLoading}
+            pagination={false}
+          />
+        )}
       </Card>
 
       <Modal
@@ -173,18 +248,27 @@ export default function Withdrawals() {
         open={rejectModal.open}
         onOk={() =>
           rejectModal.id &&
-          rejectMutation.mutate({ id: rejectModal.id, reason: rejectReason })
+          rejectModal.id.length > 0 &&
+          rejectMutation.mutate({
+            id: rejectModal.id,
+            reason: rejectReason,
+          })
         }
         onCancel={() => {
           setRejectModal({ open: false, id: null });
           setRejectReason("");
         }}
         confirmLoading={rejectMutation.isPending}
-        okButtonProps={{ danger: true }}
+        okButtonProps={{ danger: true, disabled: rejectReason.trim() === "" }}
+        okText="Reject and refund"
       >
+        <Typography.Paragraph type="secondary">
+          The reserved funds are returned to the player&apos;s wallet and the
+          reason is recorded on the withdrawal.
+        </Typography.Paragraph>
         <Input.TextArea
           rows={3}
-          placeholder="Reason for rejection..."
+          placeholder="Reason for rejection (required, shown to the player)..."
           value={rejectReason}
           onChange={(e) => setRejectReason(e.target.value)}
         />

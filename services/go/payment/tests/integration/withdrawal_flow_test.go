@@ -56,8 +56,10 @@ func TestWithdrawalFlow_Complete(t *testing.T) {
 		nowpaymentsClient,
 		walletClient,
 		userClient,
-		nil, // producer
-		nil, // tracer
+		nil,                                  // producer
+		nil,                                  // tracer
+		"",                                   // ipnCallbackURL
+		service.ReviewConfig{Enabled: false}, // integration flow: instant PSP path
 	)
 	_ = withdrawalService
 
@@ -84,18 +86,20 @@ func TestWithdrawalFlow_Complete(t *testing.T) {
 		}
 
 		// Lock funds
+		withdrawalUUID := uuid.New()
 		lockResult, err := walletClient.LockFunds(ctx, client.LockRequest{
-			UserID:         userID,
-			Currency:       "USD",
-			Amount:         req.Amount,
-			IdempotencyKey: "lock:" + req.IdempotencyKey,
+			UserID:        userID,
+			Currency:      "USD",
+			Amount:        req.Amount,
+			Reference:     service.WithdrawalLockReference(withdrawalUUID),
+			ReferenceType: service.WithdrawalLockReferenceType,
 		})
 		require.NoError(t, err)
 		assert.NotEmpty(t, lockResult.LockID)
 
 		// Create payout in NOWPayments
 		payoutResp, err := nowpaymentsClient.CreatePayout(ctx, client.CreatePayoutRequest{
-			WithdrawalID:   uuid.New().String(),
+			WithdrawalID:   withdrawalUUID.String(),
 			Address:        req.Address,
 			Currency:       string(req.Currency),
 			Amount:         decimal.NewFromFloat(0.002), // ~$100 worth
@@ -148,10 +152,11 @@ func TestWithdrawalFlow_Complete(t *testing.T) {
 
 		// Lock funds
 		_, err = walletClient.LockFunds(ctx, client.LockRequest{
-			UserID:         userID,
-			Currency:       "USD",
-			Amount:         withdrawal.Amount,
-			IdempotencyKey: "lock:" + withdrawalID,
+			UserID:        userID,
+			Currency:      "USD",
+			Amount:        withdrawal.Amount,
+			Reference:     service.WithdrawalLockReference(withdrawal.UUID),
+			ReferenceType: service.WithdrawalLockReferenceType,
 		})
 		require.NoError(t, err)
 
@@ -159,13 +164,12 @@ func TestWithdrawalFlow_Complete(t *testing.T) {
 		err = withdrawalRepo.UpdateStatus(ctx, withdrawal.ID, domain.WithdrawalStatusProcessing, domain.WithdrawalStatusFinished)
 		require.NoError(t, err)
 
-		// Finalize debit
-		debitResult, err := walletClient.FinalizeDebit(ctx, client.FinalizeDebitRequest{
+		// Settle the reservation (the money left the platform)
+		debitResult, err := walletClient.SettleFunds(ctx, client.SettleRequest{
 			UserID:         userID,
-			Currency:       "USD",
-			Amount:         withdrawal.Amount,
-			IdempotencyKey: "withdrawal:" + withdrawalID,
-			ReferenceID:    withdrawalID,
+			Reference:      service.WithdrawalLockReference(withdrawal.UUID),
+			ReferenceType:  service.WithdrawalLockReferenceType,
+			IdempotencyKey: "withdrawal:" + withdrawal.UUID.String(),
 		})
 		require.NoError(t, err)
 		assert.NotEmpty(t, debitResult.TransactionID)
@@ -204,11 +208,12 @@ func TestWithdrawalFlow_Complete(t *testing.T) {
 		require.NoError(t, err)
 
 		// Lock funds
-		lockResult, err := walletClient.LockFunds(ctx, client.LockRequest{
-			UserID:         testUserID,
-			Currency:       "USD",
-			Amount:         withdrawal.Amount,
-			IdempotencyKey: "lock:" + withdrawalID,
+		_, err = walletClient.LockFunds(ctx, client.LockRequest{
+			UserID:        testUserID,
+			Currency:      "USD",
+			Amount:        withdrawal.Amount,
+			Reference:     service.WithdrawalLockReference(withdrawal.UUID),
+			ReferenceType: service.WithdrawalLockReferenceType,
 		})
 		require.NoError(t, err)
 
@@ -216,8 +221,12 @@ func TestWithdrawalFlow_Complete(t *testing.T) {
 		balanceAfterLock, err := walletClient.GetBalance(ctx, testUserID, "USD")
 		require.NoError(t, err)
 
-		// Simulate failed withdrawal - unlock funds
-		err = walletClient.UnlockFunds(ctx, lockResult.LockID, "unlock:"+withdrawalID)
+		// Simulate failed withdrawal - release the reservation
+		err = walletClient.UnlockFunds(ctx, client.UnlockRequest{
+			UserID:        testUserID,
+			Reference:     service.WithdrawalLockReference(withdrawal.UUID),
+			ReferenceType: service.WithdrawalLockReferenceType,
+		})
 		require.NoError(t, err)
 
 		// Update status to failed

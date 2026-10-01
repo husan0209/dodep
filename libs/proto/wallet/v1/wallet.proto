@@ -40,6 +40,14 @@ service WalletCoreService {
   // Unlock moves funds from locked back to available
   rpc Unlock(UnlockRequest) returns (UnlockResponse);
 
+  // ConsumeLock settles locked funds into a completed debit.
+  // Use it when a reserved amount left the platform for good (e.g. a crypto
+  // payout was confirmed by the provider): the locked amount is written off
+  // instead of being unlocked and debited again, which would charge the user
+  // twice. Idempotent: replaying with the same idempotency_key returns the
+  // transaction created by the first call.
+  rpc ConsumeLock(ConsumeLockRequest) returns (ConsumeLockResponse);
+
   // Transfer moves funds between user's wallets
   // Idempotent via idempotency_key
   rpc Transfer(TransferRequest) returns (TransferResponse);
@@ -118,8 +126,13 @@ message LockRequest {
   common.v1.UserId user_id = 1;
   common.v1.WalletType wallet_type = 2;
   common.v1.Money amount = 3;
-  string reference_id = 4;     // Typically bet_id
+  // Business reference that owns the reservation, e.g. "withdrawal:<uuid>".
+  // Lock is idempotent per (user_id, reference_type, reference_id): a retry returns the same lock.
+  string reference_id = 4;
   string idempotency_key = 5;
+  // What the reservation is for: "withdrawal", "bet", "bonus", ...
+  // Used for idempotency scoping and to pick the ledger counter-account.
+  string reference_type = 6;
 }
 
 message LockResponse {
@@ -127,13 +140,18 @@ message LockResponse {
   common.v1.Money new_available = 2;
   common.v1.Money new_locked = 3;
   common.v1.ErrorDetails error = 4;
+  // Server-side handle of the created (or already existing) lock.
+  string lock_id = 5;
 }
 
 // ============ Unlock Request ============
 
 message UnlockRequest {
   common.v1.UserId user_id = 1;
-  string reference_id = 2;  // reference_id from LockRequest
+  // reference_id from LockRequest.
+  string reference_id = 2;
+  // reference_type from LockRequest.
+  string reference_type = 3;
 }
 
 message UnlockResponse {
@@ -141,6 +159,26 @@ message UnlockResponse {
   common.v1.Money new_available = 2;
   common.v1.Money new_locked = 3;
   common.v1.ErrorDetails error = 4;
+}
+
+// ============ Consume Lock Request ============
+
+message ConsumeLockRequest {
+  common.v1.UserId user_id = 1;
+  // reference_id from LockRequest.
+  string reference_id = 2;
+  // reference_type from LockRequest.
+  string reference_type = 3;
+  // Idempotency key for the settlement transaction.
+  string idempotency_key = 4;
+  // Optional note stored on the transaction (e.g. "withdrawal payout").
+  string description = 5;
+}
+
+message ConsumeLockResponse {
+  bool success = 1;
+  common.v1.Transaction transaction = 2;
+  common.v1.ErrorDetails error = 3;
 }
 
 // ============ Transfer Request ============

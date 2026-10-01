@@ -3,6 +3,7 @@ import type { ApiResponse, PaginatedResponse } from "@/types/api";
 import type {
   Deposit,
   Withdrawal,
+  CursorPage,
   Transaction,
   FinanceSearchParams,
 } from "@/types/finance";
@@ -25,10 +26,18 @@ export const financeService = {
     return response.data.data;
   },
 
-  async getWithdrawals(
-    params: FinanceSearchParams,
-  ): Promise<PaginatedResponse<Withdrawal>> {
-    const response = await apiClient.get<PaginatedResponse<Withdrawal>>(
+  /**
+   * Withdrawal review queue. Payment Service paginates with a keyset cursor,
+   * so callers pass page_token/prev_token instead of a page number.
+   */
+  async getWithdrawals(params: {
+    status?: string;
+    player_id?: string;
+    page_size?: number;
+    page_token?: string;
+    prev_token?: string;
+  }): Promise<CursorPage<Withdrawal>> {
+    const response = await apiClient.get<CursorPage<Withdrawal>>(
       "/admin/finance/withdrawals",
       { params },
     );
@@ -42,14 +51,24 @@ export const financeService = {
     return response.data.data;
   },
 
-  async approveWithdrawal(withdrawalId: string): Promise<void> {
-    await apiClient.post(`/admin/finance/withdrawals/${withdrawalId}/approve`);
+  /** Approves a withdrawal awaiting manual review (executes the payout). */
+  async approveWithdrawal(withdrawalId: string): Promise<Withdrawal> {
+    const response = await apiClient.post<ApiResponse<Withdrawal>>(
+      `/admin/finance/withdrawals/${withdrawalId}/approve`,
+    );
+    return response.data.data;
   },
 
-  async rejectWithdrawal(withdrawalId: string, reason: string): Promise<void> {
-    await apiClient.post(`/admin/finance/withdrawals/${withdrawalId}/reject`, {
-      reason,
-    });
+  /** Rejects a withdrawal awaiting manual review (releases the funds). */
+  async rejectWithdrawal(
+    withdrawalId: string,
+    reason: string,
+  ): Promise<Withdrawal> {
+    const response = await apiClient.post<ApiResponse<Withdrawal>>(
+      `/admin/finance/withdrawals/${withdrawalId}/reject`,
+      { reason },
+    );
+    return response.data.data;
   },
 
   async getTransactions(

@@ -17,7 +17,9 @@ use super::{WalletType, TransactionType, TransactionStatus, LedgerEntryType, Acc
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Wallet {
     pub id: Uuid,
-    pub user_id: Uuid,
+    /// Platform user identity (`users.id`, BIGINT). Other services send the
+    /// decimal form ("42") in `common.v1.UserId`.
+    pub user_id: i64,
     pub wallet_type: WalletType,
     pub currency: String,
     pub balance_available: Decimal,
@@ -31,7 +33,7 @@ pub struct Wallet {
 
 impl Wallet {
     /// Create a new wallet
-    pub fn new(user_id: Uuid, wallet_type: WalletType, currency: String) -> Self {
+    pub fn new(user_id: i64, wallet_type: WalletType, currency: String) -> Self {
         let now = Utc::now();
         Self {
             id: Uuid::new_v4(),
@@ -91,14 +93,16 @@ impl Balance {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Transaction {
     pub id: Uuid,
-    pub user_id: Uuid,
+    pub user_id: i64,
     pub wallet_id: Uuid,
     pub wallet_type: WalletType,
     pub transaction_type: TransactionType,
     pub amount: Decimal,
     pub currency: String,
     pub status: TransactionStatus,
-    pub reference_id: Option<Uuid>,
+    /// Business reference owned by the calling service (bet id, withdrawal
+    /// uuid, ...). Not necessarily a UUID.
+    pub reference_id: Option<String>,
     pub reference_type: Option<String>,
     pub idempotency_key: Option<String>,
     pub description: Option<String>,
@@ -111,13 +115,13 @@ pub struct Transaction {
 impl Transaction {
     /// Create a new pending transaction
     pub fn new(
-        user_id: Uuid,
+        user_id: i64,
         wallet_id: Uuid,
         wallet_type: WalletType,
         transaction_type: TransactionType,
         amount: Decimal,
         currency: String,
-        reference_id: Option<Uuid>,
+        reference_id: Option<String>,
         reference_type: Option<String>,
         idempotency_key: Option<String>,
     ) -> Self {
@@ -167,21 +171,27 @@ impl Transaction {
 pub struct FundLock {
     pub id: Uuid,
     pub wallet_id: Uuid,
-    pub user_id: Uuid,
+    pub user_id: i64,
     pub amount: Decimal,
-    pub reference_id: Uuid,
+    /// Business reference that owns the reservation, e.g. "withdrawal:<uuid>".
+    pub reference_id: String,
     pub reference_type: String,
     pub is_active: bool,
     pub created_at: DateTime<Utc>,
+    /// Set when the locked amount was returned to the available balance.
     pub released_at: Option<DateTime<Utc>>,
+    /// Set when the locked amount was written off (funds left the platform).
+    pub consumed_at: Option<DateTime<Utc>>,
+    /// Debit transaction created by the settlement.
+    pub settlement_transaction_id: Option<Uuid>,
 }
 
 impl FundLock {
     pub fn new(
         wallet_id: Uuid,
-        user_id: Uuid,
+        user_id: i64,
         amount: Decimal,
-        reference_id: Uuid,
+        reference_id: String,
         reference_type: String,
     ) -> Self {
         Self {
@@ -194,12 +204,22 @@ impl FundLock {
             is_active: true,
             created_at: Utc::now(),
             released_at: None,
+            consumed_at: None,
+            settlement_transaction_id: None,
         }
     }
     
     pub fn release(&mut self) {
         self.is_active = false;
         self.released_at = Some(Utc::now());
+    }
+
+    /// Settle the lock: the reserved amount left the platform and is now
+    /// booked as a debit instead of being returned to the available balance.
+    pub fn consume(&mut self, settlement_transaction_id: Uuid) {
+        self.is_active = false;
+        self.consumed_at = Some(Utc::now());
+        self.settlement_transaction_id = Some(settlement_transaction_id);
     }
 }
 
@@ -220,7 +240,7 @@ pub struct LedgerEntry {
     pub currency: String,
     pub balance_after: Option<Decimal>,  // Snapshot of account balance
     pub reference_type: Option<String>,
-    pub reference_id: Option<Uuid>,
+    pub reference_id: Option<String>,
     pub idempotency_key: Option<String>,
     pub created_at: DateTime<Utc>,
 }
@@ -285,7 +305,7 @@ impl LedgerEntry {
         currency: String,
         balance_after: Option<Decimal>,
         reference_type: String,
-        reference_id: Uuid,
+        reference_id: String,
         idempotency_key: Option<String>,
     ) -> Self {
         Self {
@@ -313,7 +333,7 @@ impl LedgerEntry {
         currency: String,
         balance_after: Option<Decimal>,
         reference_type: String,
-        reference_id: Uuid,
+        reference_id: String,
         idempotency_key: Option<String>,
     ) -> Self {
         Self {
@@ -380,10 +400,10 @@ impl OutboxEvent {
 }
 
 /// Reconciliation result
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct ReconciliationResult {
     pub wallet_id: Uuid,
-    pub user_id: Uuid,
+    pub user_id: i64,
     pub wallet_type: WalletType,
     pub currency: String,
     pub actual_balance: Decimal,

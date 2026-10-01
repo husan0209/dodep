@@ -12,7 +12,7 @@ type Withdrawal struct {
 	ID             int64
 	UUID           uuid.UUID
 	UserID         int64
-	WithdrawalID   string // NOWPayments withdrawal_id
+	WithdrawalID   string // NOWPayments withdrawal_id; empty until PSP payout executes
 	IdempotencyKey string
 
 	// Amounts
@@ -23,6 +23,14 @@ type Withdrawal struct {
 	// Crypto details
 	CryptoCurrency string
 	Address        string // Destination address
+
+	// Wallet hold created at request time; released on reject/cancel/failure.
+	LockID string
+
+	// Manual-review decision (set by Approve/Reject; empty for auto flow).
+	DecidedBy      string
+	DecidedAt      *time.Time
+	DecisionReason string
 
 	// Status
 	Status WithdrawalStatus
@@ -41,6 +49,13 @@ type Withdrawal struct {
 type WithdrawalStatus string
 
 const (
+	// WithdrawalStatusPendingReview awaits a finance-operator decision.
+	// Funds are locked in the wallet; no PSP payout exists yet.
+	WithdrawalStatusPendingReview WithdrawalStatus = "pending_review"
+	// WithdrawalStatusApproved passed manual review; PSP payout is next.
+	WithdrawalStatusApproved WithdrawalStatus = "approved"
+	// WithdrawalStatusRejected was declined by review; funds were released.
+	WithdrawalStatusRejected   WithdrawalStatus = "rejected"
 	WithdrawalStatusProcessing WithdrawalStatus = "processing"
 	WithdrawalStatusSending    WithdrawalStatus = "sending"
 	WithdrawalStatusSent       WithdrawalStatus = "sent"
@@ -53,7 +68,8 @@ const (
 func (s WithdrawalStatus) IsFinal() bool {
 	return s == WithdrawalStatusFinished ||
 		s == WithdrawalStatusFailed ||
-		s == WithdrawalStatusCancelled
+		s == WithdrawalStatusCancelled ||
+		s == WithdrawalStatusRejected
 }
 
 // IsSuccess returns true if the withdrawal was successful
@@ -61,11 +77,18 @@ func (s WithdrawalStatus) IsSuccess() bool {
 	return s == WithdrawalStatusFinished
 }
 
-// validWithdrawalTransitions defines allowed status transitions
+// validWithdrawalTransitions defines allowed status transitions.
+// Review flow (risk-based): pending_review -> approved -> processing ...
+//
+//	\-> rejected | cancelled (terminal).
+//
+// PSP flow is unchanged: processing -> sending -> sent -> finished.
 var withdrawalTransitions = map[WithdrawalStatus][]WithdrawalStatus{
-	WithdrawalStatusProcessing: {WithdrawalStatusSending, WithdrawalStatusFailed, WithdrawalStatusCancelled},
-	WithdrawalStatusSending:    {WithdrawalStatusSent, WithdrawalStatusFailed},
-	WithdrawalStatusSent:       {WithdrawalStatusFinished, WithdrawalStatusFailed},
+	WithdrawalStatusPendingReview: {WithdrawalStatusApproved, WithdrawalStatusRejected, WithdrawalStatusCancelled},
+	WithdrawalStatusApproved:      {WithdrawalStatusProcessing, WithdrawalStatusFailed, WithdrawalStatusCancelled},
+	WithdrawalStatusProcessing:    {WithdrawalStatusSending, WithdrawalStatusFailed, WithdrawalStatusCancelled},
+	WithdrawalStatusSending:       {WithdrawalStatusSent, WithdrawalStatusFailed},
+	WithdrawalStatusSent:          {WithdrawalStatusFinished, WithdrawalStatusFailed},
 }
 
 // CanTransitionTo checks if transition to target status is allowed

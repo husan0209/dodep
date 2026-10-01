@@ -15,14 +15,15 @@ import (
 
 // MockPaymentRepository is a mock implementation of PaymentRepository
 type MockPaymentRepository struct {
-	CreateFunc           func(ctx context.Context, payment *domain.Payment) error
-	GetByIDFunc          func(ctx context.Context, id int64) (*domain.Payment, error)
-	GetByPaymentIDFunc   func(ctx context.Context, paymentID string) (*domain.Payment, error)
+	CreateFunc              func(ctx context.Context, payment *domain.Payment) error
+	GetByIDFunc             func(ctx context.Context, id int64) (*domain.Payment, error)
+	GetByPaymentIDFunc      func(ctx context.Context, paymentID string) (*domain.Payment, error)
 	GetByIDempotencyKeyFunc func(ctx context.Context, key string) (*domain.Payment, error)
-	GetByUUIDFunc        func(ctx context.Context, uuid string) (*domain.Payment, error)
-	UpdateStatusFunc     func(ctx context.Context, id int64, fromStatus, toStatus domain.PaymentStatus) error
-	UpdateActualAmountFunc func(ctx context.Context, id int64, actualAmount decimal.Decimal) error
-	ListByUserIDFunc     func(ctx context.Context, userID int64, filter repository.ListFilter) (*repository.ListResult[domain.Payment], error)
+	GetByUUIDFunc           func(ctx context.Context, uuid string) (*domain.Payment, error)
+	UpdateStatusFunc        func(ctx context.Context, id int64, fromStatus, toStatus domain.PaymentStatus) error
+	UpdateActualAmountFunc  func(ctx context.Context, id int64, actualAmount decimal.Decimal) error
+	ListByUserIDFunc        func(ctx context.Context, userID int64, filter repository.ListFilter) (*repository.ListResult[domain.Payment], error)
+	ListAllFunc             func(ctx context.Context, filter repository.ListFilter) (*repository.ListResult[domain.Payment], error)
 }
 
 func (m *MockPaymentRepository) Create(ctx context.Context, payment *domain.Payment) error {
@@ -83,6 +84,13 @@ func (m *MockPaymentRepository) ListByUserID(ctx context.Context, userID int64, 
 
 func (m *MockPaymentRepository) CountByUserIDStatus(ctx context.Context, userID int64, statuses []domain.PaymentStatus) (int64, error) {
 	return 0, nil
+}
+
+func (m *MockPaymentRepository) ListAll(ctx context.Context, filter repository.ListFilter) (*repository.ListResult[domain.Payment], error) {
+	if m.ListAllFunc != nil {
+		return m.ListAllFunc(ctx, filter)
+	}
+	return &repository.ListResult[domain.Payment]{}, nil
 }
 
 // MockIdempotencyRepository is a mock implementation of IdempotencyRepository
@@ -179,10 +187,10 @@ func (m *MockDailyLimitsRepository) Reset(ctx context.Context, userID int64, ope
 
 // MockNOWPaymentsClient is a mock implementation of NOWPaymentsClient
 type MockNOWPaymentsClient struct {
-	CreatePaymentFunc       func(ctx context.Context, req client.CreatePaymentRequest) (*client.CreatePaymentResponse, error)
-	CreatePayoutFunc        func(ctx context.Context, req client.CreatePayoutRequest) (*client.CreatePayoutResponse, error)
-	GetEstimatedPriceFunc   func(ctx context.Context, amount decimal.Decimal, fromCurrency, toCurrency string) (*client.EstimatedPriceResponse, error)
-	GetCurrenciesFunc       func(ctx context.Context) (*client.CurrenciesResponse, error)
+	CreatePaymentFunc          func(ctx context.Context, req client.CreatePaymentRequest) (*client.CreatePaymentResponse, error)
+	CreatePayoutFunc           func(ctx context.Context, req client.CreatePayoutRequest) (*client.CreatePayoutResponse, error)
+	GetEstimatedPriceFunc      func(ctx context.Context, amount decimal.Decimal, fromCurrency, toCurrency string) (*client.EstimatedPriceResponse, error)
+	GetCurrenciesFunc          func(ctx context.Context) (*client.CurrenciesResponse, error)
 	VerifyWebhookSignatureFunc func(payload []byte, signature string) bool
 }
 
@@ -223,11 +231,11 @@ func (m *MockNOWPaymentsClient) VerifyWebhookSignature(payload []byte, signature
 
 // MockWalletClient is a mock implementation of WalletClient
 type MockWalletClient struct {
-	GetBalanceFunc     func(ctx context.Context, userID int64, currency string) (*client.Balance, error)
-	CreditWalletFunc   func(ctx context.Context, req client.CreditRequest) (*client.CreditResult, error)
-	LockFundsFunc      func(ctx context.Context, req client.LockRequest) (*client.LockResult, error)
-	UnlockFundsFunc    func(ctx context.Context, lockID string, idempotencyKey string) error
-	FinalizeDebitFunc  func(ctx context.Context, req client.FinalizeDebitRequest) (*client.DebitResult, error)
+	GetBalanceFunc   func(ctx context.Context, userID int64, currency string) (*client.Balance, error)
+	CreditWalletFunc func(ctx context.Context, req client.CreditRequest) (*client.CreditResult, error)
+	LockFundsFunc    func(ctx context.Context, req client.LockRequest) (*client.LockResult, error)
+	UnlockFundsFunc  func(ctx context.Context, req client.UnlockRequest) error
+	SettleFundsFunc  func(ctx context.Context, req client.SettleRequest) (*client.DebitResult, error)
 }
 
 func (m *MockWalletClient) GetBalance(ctx context.Context, userID int64, currency string) (*client.Balance, error) {
@@ -251,19 +259,21 @@ func (m *MockWalletClient) LockFunds(ctx context.Context, req client.LockRequest
 	return &client.LockResult{}, nil
 }
 
-func (m *MockWalletClient) UnlockFunds(ctx context.Context, lockID string, idempotencyKey string) error {
+func (m *MockWalletClient) UnlockFunds(ctx context.Context, req client.UnlockRequest) error {
 	if m.UnlockFundsFunc != nil {
-		return m.UnlockFundsFunc(ctx, lockID, idempotencyKey)
+		return m.UnlockFundsFunc(ctx, req)
 	}
 	return nil
 }
 
-func (m *MockWalletClient) FinalizeDebit(ctx context.Context, req client.FinalizeDebitRequest) (*client.DebitResult, error) {
-	if m.FinalizeDebitFunc != nil {
-		return m.FinalizeDebitFunc(ctx, req)
+func (m *MockWalletClient) SettleFunds(ctx context.Context, req client.SettleRequest) (*client.DebitResult, error) {
+	if m.SettleFundsFunc != nil {
+		return m.SettleFundsFunc(ctx, req)
 	}
 	return &client.DebitResult{}, nil
 }
+
+func (m *MockWalletClient) Close() error { return nil }
 
 // MockUserClient is a mock implementation of UserClient
 type MockUserClient struct {
@@ -293,6 +303,8 @@ func (m *MockUserClient) GetUserInfo(ctx context.Context, userID int64) (*client
 	return &client.UserInfo{}, nil
 }
 
+func (m *MockUserClient) Close() error { return nil }
+
 // Helper function to create a test payment service
 func newTestPaymentService(
 	paymentRepo repository.PaymentRepository,
@@ -313,12 +325,13 @@ func newTestPaymentService(
 		user,
 		nil, // producer
 		nil, // tracer
+		"",  // ipnCallbackURL
 	)
 }
 
 func TestPaymentService_InitiateDeposit_Success(t *testing.T) {
 	ctx := context.Background()
-	
+
 	paymentRepo := &MockPaymentRepository{
 		GetByIDempotencyKeyFunc: func(ctx context.Context, key string) (*domain.Payment, error) {
 			return nil, nil // No existing payment
@@ -328,22 +341,22 @@ func TestPaymentService_InitiateDeposit_Success(t *testing.T) {
 			return nil
 		},
 	}
-	
+
 	idempotencyRepo := &MockIdempotencyRepository{}
-	
+
 	exchangeRateRepo := &MockExchangeRateRepository{
 		GetFunc: func(ctx context.Context, fromCurrency, toCurrency string) (*decimal.Decimal, error) {
 			rate := decimal.NewFromFloat(45000.0) // BTC/USD rate
 			return &rate, nil
 		},
 	}
-	
+
 	dailyLimitsRepo := &MockDailyLimitsRepository{
 		GetFunc: func(ctx context.Context, userID int64, operationType string) (decimal.Decimal, error) {
 			return decimal.Zero, nil // No deposits today
 		},
 	}
-	
+
 	nowpayments := &MockNOWPaymentsClient{
 		CreatePaymentFunc: func(ctx context.Context, req client.CreatePaymentRequest) (*client.CreatePaymentResponse, error) {
 			return &client.CreatePaymentResponse{
@@ -366,18 +379,18 @@ func TestPaymentService_InitiateDeposit_Success(t *testing.T) {
 			}, nil
 		},
 	}
-	
+
 	user := &MockUserClient{
 		GetKYCLevelFunc: func(ctx context.Context, userID int64) (int, error) {
 			return 2, nil // KYC level 2
 		},
 	}
-	
+
 	// Create service with mock clients
 	// Note: In real tests, we'd need to handle the type conversion properly
 	// For now, we'll test the logic directly
 	_ = newTestPaymentService(paymentRepo, idempotencyRepo, exchangeRateRepo, dailyLimitsRepo, nil, nil, nil)
-	
+
 	// Test request
 	req := InitiateDepositRequest{
 		UserID:         12345,
@@ -387,7 +400,7 @@ func TestPaymentService_InitiateDeposit_Success(t *testing.T) {
 		IPAddress:      "192.168.1.1",
 		UserAgent:      "test-agent",
 	}
-	
+
 	// Verify the request is valid
 	if req.UserID != 12345 {
 		t.Errorf("expected user ID 12345, got %d", req.UserID)
@@ -398,7 +411,7 @@ func TestPaymentService_InitiateDeposit_Success(t *testing.T) {
 	if !req.Amount.Equal(decimal.NewFromFloat(100.0)) {
 		t.Errorf("expected amount 100, got %s", req.Amount.String())
 	}
-	
+
 	// Verify mock setup
 	_ = ctx
 	_ = nowpayments
@@ -407,7 +420,7 @@ func TestPaymentService_InitiateDeposit_Success(t *testing.T) {
 
 func TestPaymentService_InitiateDeposit_Idempotency(t *testing.T) {
 	ctx := context.Background()
-	
+
 	existingPayment := &domain.Payment{
 		ID:              1,
 		UUID:            uuid.New(),
@@ -421,7 +434,7 @@ func TestPaymentService_InitiateDeposit_Idempotency(t *testing.T) {
 		PayAddress:      "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
 		Status:          domain.PaymentStatusPending,
 	}
-	
+
 	paymentRepo := &MockPaymentRepository{
 		GetByIDempotencyKeyFunc: func(ctx context.Context, key string) (*domain.Payment, error) {
 			if key == "idem-key-existing" {
@@ -430,17 +443,17 @@ func TestPaymentService_InitiateDeposit_Idempotency(t *testing.T) {
 			return nil, nil
 		},
 	}
-	
+
 	// Verify that existing payment is returned for same idempotency key
 	payment, err := paymentRepo.GetByIDempotencyKey(ctx, "idem-key-existing")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	
+
 	if payment == nil {
 		t.Fatal("expected existing payment to be returned")
 	}
-	
+
 	if payment.PaymentID != "np-payment-existing" {
 		t.Errorf("expected payment ID np-payment-existing, got %s", payment.PaymentID)
 	}
@@ -448,39 +461,39 @@ func TestPaymentService_InitiateDeposit_Idempotency(t *testing.T) {
 
 func TestPaymentService_InitiateDeposit_KYCLimitExceeded(t *testing.T) {
 	ctx := context.Background()
-	
+
 	paymentRepo := &MockPaymentRepository{
 		GetByIDempotencyKeyFunc: func(ctx context.Context, key string) (*domain.Payment, error) {
 			return nil, nil
 		},
 	}
-	
+
 	dailyLimitsRepo := &MockDailyLimitsRepository{
 		GetFunc: func(ctx context.Context, userID int64, operationType string) (decimal.Decimal, error) {
 			// User already deposited $450 today (limit for KYC level 0 is $500)
 			return decimal.NewFromFloat(450.0), nil
 		},
 	}
-	
+
 	user := &MockUserClient{
 		GetKYCLevelFunc: func(ctx context.Context, userID int64) (int, error) {
 			return 0, nil // KYC level 0
 		},
 	}
-	
+
 	// Verify KYC level 0 limit
 	kycLevel, _ := user.GetKYCLevel(ctx, 12345)
 	_ = kycLevel
 	used, _ := dailyLimitsRepo.Get(ctx, 12345, "deposit")
-	
+
 	limit := 500.0 // KYC level 0 limit
 	requested := decimal.NewFromFloat(100.0)
-	
+
 	if used.Add(requested).GreaterThan(decimal.NewFromFloat(limit)) {
 		// This should trigger daily limit exceeded error
 		t.Log("Daily limit exceeded correctly detected")
 	}
-	
+
 	_ = ctx
 	_ = paymentRepo
 }
@@ -493,7 +506,7 @@ func TestPaymentService_InitiateDeposit_CurrencyNotSupported(t *testing.T) {
 		Currency:       "UNSUPPORTED", // Invalid currency
 		IdempotencyKey: "idem-key-123",
 	}
-	
+
 	// Verify currency validation
 	if domain.CryptoCurrency(req.Currency).IsDepositSupported() {
 		t.Error("expected unsupported currency to fail validation")
@@ -502,7 +515,7 @@ func TestPaymentService_InitiateDeposit_CurrencyNotSupported(t *testing.T) {
 
 func TestPaymentService_GetPayment_Success(t *testing.T) {
 	ctx := context.Background()
-	
+
 	testUUID := uuid.New()
 	existingPayment := &domain.Payment{
 		ID:              1,
@@ -517,22 +530,22 @@ func TestPaymentService_GetPayment_Success(t *testing.T) {
 		PayAddress:      "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
 		Status:          domain.PaymentStatusPending,
 	}
-	
+
 	paymentRepo := &MockPaymentRepository{
 		GetByUUIDFunc: func(ctx context.Context, uuid string) (*domain.Payment, error) {
 			return existingPayment, nil
 		},
 	}
-	
+
 	payment, err := paymentRepo.GetByUUID(ctx, testUUID.String())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	
+
 	if payment == nil {
 		t.Fatal("expected payment to be returned")
 	}
-	
+
 	if payment.PaymentID != "np-payment-123" {
 		t.Errorf("expected payment ID np-payment-123, got %s", payment.PaymentID)
 	}
@@ -540,13 +553,13 @@ func TestPaymentService_GetPayment_Success(t *testing.T) {
 
 func TestPaymentService_GetPayment_NotFound(t *testing.T) {
 	ctx := context.Background()
-	
+
 	paymentRepo := &MockPaymentRepository{
 		GetByUUIDFunc: func(ctx context.Context, uuid string) (*domain.Payment, error) {
 			return nil, errors.New("payment not found")
 		},
 	}
-	
+
 	_, err := paymentRepo.GetByUUID(ctx, "non-existent-uuid")
 	if err == nil {
 		t.Error("expected error for non-existent payment")
@@ -555,7 +568,7 @@ func TestPaymentService_GetPayment_NotFound(t *testing.T) {
 
 func TestPaymentService_ListPayments_Success(t *testing.T) {
 	ctx := context.Background()
-	
+
 	payments := []domain.Payment{
 		{
 			ID:              1,
@@ -574,7 +587,7 @@ func TestPaymentService_ListPayments_Success(t *testing.T) {
 			Status:          domain.PaymentStatusPending,
 		},
 	}
-	
+
 	paymentRepo := &MockPaymentRepository{
 		ListByUserIDFunc: func(ctx context.Context, userID int64, filter repository.ListFilter) (*repository.ListResult[domain.Payment], error) {
 			return &repository.ListResult[domain.Payment]{
@@ -584,16 +597,16 @@ func TestPaymentService_ListPayments_Success(t *testing.T) {
 			}, nil
 		},
 	}
-	
+
 	result, err := paymentRepo.ListByUserID(ctx, 12345, repository.ListFilter{Limit: 10})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	
+
 	if len(result.Items) != 2 {
 		t.Errorf("expected 2 payments, got %d", len(result.Items))
 	}
-	
+
 	if !result.HasMore {
 		t.Error("expected HasMore to be true")
 	}
@@ -643,22 +656,22 @@ func TestPaymentService_ValidateDepositLimits(t *testing.T) {
 			shouldExceed:  false, // 25000 + 20000 = 45000 < 50000
 		},
 	}
-	
+
 	limits := map[int]float64{
 		0: 500,
 		1: 2000,
 		2: 10000,
 		3: 50000,
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			limit := limits[tt.kycLevel]
 			used := decimal.NewFromFloat(tt.usedToday)
 			requested := decimal.NewFromFloat(tt.requestAmount)
-			
+
 			exceeds := used.Add(requested).GreaterThan(decimal.NewFromFloat(limit))
-			
+
 			if exceeds != tt.shouldExceed {
 				t.Errorf("expected exceeds=%v, got %v", tt.shouldExceed, exceeds)
 			}
@@ -668,9 +681,9 @@ func TestPaymentService_ValidateDepositLimits(t *testing.T) {
 
 func TestPaymentService_GetDepositLimit(t *testing.T) {
 	service := &PaymentService{}
-	
+
 	tests := []struct {
-		kycLevel     int
+		kycLevel      int
 		expectedLimit float64
 	}{
 		{kycLevel: 0, expectedLimit: 500},
@@ -679,7 +692,7 @@ func TestPaymentService_GetDepositLimit(t *testing.T) {
 		{kycLevel: 3, expectedLimit: 50000},
 		{kycLevel: 99, expectedLimit: 500}, // Unknown level defaults to 0
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(string(rune(tt.kycLevel)), func(t *testing.T) {
 			limit := service.getDepositLimit(tt.kycLevel)
@@ -692,7 +705,7 @@ func TestPaymentService_GetDepositLimit(t *testing.T) {
 
 func TestPaymentService_GetFiatAmount(t *testing.T) {
 	ctx := context.Background()
-	
+
 	// Test with cached rate
 	cachedRate := decimal.NewFromFloat(45000.0)
 	exchangeRateRepo := &MockExchangeRateRepository{
@@ -700,15 +713,15 @@ func TestPaymentService_GetFiatAmount(t *testing.T) {
 			return &cachedRate, nil
 		},
 	}
-	
+
 	rate, err := exchangeRateRepo.Get(ctx, "BTC", "USD")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	
+
 	amount := decimal.NewFromFloat(0.001) // 0.001 BTC
 	expectedFiat := amount.Mul(*rate)     // 0.001 * 45000 = 45 USD
-	
+
 	if !expectedFiat.Equal(decimal.NewFromFloat(45.0)) {
 		t.Errorf("expected fiat amount 45, got %s", expectedFiat.String())
 	}
@@ -716,42 +729,42 @@ func TestPaymentService_GetFiatAmount(t *testing.T) {
 
 func TestPaymentService_CreatePayment_ProviderError(t *testing.T) {
 	ctx := context.Background()
-	
+
 	paymentRepo := &MockPaymentRepository{
 		GetByIDempotencyKeyFunc: func(ctx context.Context, key string) (*domain.Payment, error) {
 			return nil, nil
 		},
 	}
-	
+
 	dailyLimitsRepo := &MockDailyLimitsRepository{
 		GetFunc: func(ctx context.Context, userID int64, operationType string) (decimal.Decimal, error) {
 			return decimal.Zero, nil
 		},
 	}
-	
+
 	user := &MockUserClient{
 		GetKYCLevelFunc: func(ctx context.Context, userID int64) (int, error) {
 			return 2, nil
 		},
 	}
-	
+
 	nowpayments := &MockNOWPaymentsClient{
 		CreatePaymentFunc: func(ctx context.Context, req client.CreatePaymentRequest) (*client.CreatePaymentResponse, error) {
 			return nil, errors.New("provider unavailable")
 		},
 	}
-	
+
 	// Verify provider error handling
 	_, err := nowpayments.CreatePayment(ctx, client.CreatePaymentRequest{
 		PriceAmount:   decimal.NewFromFloat(100.0),
 		PriceCurrency: "USD",
 		PayCurrency:   "BTC",
 	})
-	
+
 	if err == nil {
 		t.Error("expected error from provider")
 	}
-	
+
 	_ = ctx
 	_ = paymentRepo
 	_ = dailyLimitsRepo

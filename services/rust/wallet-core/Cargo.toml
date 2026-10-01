@@ -26,6 +26,9 @@ sqlx = { version = "0.7", features = ["runtime-tokio", "postgres", "uuid", "chro
 # Cache
 redis = { version = "0.24", features = ["tokio-comp", "connection-manager"] }
 
+# Message broker (Redpanda / Kafka API)
+rdkafka.workspace = true
+
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -33,6 +36,7 @@ serde_json = "1.0"
 # Error handling
 thiserror = "1.0"
 anyhow = "1.0"
+async-trait = "0.1"
 
 # Logging & tracing
 tracing = "0.1"

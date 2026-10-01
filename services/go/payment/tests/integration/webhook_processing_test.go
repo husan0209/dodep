@@ -9,6 +9,7 @@ import (
 	"github.com/opus-casino/payment/internal/client"
 	"github.com/opus-casino/payment/internal/domain"
 	"github.com/opus-casino/payment/internal/repository"
+	"github.com/opus-casino/payment/internal/service"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -30,10 +31,10 @@ func TestWebhookProcessing_SignatureVerification(t *testing.T) {
 	nowpaymentsClient := NewMockNOWPaymentsClient(containers.IPNSecret)
 
 	tests := []struct {
-		name           string
-		payload        client.WebhookPayload
-		signature      string
-		expectValid    bool
+		name        string
+		payload     client.WebhookPayload
+		signature   string
+		expectValid bool
 	}{
 		{
 			name: "valid signature",
@@ -288,7 +289,7 @@ func TestWebhookProcessing_WithdrawalWebhook(t *testing.T) {
 
 	t.Run("process finished withdrawal webhook", func(t *testing.T) {
 		withdrawalID := "np-webhook-withdrawal-finished"
-		
+
 		// Create withdrawal
 		withdrawal := &domain.Withdrawal{
 			UUID:           uuid.New(),
@@ -308,10 +309,11 @@ func TestWebhookProcessing_WithdrawalWebhook(t *testing.T) {
 
 		// Lock funds
 		_, err = walletClient.LockFunds(ctx, client.LockRequest{
-			UserID:         userID,
-			Currency:       "USD",
-			Amount:         withdrawal.Amount,
-			IdempotencyKey: "lock:" + withdrawalID,
+			UserID:        userID,
+			Currency:      "USD",
+			Amount:        withdrawal.Amount,
+			Reference:     service.WithdrawalLockReference(withdrawal.UUID),
+			ReferenceType: service.WithdrawalLockReferenceType,
 		})
 		require.NoError(t, err)
 
@@ -323,13 +325,12 @@ func TestWebhookProcessing_WithdrawalWebhook(t *testing.T) {
 		err = withdrawalRepo.UpdateStatus(ctx, withdrawal.ID, domain.WithdrawalStatusSent, domain.WithdrawalStatusFinished)
 		require.NoError(t, err)
 
-		// Finalize debit
-		debitResult, err := walletClient.FinalizeDebit(ctx, client.FinalizeDebitRequest{
+		// Settle the reservation (the locked amount left the platform)
+		debitResult, err := walletClient.SettleFunds(ctx, client.SettleRequest{
 			UserID:         userID,
-			Currency:       "USD",
-			Amount:         withdrawal.Amount,
-			IdempotencyKey: "withdrawal:" + withdrawalID,
-			ReferenceID:    withdrawalID,
+			Reference:      service.WithdrawalLockReference(withdrawal.UUID),
+			ReferenceType:  service.WithdrawalLockReferenceType,
+			IdempotencyKey: "withdrawal:" + withdrawal.UUID.String(),
 		})
 		require.NoError(t, err)
 		assert.NotEmpty(t, debitResult.TransactionID)
@@ -386,11 +387,12 @@ func TestWebhookProcessing_WithdrawalWebhook(t *testing.T) {
 		require.NoError(t, err)
 
 		// Lock funds
-		lockResult, err := walletClient.LockFunds(ctx, client.LockRequest{
-			UserID:         testUserID,
-			Currency:       "USD",
-			Amount:         withdrawal.Amount,
-			IdempotencyKey: "lock:" + withdrawalID,
+		_, err = walletClient.LockFunds(ctx, client.LockRequest{
+			UserID:        testUserID,
+			Currency:      "USD",
+			Amount:        withdrawal.Amount,
+			Reference:     service.WithdrawalLockReference(withdrawal.UUID),
+			ReferenceType: service.WithdrawalLockReferenceType,
 		})
 		require.NoError(t, err)
 
@@ -398,8 +400,12 @@ func TestWebhookProcessing_WithdrawalWebhook(t *testing.T) {
 		balanceAfterLock, err := walletClient.GetBalance(ctx, testUserID, "USD")
 		require.NoError(t, err)
 
-		// Process failed webhook - unlock funds
-		err = walletClient.UnlockFunds(ctx, lockResult.LockID, "unlock:"+withdrawalID)
+		// Process failed webhook - release the reservation
+		err = walletClient.UnlockFunds(ctx, client.UnlockRequest{
+			UserID:        testUserID,
+			Reference:     service.WithdrawalLockReference(withdrawal.UUID),
+			ReferenceType: service.WithdrawalLockReferenceType,
+		})
 		require.NoError(t, err)
 
 		// Update status

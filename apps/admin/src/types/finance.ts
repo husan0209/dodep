@@ -20,12 +20,20 @@ export type DepositMethod =
   | "e_wallet"
   | "crypto"
   | "local";
+/**
+ * Withdrawal lifecycle as owned by Payment Service.
+ * `pending_review` means the funds are reserved in the wallet and a finance
+ * operator must approve or reject before the payout is sent to the provider.
+ */
 export type WithdrawalStatus =
-  | "pending"
+  | "pending_review"
   | "approved"
   | "processing"
-  | "completed"
+  | "sending"
+  | "sent"
+  | "finished"
   | "rejected"
+  | "failed"
   | "cancelled";
 
 export interface Transaction {
@@ -59,19 +67,22 @@ export interface Deposit {
 }
 
 export interface Withdrawal {
+  /** Payment Service withdrawal UUID — the id used by approve/reject. */
   id: string;
   user_id: string;
   amount: string;
   currency_code: string;
-  method: DepositMethod;
-  destination: string;
   status: WithdrawalStatus;
-  psp_reference: string | null;
-  reviewed_by: string | null;
-  reviewed_at: string | null;
-  rejection_reason: string | null;
+  /** Provider (NOWPayments) payout id; empty until the payout is created. */
+  psp_reference: string;
+  destination: string;
+  reviewed_by: string;
+  rejection_reason: string;
+  idempotency_key: string;
   created_at: string;
-  completed_at: string | null;
+  updated_at: string;
+  completed_at: string;
+  approved_at: string;
 }
 
 export interface WalletBalance {
@@ -94,4 +105,18 @@ export interface FinanceSearchParams {
   created_to?: string;
   page?: number;
   page_size?: number;
+}
+
+/**
+ * Cursor pagination as returned by Payment Service. Page numbers are not
+ * available: the queue is read with a keyset cursor so concurrent approvals
+ * cannot make rows shift between pages.
+ */
+export interface CursorPage<T> {
+  data: T[];
+  pagination: {
+    next_cursor: string;
+    prev_cursor: string;
+    has_more: boolean;
+  };
 }

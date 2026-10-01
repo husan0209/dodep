@@ -61,7 +61,7 @@ impl IdempotencyService {
         let full_key = format!("{}{}", self.key_prefix, key);
         
         // SET with EX (expiry) - 24 hours by default
-        conn.set_ex(&full_key, txn_id.to_string(), self.ttl_secs).await?;
+        conn.set_ex::<_, _, ()>(&full_key, txn_id.to_string(), self.ttl_secs).await?;
         
         debug!(key = %key, txn_id = %txn_id, "Set idempotency key");
         

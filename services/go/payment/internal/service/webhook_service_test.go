@@ -62,7 +62,7 @@ func newTestWebhookService(
 
 func TestWebhookService_ProcessDepositWebhook_Success(t *testing.T) {
 	ctx := context.Background()
-	
+
 	payment := &domain.Payment{
 		ID:              1,
 		UUID:            uuid.New(),
@@ -76,7 +76,7 @@ func TestWebhookService_ProcessDepositWebhook_Success(t *testing.T) {
 		PayAddress:      "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
 		Status:          domain.PaymentStatusWaiting,
 	}
-	
+
 	paymentRepo := &MockPaymentRepository{
 		GetByPaymentIDFunc: func(ctx context.Context, paymentID string) (*domain.Payment, error) {
 			return payment, nil
@@ -86,7 +86,7 @@ func TestWebhookService_ProcessDepositWebhook_Success(t *testing.T) {
 			return nil
 		},
 	}
-	
+
 	idempotencyRepo := &MockIdempotencyRepository{
 		GetFunc: func(ctx context.Context, key string) ([]byte, bool, error) {
 			return nil, false, nil // Not processed yet
@@ -95,9 +95,9 @@ func TestWebhookService_ProcessDepositWebhook_Success(t *testing.T) {
 			return nil
 		},
 	}
-	
+
 	auditLogRepo := &MockAuditLogRepository{}
-	
+
 	wallet := &MockWalletClient{
 		CreditWalletFunc: func(ctx context.Context, req client.CreditRequest) (*client.CreditResult, error) {
 			return &client.CreditResult{
@@ -106,13 +106,13 @@ func TestWebhookService_ProcessDepositWebhook_Success(t *testing.T) {
 			}, nil
 		},
 	}
-	
+
 	nowpayments := &MockNOWPaymentsClient{
 		VerifyWebhookSignatureFunc: func(payload []byte, signature string) bool {
 			return true // Valid signature
 		},
 	}
-	
+
 	// Create webhook payload
 	webhookPayload := client.WebhookPayload{
 		PaymentID:       "np-payment-123",
@@ -125,14 +125,14 @@ func TestWebhookService_ProcessDepositWebhook_Success(t *testing.T) {
 		OutcomeAmount:   decimal.NewFromFloat(100.0),
 		OutcomeCurrency: "USD",
 	}
-	
+
 	payloadBytes, _ := json.Marshal(webhookPayload)
-	
+
 	// Verify signature check
 	if !nowpayments.VerifyWebhookSignature(payloadBytes, "valid-signature") {
 		t.Error("expected signature to be valid")
 	}
-	
+
 	// Verify payment retrieval
 	retrievedPayment, err := paymentRepo.GetByPaymentID(ctx, "np-payment-123")
 	if err != nil {
@@ -141,7 +141,7 @@ func TestWebhookService_ProcessDepositWebhook_Success(t *testing.T) {
 	if retrievedPayment == nil {
 		t.Fatal("expected payment to be retrieved")
 	}
-	
+
 	// Verify wallet credit would be called
 	_, err = wallet.CreditWallet(ctx, client.CreditRequest{
 		UserID:         payment.UserID,
@@ -154,7 +154,7 @@ func TestWebhookService_ProcessDepositWebhook_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error crediting wallet: %v", err)
 	}
-	
+
 	_ = ctx
 	_ = idempotencyRepo
 	_ = auditLogRepo
@@ -162,48 +162,48 @@ func TestWebhookService_ProcessDepositWebhook_Success(t *testing.T) {
 
 func TestWebhookService_ProcessDepositWebhook_InvalidSignature(t *testing.T) {
 	ctx := context.Background()
-	
+
 	nowpayments := &MockNOWPaymentsClient{
 		VerifyWebhookSignatureFunc: func(payload []byte, signature string) bool {
 			return false // Invalid signature
 		},
 	}
-	
+
 	payload := []byte(`{"payment_id": "np-payment-123", "payment_status": "finished"}`)
-	
+
 	// Verify signature check fails
 	if nowpayments.VerifyWebhookSignature(payload, "invalid-signature") {
 		t.Error("expected signature to be invalid")
 	}
-	
+
 	// Verify error would be returned
 	err := domain.NewDetailedError(domain.ErrWebhookSignatureInvalid, domain.ErrCodeWebhookSignatureInvalid)
 	if err == nil {
 		t.Error("expected webhook signature invalid error")
 	}
-	
+
 	_ = ctx
 }
 
 func TestWebhookService_ProcessDepositWebhook_AlreadyProcessed(t *testing.T) {
 	ctx := context.Background()
-	
+
 	idempotencyRepo := &MockIdempotencyRepository{
 		GetFunc: func(ctx context.Context, key string) ([]byte, bool, error) {
 			return []byte("processed"), true, nil // Already processed
 		},
 	}
-	
+
 	// Verify idempotency check
 	processed, exists, err := idempotencyRepo.Get(ctx, "webhook:deposit:np-payment-123")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	
+
 	if !exists {
 		t.Error("expected webhook to be already processed")
 	}
-	
+
 	if string(processed) != "processed" {
 		t.Errorf("expected processed status, got %s", string(processed))
 	}
@@ -211,13 +211,13 @@ func TestWebhookService_ProcessDepositWebhook_AlreadyProcessed(t *testing.T) {
 
 func TestWebhookService_ProcessDepositWebhook_PaymentNotFound(t *testing.T) {
 	ctx := context.Background()
-	
+
 	paymentRepo := &MockPaymentRepository{
 		GetByPaymentIDFunc: func(ctx context.Context, paymentID string) (*domain.Payment, error) {
 			return nil, errors.New("payment not found")
 		},
 	}
-	
+
 	_, err := paymentRepo.GetByPaymentID(ctx, "non-existent-payment")
 	if err == nil {
 		t.Error("expected error for non-existent payment")
@@ -262,7 +262,7 @@ func TestWebhookService_ProcessDepositWebhook_StatusTransitions(t *testing.T) {
 			expectedStatus: domain.PaymentStatusExpired,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Verify status transition is valid
@@ -276,7 +276,7 @@ func TestWebhookService_ProcessDepositWebhook_StatusTransitions(t *testing.T) {
 
 func TestWebhookService_ProcessWithdrawalWebhook_Success(t *testing.T) {
 	ctx := context.Background()
-	
+
 	withdrawal := &domain.Withdrawal{
 		ID:             1,
 		UUID:           uuid.New(),
@@ -290,7 +290,7 @@ func TestWebhookService_ProcessWithdrawalWebhook_Success(t *testing.T) {
 		Address:        "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
 		Status:         domain.WithdrawalStatusProcessing,
 	}
-	
+
 	withdrawalRepo := &MockWithdrawalRepository{
 		GetByWithdrawalIDFunc: func(ctx context.Context, withdrawalID string) (*domain.Withdrawal, error) {
 			return withdrawal, nil
@@ -300,7 +300,7 @@ func TestWebhookService_ProcessWithdrawalWebhook_Success(t *testing.T) {
 			return nil
 		},
 	}
-	
+
 	idempotencyRepo := &MockIdempotencyRepository{
 		GetFunc: func(ctx context.Context, key string) ([]byte, bool, error) {
 			return nil, false, nil // Not processed yet
@@ -309,23 +309,23 @@ func TestWebhookService_ProcessWithdrawalWebhook_Success(t *testing.T) {
 			return nil
 		},
 	}
-	
+
 	auditLogRepo := &MockAuditLogRepository{}
-	
+
 	wallet := &MockWalletClient{
-		FinalizeDebitFunc: func(ctx context.Context, req client.FinalizeDebitRequest) (*client.DebitResult, error) {
+		SettleFundsFunc: func(ctx context.Context, req client.SettleRequest) (*client.DebitResult, error) {
 			return &client.DebitResult{
 				TransactionID: "tx-123",
 			}, nil
 		},
 	}
-	
+
 	nowpayments := &MockNOWPaymentsClient{
 		VerifyWebhookSignatureFunc: func(payload []byte, signature string) bool {
 			return true
 		},
 	}
-	
+
 	// Create webhook payload
 	webhookPayload := client.WebhookPayload{
 		PaymentID:       "np-withdrawal-123",
@@ -335,14 +335,14 @@ func TestWebhookService_ProcessWithdrawalWebhook_Success(t *testing.T) {
 		OutcomeAmount:   decimal.NewFromFloat(45.0),
 		OutcomeCurrency: "USD",
 	}
-	
+
 	payloadBytes, _ := json.Marshal(webhookPayload)
-	
+
 	// Verify signature check
 	if !nowpayments.VerifyWebhookSignature(payloadBytes, "valid-signature") {
 		t.Error("expected signature to be valid")
 	}
-	
+
 	// Verify withdrawal retrieval
 	retrievedWithdrawal, err := withdrawalRepo.GetByWithdrawalID(ctx, "np-withdrawal-123")
 	if err != nil {
@@ -351,19 +351,18 @@ func TestWebhookService_ProcessWithdrawalWebhook_Success(t *testing.T) {
 	if retrievedWithdrawal == nil {
 		t.Fatal("expected withdrawal to be retrieved")
 	}
-	
-	// Verify wallet finalize debit would be called
-	_, err = wallet.FinalizeDebit(ctx, client.FinalizeDebitRequest{
+
+	// Verify wallet settlement of the reservation would be called
+	_, err = wallet.SettleFunds(ctx, client.SettleRequest{
 		UserID:         withdrawal.UserID,
-		Currency:       "USD",
-		Amount:         withdrawal.FiatAmount,
-		IdempotencyKey: "withdrawal:" + withdrawal.WithdrawalID,
-		ReferenceID:    withdrawal.WithdrawalID,
+		Reference:      WithdrawalLockReference(withdrawal.UUID),
+		ReferenceType:  WithdrawalLockReferenceType,
+		IdempotencyKey: "withdrawal:" + withdrawal.UUID.String(),
 	})
 	if err != nil {
-		t.Fatalf("unexpected error finalizing debit: %v", err)
+		t.Fatalf("unexpected error settling funds: %v", err)
 	}
-	
+
 	_ = ctx
 	_ = idempotencyRepo
 	_ = auditLogRepo
@@ -371,7 +370,7 @@ func TestWebhookService_ProcessWithdrawalWebhook_Success(t *testing.T) {
 
 func TestWebhookService_ProcessWithdrawalWebhook_Failed_UnlockFunds(t *testing.T) {
 	ctx := context.Background()
-	
+
 	withdrawal := &domain.Withdrawal{
 		ID:             1,
 		UUID:           uuid.New(),
@@ -385,7 +384,7 @@ func TestWebhookService_ProcessWithdrawalWebhook_Failed_UnlockFunds(t *testing.T
 		Address:        "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
 		Status:         domain.WithdrawalStatusProcessing,
 	}
-	
+
 	withdrawalRepo := &MockWithdrawalRepository{
 		GetByWithdrawalIDFunc: func(ctx context.Context, withdrawalID string) (*domain.Withdrawal, error) {
 			return withdrawal, nil
@@ -395,44 +394,48 @@ func TestWebhookService_ProcessWithdrawalWebhook_Failed_UnlockFunds(t *testing.T
 			return nil
 		},
 	}
-	
+
 	wallet := &MockWalletClient{
-		UnlockFundsFunc: func(ctx context.Context, lockID string, idempotencyKey string) error {
-			// Funds unlocked after failed withdrawal
+		UnlockFundsFunc: func(ctx context.Context, req client.UnlockRequest) error {
+			// Funds released after failed withdrawal
 			return nil
 		},
 	}
-	
+
 	// Simulate failed withdrawal
 	webhookPayload := client.WebhookPayload{
 		PaymentID:     "np-withdrawal-123",
 		PaymentStatus: "failed",
 	}
-	
+
 	_, _ = json.Marshal(webhookPayload)
-	
-	// Verify unlock funds would be called
-	err := wallet.UnlockFunds(ctx, withdrawal.WithdrawalID, "withdrawal_unlock:"+withdrawal.WithdrawalID)
+
+	// Verify the reservation release would be called
+	err := wallet.UnlockFunds(ctx, client.UnlockRequest{
+		UserID:        withdrawal.UserID,
+		Reference:     WithdrawalLockReference(withdrawal.UUID),
+		ReferenceType: WithdrawalLockReferenceType,
+	})
 	if err != nil {
-		t.Fatalf("unexpected error unlocking funds: %v", err)
+		t.Fatalf("unexpected error releasing funds: %v", err)
 	}
-	
+
 	// Verify status update
 	err = withdrawalRepo.UpdateStatus(ctx, withdrawal.ID, domain.WithdrawalStatusProcessing, domain.WithdrawalStatusFailed)
 	if err != nil {
 		t.Fatalf("unexpected error updating status: %v", err)
 	}
-	
+
 	if withdrawal.Status != domain.WithdrawalStatusFailed {
 		t.Errorf("expected status failed, got %s", withdrawal.Status)
 	}
-	
+
 	_ = ctx
 }
 
 func TestWebhookService_MapPaymentStatus(t *testing.T) {
 	service := &WebhookService{}
-	
+
 	tests := []struct {
 		input    string
 		expected domain.PaymentStatus
@@ -448,7 +451,7 @@ func TestWebhookService_MapPaymentStatus(t *testing.T) {
 		{"refunded", domain.PaymentStatusRefunded},
 		{"unknown", domain.PaymentStatusPending}, // Default
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
 			result := service.mapPaymentStatus(tt.input)
@@ -461,7 +464,7 @@ func TestWebhookService_MapPaymentStatus(t *testing.T) {
 
 func TestWebhookService_MapWithdrawalStatus(t *testing.T) {
 	service := &WebhookService{}
-	
+
 	tests := []struct {
 		input    string
 		expected domain.WithdrawalStatus
@@ -474,7 +477,7 @@ func TestWebhookService_MapWithdrawalStatus(t *testing.T) {
 		{"cancelled", domain.WithdrawalStatusCancelled},
 		{"unknown", domain.WithdrawalStatusProcessing}, // Default
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
 			result := service.mapWithdrawalStatus(tt.input)
@@ -487,7 +490,7 @@ func TestWebhookService_MapWithdrawalStatus(t *testing.T) {
 
 func TestWebhookService_LogAudit(t *testing.T) {
 	ctx := context.Background()
-	
+
 	var createdLog *repository.AuditLog
 	auditLogRepo := &MockAuditLogRepository{
 		CreateFunc: func(ctx context.Context, log *repository.AuditLog) error {
@@ -495,30 +498,30 @@ func TestWebhookService_LogAudit(t *testing.T) {
 			return nil
 		},
 	}
-	
+
 	service := &WebhookService{
 		auditLogRepo: auditLogRepo,
 	}
-	
+
 	amount := decimal.NewFromFloat(100.0)
 	service.logAudit(ctx, 12345, "deposit", 1, "np-payment-123", "waiting", "finished", &amount)
-	
+
 	if createdLog == nil {
 		t.Fatal("expected audit log to be created")
 	}
-	
+
 	if createdLog.UserID != 12345 {
 		t.Errorf("expected user ID 12345, got %d", createdLog.UserID)
 	}
-	
+
 	if createdLog.OperationType != "deposit" {
 		t.Errorf("expected operation type deposit, got %s", createdLog.OperationType)
 	}
-	
+
 	if createdLog.PreviousStatus != "waiting" {
 		t.Errorf("expected previous status waiting, got %s", createdLog.PreviousStatus)
 	}
-	
+
 	if createdLog.NewStatus != "finished" {
 		t.Errorf("expected new status finished, got %s", createdLog.NewStatus)
 	}
@@ -526,7 +529,7 @@ func TestWebhookService_LogAudit(t *testing.T) {
 
 func TestWebhookService_HandleDepositFinished_ActualAmountDiffers(t *testing.T) {
 	ctx := context.Background()
-	
+
 	payment := &domain.Payment{
 		ID:              1,
 		UserID:          12345,
@@ -535,7 +538,7 @@ func TestWebhookService_HandleDepositFinished_ActualAmountDiffers(t *testing.T) 
 		FiatAmount:      decimal.NewFromFloat(100.0),
 		Status:          domain.PaymentStatusConfirmed,
 	}
-	
+
 	var actualAmountUpdated bool
 	paymentRepo := &MockPaymentRepository{
 		UpdateStatusFunc: func(ctx context.Context, id int64, fromStatus, toStatus domain.PaymentStatus) error {
@@ -547,13 +550,13 @@ func TestWebhookService_HandleDepositFinished_ActualAmountDiffers(t *testing.T) 
 			return nil
 		},
 	}
-	
+
 	wallet := &MockWalletClient{
 		CreditWalletFunc: func(ctx context.Context, req client.CreditRequest) (*client.CreditResult, error) {
 			return &client.CreditResult{TransactionID: "tx-123"}, nil
 		},
 	}
-	
+
 	// Simulate webhook with different actual amount
 	payload := client.WebhookPayload{
 		PaymentID:       "np-payment-123",
@@ -561,7 +564,7 @@ func TestWebhookService_HandleDepositFinished_ActualAmountDiffers(t *testing.T) 
 		OutcomeAmount:   decimal.NewFromFloat(105.0), // Different from requested
 		OutcomeCurrency: "USD",
 	}
-	
+
 	// Verify wallet credit
 	_, err := wallet.CreditWallet(ctx, client.CreditRequest{
 		UserID:         payment.UserID,
@@ -572,13 +575,13 @@ func TestWebhookService_HandleDepositFinished_ActualAmountDiffers(t *testing.T) 
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	
+
 	// Verify status update
 	err = paymentRepo.UpdateStatus(ctx, payment.ID, payment.Status, domain.PaymentStatusFinished)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	
+
 	// Verify actual amount update would be called
 	if !payload.OutcomeAmount.Equal(payment.RequestedAmount) {
 		err := paymentRepo.UpdateActualAmount(ctx, payment.ID, payload.OutcomeAmount)
@@ -586,7 +589,7 @@ func TestWebhookService_HandleDepositFinished_ActualAmountDiffers(t *testing.T) 
 			t.Fatalf("unexpected error updating actual amount: %v", err)
 		}
 	}
-	
+
 	_ = ctx
 	_ = actualAmountUpdated
 }
