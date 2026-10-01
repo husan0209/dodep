@@ -278,6 +278,7 @@ type AffiliateAdjustment struct {
 	Amount         decimal.Decimal
 	Currency       string
 	Reason         string
+	ReferenceID    string
 	CreatedBy      string
 	CreatedAt      time.Time
 }

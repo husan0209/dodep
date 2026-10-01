@@ -6,14 +6,16 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/opus-casino/affiliate/internal/domain"
+	"github.com/opus-casino/affiliate/internal/fraud"
 	"github.com/opus-casino/affiliate/internal/repository"
 	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 )
 
 type AffiliateService struct {
-	repo   repository.AffiliateRepository
-	logger *zap.Logger
+	repo     repository.AffiliateRepository
+	logger   *zap.Logger
+	fraudCfg fraud.Config
 }
 
 func NewAffiliateService(repo repository.AffiliateRepository, logger *zap.Logger) *AffiliateService {
@@ -22,8 +24,83 @@ func NewAffiliateService(repo repository.AffiliateRepository, logger *zap.Logger
 	}
 
 	return &AffiliateService{
-		repo:   repo,
-		logger: logger,
+		repo:     repo,
+		logger:   logger,
+		fraudCfg: fraud.DefaultConfig(),
+	}
+}
+
+// SetFraudConfig overrides the anti-fraud thresholds (risk-manager tuning
+// without code changes).
+func (s *AffiliateService) SetFraudConfig(cfg fraud.Config) {
+	s.fraudCfg = cfg
+}
+
+// fraudStore adapts the repository to the fraud engine's signal interface.
+type fraudStore struct {
+	repo repository.AffiliateRepository
+}
+
+func (f fraudStore) GetClickByClickID(ctx context.Context, clickID string) (*domain.AffiliateClick, error) {
+	return f.repo.GetClickByClickID(ctx, clickID)
+}
+
+func (f fraudStore) CountClicksSince(ctx context.Context, affiliateID uuid.UUID, since time.Time) (int64, error) {
+	return f.repo.CountClicksSince(ctx, affiliateID, since)
+}
+
+func (f fraudStore) CountAttributionsSince(ctx context.Context, affiliateID uuid.UUID, since time.Time) (int64, error) {
+	return f.repo.CountAttributionsSince(ctx, affiliateID, since)
+}
+
+func (f fraudStore) CountReferredUsersByDevice(ctx context.Context, affiliateID uuid.UUID, deviceFP string, since time.Time) (int64, error) {
+	return f.repo.CountReferredUsersByDevice(ctx, affiliateID, deviceFP, since)
+}
+
+func (f fraudStore) CountReferredUsersByIP(ctx context.Context, affiliateID uuid.UUID, ipHash string, since time.Time) (int64, error) {
+	return f.repo.CountReferredUsersByIP(ctx, affiliateID, ipHash, since)
+}
+
+// evaluateAttributionFraud runs the automatic anti-fraud engine after a
+// successful binding and persists one open flag per finding. It never fails
+// the attribution itself: fraud must not break legitimate signups.
+func (s *AffiliateService) evaluateAttributionFraud(ctx context.Context, attribution *domain.AffiliateAttribution) {
+	verdict, err := fraud.Evaluate(ctx, fraudStore{repo: s.repo}, s.fraudCfg, fraud.Input{
+		AffiliateID:    attribution.AffiliateID,
+		ReferredUserID: attribution.ReferredUserID,
+		ClickID:        attribution.ClickID,
+		EvaluatedAt:    time.Now().UTC(),
+	})
+	if err != nil {
+		s.logger.Warn("affiliate fraud evaluation failed",
+			zap.String("attribution_id", attribution.ID.String()),
+			zap.Error(err),
+		)
+		return
+	}
+	if verdict == nil {
+		return
+	}
+	for _, finding := range verdict.Findings {
+		_, flagErr := s.FlagAffiliateFraud(ctx, FlagAffiliateFraudInput{
+			AffiliateID:    attribution.AffiliateID,
+			ReferredUserID: attribution.ReferredUserID,
+			FlagType:       finding.RuleID,
+			Severity:       finding.Severity,
+			Details:        finding.Details,
+		})
+		if flagErr != nil {
+			s.logger.Warn("affiliate fraud flag creation failed",
+				zap.String("rule_id", finding.RuleID),
+				zap.Error(flagErr),
+			)
+		}
+	}
+	if verdict.RecommendSuspension {
+		s.logger.Warn("affiliate recommended for suspension",
+			zap.String("affiliate_id", attribution.AffiliateID.String()),
+			zap.String("max_severity", string(verdict.MaxSeverity)),
+		)
 	}
 }
 
@@ -331,6 +408,9 @@ func (s *AffiliateService) BindReferredUser(ctx context.Context, in BindReferred
 		return nil, err
 	}
 
+	// Automatic anti-fraud screening (flag-first, never blocks the binding).
+	s.evaluateAttributionFraud(ctx, attribution)
+
 	return attribution, nil
 }
 
@@ -593,6 +673,10 @@ func (s *AffiliateService) resolveCommissionPlan(ctx context.Context, in Approve
 		if plan != nil {
 			return s.overridePlan(plan, in), nil
 		}
+		// Explicit plan ID is unknown: fall through to the default plan
+		// WITHOUT stamping the unknown ID (it would violate
+		// affiliate_profiles_commission_plan_id_fkey on profile insert).
+		in.CommissionPlanID = uuid.Nil
 	}
 
 	plan, err := s.repo.GetDefaultCommissionPlan(ctx)
@@ -600,13 +684,9 @@ func (s *AffiliateService) resolveCommissionPlan(ctx context.Context, in Approve
 		return nil, err
 	}
 	if plan == nil {
-		plan = &domain.AffiliateCommissionPlan{
-			ID:             in.CommissionPlanID,
-			Name:           "manual-plan",
-			CommissionType: "revshare",
-			ApprovalMode:   domain.ApprovalModeManual,
-			PayoutSchedule: domain.PayoutScheduleMonthly,
-		}
+		// No plan row exists at all (seed missing): fail with a clear
+		// domain error instead of crashing on the FK constraint.
+		return nil, domain.ErrCommissionPlanNotFound
 	}
 	return s.overridePlan(plan, in), nil
 }
@@ -666,6 +746,10 @@ func (s *AffiliateService) GetProfileByID(ctx context.Context, affiliateID uuid.
 	return s.repo.GetProfileByID(ctx, affiliateID)
 }
 
+func (s *AffiliateService) GetCommissionPlanByID(ctx context.Context, planID uuid.UUID) (*domain.AffiliateCommissionPlan, error) {
+	return s.repo.GetCommissionPlanByID(ctx, planID)
+}
+
 func (s *AffiliateService) GetDashboard(ctx context.Context, affiliateID uuid.UUID) (*domain.AffiliateDashboard, error) {
 	return s.repo.GetDashboard(ctx, affiliateID)
 }
@@ -723,6 +807,143 @@ func (s *AffiliateService) UpdateCommissionRate(ctx context.Context, affiliateID
 	}
 
 	return s.repo.UpdateCommissionRate(ctx, affiliateID, rate)
+}
+
+// ReverseCommissionInput describes a manual commission reversal.
+type ReverseCommissionInput struct {
+	AffiliateID uuid.UUID
+	EarningID   uuid.UUID
+	Reason      string
+	ReversedBy  string
+}
+
+// ReverseCommission cancels an accrued commission (fraud, chargeback,
+// correction) and moves the money to the `reversed` ledger account.
+// It is idempotent: reversing an already reversed earning is a no-op.
+func (s *AffiliateService) ReverseCommission(
+	ctx context.Context,
+	in ReverseCommissionInput,
+) (*domain.AffiliateEarning, error) {
+	if in.Reason == "" {
+		return nil, domain.ErrValidationFailed
+	}
+
+	earnings, err := s.repo.ListEarnings(ctx, in.AffiliateID, "", 0)
+	if err != nil {
+		return nil, err
+	}
+	var target *domain.AffiliateEarning
+	for i := range earnings {
+		if earnings[i].ID == in.EarningID {
+			target = &earnings[i]
+			break
+		}
+	}
+	if target == nil {
+		return nil, domain.ErrEarningNotFound
+	}
+
+	reversed, err := s.repo.ReverseEarning(ctx, in.EarningID, in.Reason, in.ReversedBy)
+	if err != nil {
+		return nil, err
+	}
+
+	s.logger.Info("commission reversed",
+		zap.String("affiliate_id", in.AffiliateID.String()),
+		zap.String("earning_id", in.EarningID.String()),
+		zap.String("amount", reversed.CommissionAmount.String()),
+		zap.String("reason", in.Reason),
+		zap.String("reversed_by", in.ReversedBy),
+	)
+
+	return reversed, nil
+}
+
+// ListLedgerBalances returns the affiliate ledger balances (pending,
+// available, paid, reversed, adjusted).
+func (s *AffiliateService) ListLedgerBalances(
+	ctx context.Context,
+	affiliateID uuid.UUID,
+) ([]repository.LedgerAccountBalance, error) {
+	if _, err := s.repo.GetProfileByID(ctx, affiliateID); err != nil {
+		return nil, err
+	}
+	return s.repo.GetLedgerBalances(ctx, affiliateID)
+}
+
+// ReconcileAffiliate compares ledger balances with balances derived from
+// earnings/payouts/adjustments. Any divergence must block payouts.
+func (s *AffiliateService) ReconcileAffiliate(
+	ctx context.Context,
+	affiliateID uuid.UUID,
+) (*repository.LedgerReconciliationReport, error) {
+	report, err := s.repo.ReconcileLedger(ctx, affiliateID)
+	if err != nil {
+		return nil, err
+	}
+	if report.Balanced {
+		s.logger.Info("affiliate ledger reconciled",
+			zap.String("affiliate_id", affiliateID.String()),
+			zap.String("currency", report.Currency),
+		)
+		return report, nil
+	}
+
+	s.logger.Error("affiliate ledger divergence detected",
+		zap.String("affiliate_id", affiliateID.String()),
+		zap.String("currency", report.Currency),
+		zap.Strings("divergences", report.Divergences),
+	)
+	return report, nil
+}
+
+// ListCommissionPlans returns all commission plans for admin management.
+func (s *AffiliateService) ListCommissionPlans(ctx context.Context) ([]domain.AffiliateCommissionPlan, error) {
+	return s.repo.ListCommissionPlans(ctx)
+}
+
+// ChangeCommissionPlan switches an affiliate to another commission plan,
+// snapshotting the plan's rate/hold/min-payout onto the profile.
+// Only active plans can be assigned; past accruals keep their old rate.
+func (s *AffiliateService) ChangeCommissionPlan(ctx context.Context, affiliateID uuid.UUID, planID uuid.UUID) (*domain.AffiliateProfile, error) {
+	profile, err := s.repo.GetProfileByID(ctx, affiliateID)
+	if err != nil {
+		return nil, err
+	}
+	if profile == nil {
+		return nil, domain.ErrAffiliateNotFound
+	}
+
+	plan, err := s.repo.GetCommissionPlanByID(ctx, planID)
+	if err != nil {
+		return nil, err
+	}
+	if plan == nil {
+		return nil, domain.ErrCommissionPlanNotFound
+	}
+	if !plan.IsActive {
+		return nil, domain.ErrInvalidCommissionAmount
+	}
+
+	if err := s.repo.UpdateProfilePlan(ctx, affiliateID, plan); err != nil {
+		return nil, err
+	}
+
+	updated, err := s.repo.GetProfileByID(ctx, affiliateID)
+	if err != nil {
+		return nil, err
+	}
+	if updated == nil {
+		return nil, domain.ErrAffiliateNotFound
+	}
+
+	s.logger.Info("commission plan changed",
+		zap.String("affiliate_id", affiliateID.String()),
+		zap.String("plan_id", plan.ID.String()),
+		zap.String("rate", plan.CommissionRate.String()),
+	)
+
+	return updated, nil
 }
 
 type CreateAdjustmentInput struct {

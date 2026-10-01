@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"net"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 
@@ -12,13 +14,17 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"go.uber.org/zap"
+	"google.golang.org/grpc"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 
 	"github.com/opus-casino/affiliate/internal/config"
+	"github.com/opus-casino/affiliate/internal/consumer"
 	"github.com/opus-casino/affiliate/internal/event"
+	grpcserver "github.com/opus-casino/affiliate/internal/grpc"
 	"github.com/opus-casino/affiliate/internal/repository"
 	"github.com/opus-casino/affiliate/internal/service"
+	pb "github.com/opus-casino/proto/gen/go/affiliate/v1"
 )
 
 // corsOriginsFromEnv reads $CORS_ORIGINS (comma-separated) and trims spaces.
@@ -57,8 +63,30 @@ func main() {
 	// 4. Initialize repository → service
 	repo := repository.NewGormAffiliateRepository(db, log)
 	affiliateService := service.NewAffiliateService(repo, log)
-	publisher := event.NewLogPublisher(log)
+
+	// Outbox delivery: real Redpanda producer when REDPANDA_BROKERS is set,
+	// LogPublisher fallback for local dev without a broker.
+	var publisher event.Publisher = event.NewLogPublisher(log)
+	var closePublisher func()
+	if brokers := splitBrokers(cfg.RedpandaBrokers); len(brokers) > 0 {
+		rp, err := event.NewRedpandaPublisher(
+			context.Background(),
+			event.RedpandaPublisherConfig{Brokers: brokers},
+			log,
+		)
+		if err != nil {
+			log.Fatal("Failed to connect to Redpanda", zap.Error(err))
+		}
+		publisher = rp
+		closePublisher = rp.Close
+		log.Info("Outbox delivery via Redpanda", zap.Strings("brokers", brokers))
+	} else {
+		log.Info("REDPANDA_BROKERS unset: outbox delivery via LogPublisher")
+	}
 	outboxWorker := event.NewOutboxWorker(repo, publisher, log, cfg.OutboxPollInterval, cfg.OutboxBatchSize)
+
+	// 4a. Initialize gRPC handler
+	grpcHandler := grpcserver.NewAffiliateGRPCHandler(affiliateService, log)
 
 	// 5. Initialize Fiber HTTP server
 	app := fiber.New(fiber.Config{
@@ -100,6 +128,28 @@ func main() {
 	defer cancelWorkers()
 	go outboxWorker.Run(workerCtx)
 
+	// 10a. Start NGR consumer (if Redpanda is configured)
+	if cfg.RedpandaBrokers != "" {
+		go startNGRConsumer(workerCtx, cfg, affiliateService, log)
+	}
+
+	// 10b. Start gRPC server
+	grpcListener, err := net.Listen("tcp", ":"+strconv.Itoa(cfg.GRPCPort))
+	if err != nil {
+		log.Fatal("Failed to listen for gRPC", zap.Error(err))
+	}
+	grpcServer := grpc.NewServer(
+		grpc.MaxRecvMsgSize(16*1024*1024),
+		grpc.MaxSendMsgSize(16*1024*1024),
+	)
+	pb.RegisterAffiliateServiceServer(grpcServer, grpcHandler)
+	go func() {
+		log.Info("Starting gRPC server", zap.Int("port", cfg.GRPCPort))
+		if err := grpcServer.Serve(grpcListener); err != nil {
+			log.Error("gRPC server error", zap.Error(err))
+		}
+	}()
+
 	// 11. Start HTTP server
 	go func() {
 		port := cfg.HTTPPort
@@ -116,10 +166,26 @@ func main() {
 
 	log.Info("Shutting down Affiliate Service...")
 	cancelWorkers()
+	if closePublisher != nil {
+		closePublisher()
+	}
+	grpcServer.GracefulStop()
 	if err := app.Shutdown(); err != nil {
 		log.Error("Failed to shutdown HTTP server", zap.Error(err))
 	}
 	log.Info("Affiliate Service stopped")
+}
+
+// splitBrokers parses a comma-separated broker list, dropping empties.
+func splitBrokers(raw string) []string {
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if t := strings.TrimSpace(p); t != "" {
+			out = append(out, t)
+		}
+	}
+	return out
 }
 
 func healthHandler(c *fiber.Ctx) error {
@@ -128,4 +194,29 @@ func healthHandler(c *fiber.Ctx) error {
 
 func readyHandler(c *fiber.Ctx) error {
 	return c.SendString("ready")
+}
+
+// startNGRConsumer starts the Redpanda consumer for NGR events
+func startNGRConsumer(ctx context.Context, cfg *config.Config, svc *service.AffiliateService, log *zap.Logger) {
+	brokers := strings.Split(cfg.RedpandaBrokers, ",")
+	consumerCfg := consumer.DefaultNGRConsumerConfig()
+	consumerCfg.Brokers = brokers
+
+	franzCfg := consumer.FranzConsumerConfig{
+		Brokers: brokers,
+		GroupID: consumerCfg.GroupID,
+		Topics:  consumerCfg.Topics,
+	}
+
+	franzConsumer, err := consumer.NewFranzConsumer(ctx, franzCfg, log)
+	if err != nil {
+		log.Error("Failed to create Franz consumer", zap.Error(err))
+		return
+	}
+	defer franzConsumer.Close()
+
+	ngrConsumer := consumer.NewNGRConsumer(svc, log, consumerCfg)
+	if err := ngrConsumer.Run(ctx, franzConsumer); err != nil && err != context.Canceled {
+		log.Error("NGR consumer error", zap.Error(err))
+	}
 }

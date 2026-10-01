@@ -26,6 +26,9 @@ type Config struct {
 	// Environment
 	Env string
 
+	// Redpanda / Kafka
+	RedpandaBrokers string
+
 	// Outbox worker
 	OutboxPollInterval time.Duration
 	OutboxBatchSize    int
@@ -52,6 +55,9 @@ func Load() *Config {
 
 		// Environment
 		Env: getEnv("APP_ENV", "development"),
+
+		// Redpanda
+		RedpandaBrokers: getEnv("REDPANDA_BROKERS", ""),
 
 		// Outbox worker
 		OutboxPollInterval: getDurationEnv("OUTBOX_POLL_INTERVAL", 2*time.Second),

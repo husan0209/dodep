@@ -391,13 +391,14 @@ func handleDomainError(c *fiber.Ctx, err error) error {
 		return c.Status(409).JSON(fiber.Map{"error": err.Error()})
 	case domain.ErrAffiliateNotFound, domain.ErrEnrollmentNotFound,
 		domain.ErrAffiliateLinkNotFound, domain.ErrPayoutMethodNotFound,
-		domain.ErrPayoutNotFound:
+		domain.ErrPayoutNotFound, domain.ErrCommissionPlanNotFound:
 		return c.Status(404).JSON(fiber.Map{"error": err.Error()})
 	case domain.ErrAffiliateAlreadyExists, domain.ErrAttributionAlreadyBound:
 		return c.Status(409).JSON(fiber.Map{"error": err.Error()})
 	case domain.ErrSelfReferral, domain.ErrInvalidPayoutAmount,
 		domain.ErrMinPayoutNotReached, domain.ErrInvalidPayoutStatus,
-		domain.ErrInvalidCommissionAmount:
+		domain.ErrInvalidCommissionAmount, domain.ErrEarningNotReversible,
+		domain.ErrValidationFailed:
 		return c.Status(400).JSON(fiber.Map{"error": err.Error()})
 	case domain.ErrAffiliateKYCRequired, domain.ErrAffiliateFraudBlocked,
 		domain.ErrAffiliateInactive:

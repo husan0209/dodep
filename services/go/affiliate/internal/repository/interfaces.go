@@ -20,6 +20,8 @@ type AffiliateRepository interface {
 	UpdateProfileStatus(ctx context.Context, affiliateID uuid.UUID, from domain.AffiliateStatus, to domain.AffiliateStatus) error
 	GetCommissionPlanByID(ctx context.Context, planID uuid.UUID) (*domain.AffiliateCommissionPlan, error)
 	GetDefaultCommissionPlan(ctx context.Context) (*domain.AffiliateCommissionPlan, error)
+	ListCommissionPlans(ctx context.Context) ([]domain.AffiliateCommissionPlan, error)
+	UpdateProfilePlan(ctx context.Context, affiliateID uuid.UUID, plan *domain.AffiliateCommissionPlan) error
 
 	CreateLink(ctx context.Context, link *domain.AffiliateLink) error
 	ListLinksByAffiliateID(ctx context.Context, affiliateID uuid.UUID) ([]domain.AffiliateLink, error)
@@ -52,6 +54,18 @@ type AffiliateRepository interface {
 	ListAllFraudFlags(ctx context.Context, status domain.FraudFlagStatus, limit, offset int) ([]domain.AffiliateFraudFlag, int64, error)
 
 	ReleaseEligibleEarnings(ctx context.Context, now time.Time) (int64, error)
+
+	// Ledger (affiliate money is tracked separately from the player wallet)
+	GetLedgerBalances(ctx context.Context, affiliateID uuid.UUID) ([]LedgerAccountBalance, error)
+	ReconcileLedger(ctx context.Context, affiliateID uuid.UUID) (*LedgerReconciliationReport, error)
+	ReverseEarning(ctx context.Context, earningID uuid.UUID, reason, reversedBy string) (*domain.AffiliateEarning, error)
+
+	// Fraud signal queries (used by the automatic anti-fraud engine).
+	GetClickByClickID(ctx context.Context, clickID string) (*domain.AffiliateClick, error)
+	CountClicksSince(ctx context.Context, affiliateID uuid.UUID, since time.Time) (int64, error)
+	CountAttributionsSince(ctx context.Context, affiliateID uuid.UUID, since time.Time) (int64, error)
+	CountReferredUsersByDevice(ctx context.Context, affiliateID uuid.UUID, deviceFP string, since time.Time) (int64, error)
+	CountReferredUsersByIP(ctx context.Context, affiliateID uuid.UUID, ipHash string, since time.Time) (int64, error)
 
 	ListPendingOutboxEvents(ctx context.Context, limit int) ([]domain.OutboxEvent, error)
 	MarkOutboxEventPublished(ctx context.Context, eventID int64) error

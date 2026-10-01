@@ -43,6 +43,11 @@ type mockAffiliateRepository struct {
 	createFraudFlagFunc            func(context.Context, *domain.AffiliateFraudFlag) error
 	getOpenFraudFlagsFunc          func(context.Context, uuid.UUID) ([]domain.AffiliateFraudFlag, error)
 	releaseEligibleEarningsFunc    func(context.Context, time.Time) (int64, error)
+	getClickByClickIDFunc        func(context.Context, string) (*domain.AffiliateClick, error)
+	countClicksSinceFunc         func(context.Context, uuid.UUID, time.Time) (int64, error)
+	countAttributionsSinceFunc   func(context.Context, uuid.UUID, time.Time) (int64, error)
+	countReferredUsersByDeviceFunc func(context.Context, uuid.UUID, string, time.Time) (int64, error)
+	countReferredUsersByIPFunc   func(context.Context, uuid.UUID, string, time.Time) (int64, error)
 }
 
 func (m *mockAffiliateRepository) GetEnrollmentByUserID(ctx context.Context, userID int64) (*domain.AffiliateEnrollmentRequest, error) {
@@ -249,6 +254,26 @@ func (m *mockAffiliateRepository) UpdateCommissionRate(_ context.Context, _ uuid
 	return nil
 }
 
+func (m *mockAffiliateRepository) ListCommissionPlans(_ context.Context) ([]domain.AffiliateCommissionPlan, error) {
+	return nil, nil
+}
+
+func (m *mockAffiliateRepository) UpdateProfilePlan(_ context.Context, _ uuid.UUID, _ *domain.AffiliateCommissionPlan) error {
+	return nil
+}
+
+func (m *mockAffiliateRepository) GetLedgerBalances(_ context.Context, _ uuid.UUID) ([]repository.LedgerAccountBalance, error) {
+	return nil, nil
+}
+
+func (m *mockAffiliateRepository) ReconcileLedger(_ context.Context, _ uuid.UUID) (*repository.LedgerReconciliationReport, error) {
+	return nil, nil
+}
+
+func (m *mockAffiliateRepository) ReverseEarning(_ context.Context, _ uuid.UUID, _, _ string) (*domain.AffiliateEarning, error) {
+	return nil, nil
+}
+
 func (m *mockAffiliateRepository) CreateAdjustment(_ context.Context, _ *domain.AffiliateAdjustment) error {
 	return nil
 }
@@ -282,6 +307,41 @@ func (m *mockAffiliateRepository) MarkOutboxEventPublished(_ context.Context, _ 
 
 func (m *mockAffiliateRepository) IncrementOutboxEventRetry(_ context.Context, _ int64) error {
 	return nil
+}
+
+func (m *mockAffiliateRepository) GetClickByClickID(ctx context.Context, clickID string) (*domain.AffiliateClick, error) {
+	if m.getClickByClickIDFunc != nil {
+		return m.getClickByClickIDFunc(ctx, clickID)
+	}
+	return nil, nil
+}
+
+func (m *mockAffiliateRepository) CountClicksSince(ctx context.Context, affiliateID uuid.UUID, since time.Time) (int64, error) {
+	if m.countClicksSinceFunc != nil {
+		return m.countClicksSinceFunc(ctx, affiliateID, since)
+	}
+	return 0, nil
+}
+
+func (m *mockAffiliateRepository) CountAttributionsSince(ctx context.Context, affiliateID uuid.UUID, since time.Time) (int64, error) {
+	if m.countAttributionsSinceFunc != nil {
+		return m.countAttributionsSinceFunc(ctx, affiliateID, since)
+	}
+	return 0, nil
+}
+
+func (m *mockAffiliateRepository) CountReferredUsersByDevice(ctx context.Context, affiliateID uuid.UUID, deviceFP string, since time.Time) (int64, error) {
+	if m.countReferredUsersByDeviceFunc != nil {
+		return m.countReferredUsersByDeviceFunc(ctx, affiliateID, deviceFP, since)
+	}
+	return 0, nil
+}
+
+func (m *mockAffiliateRepository) CountReferredUsersByIP(ctx context.Context, affiliateID uuid.UUID, ipHash string, since time.Time) (int64, error) {
+	if m.countReferredUsersByIPFunc != nil {
+		return m.countReferredUsersByIPFunc(ctx, affiliateID, ipHash, since)
+	}
+	return 0, nil
 }
 
 func newTestAffiliateService(repo repository.AffiliateRepository) *AffiliateService {
@@ -571,6 +631,104 @@ func TestAffiliateService_BindReferredUser_RejectsSelfReferralAndDuplicateBindin
 	})
 	if !errors.Is(err, domain.ErrAttributionAlreadyBound) {
 		t.Fatalf("expected ErrAttributionAlreadyBound, got %v", err)
+	}
+}
+
+func TestAffiliateService_BindReferredUser_AutoFlagsDeviceSharing(t *testing.T) {
+	ctx := context.Background()
+	affiliateID := uuid.New()
+	var flags []*domain.AffiliateFraudFlag
+	repo := &mockAffiliateRepository{
+		getProfileByIDFunc: func(ctx context.Context, id uuid.UUID) (*domain.AffiliateProfile, error) {
+			return &domain.AffiliateProfile{
+				ID:       affiliateID,
+				UserID:   42,
+				Status:   domain.AffiliateStatusActive,
+				Currency: "USD",
+			}, nil
+		},
+		getAttributionByUserIDFunc: func(ctx context.Context, referredUserID int64) (*domain.AffiliateAttribution, error) {
+			return nil, nil
+		},
+		createAttributionFunc: func(ctx context.Context, a *domain.AffiliateAttribution) error {
+			return nil
+		},
+		getClickByClickIDFunc: func(ctx context.Context, clickID string) (*domain.AffiliateClick, error) {
+			return &domain.AffiliateClick{
+				ClickID:           clickID,
+				AffiliateID:       affiliateID,
+				DeviceFingerprint: "fp-shared",
+				IPHash:            "ip-1",
+			}, nil
+		},
+		countReferredUsersByDeviceFunc: func(ctx context.Context, id uuid.UUID, fp string, since time.Time) (int64, error) {
+			return 5, nil // high severity
+		},
+		createFraudFlagFunc: func(ctx context.Context, flag *domain.AffiliateFraudFlag) error {
+			flags = append(flags, flag)
+			return nil
+		},
+	}
+	svc := newTestAffiliateService(repo)
+
+	attr, err := svc.BindReferredUser(ctx, BindReferredUserInput{
+		AffiliateID:    affiliateID,
+		ReferredUserID: 77,
+		ClickID:        "click-9",
+	})
+	if err != nil {
+		t.Fatalf("binding must succeed despite fraud findings, got %v", err)
+	}
+	if attr == nil {
+		t.Fatal("expected attribution")
+	}
+	if len(flags) != 1 {
+		t.Fatalf("expected 1 auto flag, got %d", len(flags))
+	}
+	if flags[0].FlagType != "device_sharing" {
+		t.Fatalf("expected device_sharing flag, got %s", flags[0].FlagType)
+	}
+	if flags[0].Severity != domain.FraudSeverityHigh {
+		t.Fatalf("expected high severity, got %s", flags[0].Severity)
+	}
+	if flags[0].Status != domain.FraudFlagStatusOpen {
+		t.Fatalf("expected open status, got %s", flags[0].Status)
+	}
+	if flags[0].ReferredUserID != 77 {
+		t.Fatalf("expected referred user 77, got %d", flags[0].ReferredUserID)
+	}
+}
+
+func TestAffiliateService_BindReferredUser_FraudEngineFailureDoesNotBlockBinding(t *testing.T) {
+	ctx := context.Background()
+	affiliateID := uuid.New()
+	repo := &mockAffiliateRepository{
+		getProfileByIDFunc: func(ctx context.Context, id uuid.UUID) (*domain.AffiliateProfile, error) {
+			return &domain.AffiliateProfile{
+				ID:       affiliateID,
+				UserID:   42,
+				Status:   domain.AffiliateStatusActive,
+				Currency: "USD",
+			}, nil
+		},
+		getAttributionByUserIDFunc: func(ctx context.Context, referredUserID int64) (*domain.AffiliateAttribution, error) {
+			return nil, nil
+		},
+		createAttributionFunc: func(ctx context.Context, a *domain.AffiliateAttribution) error {
+			return nil
+		},
+		getClickByClickIDFunc: func(ctx context.Context, clickID string) (*domain.AffiliateClick, error) {
+			return nil, errors.New("db down")
+		},
+	}
+	svc := newTestAffiliateService(repo)
+
+	if _, err := svc.BindReferredUser(ctx, BindReferredUserInput{
+		AffiliateID:    affiliateID,
+		ReferredUserID: 78,
+		ClickID:        "click-10",
+	}); err != nil {
+		t.Fatalf("engine failure must not block binding, got %v", err)
 	}
 }
 

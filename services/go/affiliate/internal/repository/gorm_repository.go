@@ -405,8 +405,76 @@ func (r *GormAffiliateRepository) CreateAttribution(ctx context.Context, attribu
 	})
 }
 
-func (r *GormAffiliateRepository) GetDashboard(ctx context.Context, affiliateID uuid.UUID) (*domain.AffiliateDashboard, error) {
-	dashboard := &domain.AffiliateDashboard{
+func (r *GormAffiliateRepository) GetClickByClickID(ctx context.Context, clickID string) (*domain.AffiliateClick, error) {
+	var model affiliateClickModel
+	err := r.db.WithContext(ctx).Where("click_id = ?", clickID).First(&model).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("get click by click id: %w", err)
+	}
+	return &domain.AffiliateClick{
+		ID:                model.ID,
+		AffiliateID:       model.AffiliateID,
+		LinkID:            model.LinkID,
+		ClickID:           model.ClickID,
+		IPHash:            model.IPHash,
+		UserAgentHash:     model.UserAgentHash,
+		DeviceFingerprint: model.DeviceFingerprint,
+		CountryCode:       model.CountryCode,
+		LandingPage:       model.LandingPage,
+		CreatedAt:         model.CreatedAt,
+	}, nil
+}
+
+func (r *GormAffiliateRepository) CountClicksSince(ctx context.Context, affiliateID uuid.UUID, since time.Time) (int64, error) {
+	var n int64
+	err := r.db.WithContext(ctx).Model(&affiliateClickModel{}).
+		Where("affiliate_id = ? AND created_at >= ?", affiliateID, since).
+		Count(&n).Error
+	if err != nil {
+		return 0, fmt.Errorf("count clicks since: %w", err)
+	}
+	return n, nil
+}
+
+func (r *GormAffiliateRepository) CountAttributionsSince(ctx context.Context, affiliateID uuid.UUID, since time.Time) (int64, error) {
+	var n int64
+	err := r.db.WithContext(ctx).Model(&affiliateAttributionModel{}).
+		Where("affiliate_id = ? AND created_at >= ?", affiliateID, since).
+		Count(&n).Error
+	if err != nil {
+		return 0, fmt.Errorf("count attributions since: %w", err)
+	}
+	return n, nil
+}
+
+func (r *GormAffiliateRepository) CountReferredUsersByDevice(ctx context.Context, affiliateID uuid.UUID, deviceFP string, since time.Time) (int64, error) {
+	var n int64
+	err := r.db.WithContext(ctx).Table("affiliate_attributions AS a").
+		Joins("JOIN affiliate_clicks AS c ON c.click_id = a.click_id").
+		Where("a.affiliate_id = ? AND c.device_fingerprint = ? AND a.created_at >= ?", affiliateID, deviceFP, since).
+		Select("COUNT(DISTINCT a.referred_user_id)").Scan(&n).Error
+	if err != nil {
+		return 0, fmt.Errorf("count referred users by device: %w", err)
+	}
+	return n, nil
+}
+
+func (r *GormAffiliateRepository) CountReferredUsersByIP(ctx context.Context, affiliateID uuid.UUID, ipHash string, since time.Time) (int64, error) {
+	var n int64
+	err := r.db.WithContext(ctx).Table("affiliate_attributions AS a").
+		Joins("JOIN affiliate_clicks AS c ON c.click_id = a.click_id").
+		Where("a.affiliate_id = ? AND c.ip_hash = ? AND a.created_at >= ?", affiliateID, ipHash, since).
+		Select("COUNT(DISTINCT a.referred_user_id)").Scan(&n).Error
+	if err != nil {
+		return 0, fmt.Errorf("count referred users by ip: %w", err)
+	}
+	return n, nil
+}
+
+func (r *GormAffiliateRepository) GetDashboard(ctx context.Context, affiliateID uuid.UUID) (*domain.AffiliateDashboard, error) {	dashboard := &domain.AffiliateDashboard{
 		Currency: "USD",
 	}
 	type sumRow struct {
@@ -483,10 +551,23 @@ func (r *GormAffiliateRepository) ListEarnings(ctx context.Context, affiliateID 
 }
 
 func (r *GormAffiliateRepository) GetAvailableBalance(ctx context.Context, affiliateID uuid.UUID) (decimal.Decimal, error) {
+	return r.availableBalanceTx(r.db.WithContext(ctx), affiliateID)
+}
+
+// availableBalanceTx computes the payout-available balance: released
+// earnings minus everything already requested or settled.
+//
+// Callers that need a consistency guarantee must run it inside a
+// transaction that already locked the affiliate profile row
+// (see CreatePayout), otherwise concurrent payouts can overdraw.
+func (r *GormAffiliateRepository) availableBalanceTx(
+	tx *gorm.DB,
+	affiliateID uuid.UUID,
+) (decimal.Decimal, error) {
 	var availableRow struct {
 		Amount decimal.Decimal
 	}
-	err := r.db.WithContext(ctx).Model(&affiliateEarningModel{}).
+	err := tx.Model(&affiliateEarningModel{}).
 		Select("COALESCE(SUM(commission_amount),0) AS amount").
 		Where("affiliate_id = ? AND status = ?", affiliateID, string(domain.EarningStatusAvailable)).
 		Scan(&availableRow).Error
@@ -497,7 +578,7 @@ func (r *GormAffiliateRepository) GetAvailableBalance(ctx context.Context, affil
 	var reservedRow struct {
 		Amount decimal.Decimal
 	}
-	err = r.db.WithContext(ctx).Model(&affiliatePayoutModel{}).
+	err = tx.Model(&affiliatePayoutModel{}).
 		Select("COALESCE(SUM(amount),0) AS amount").
 		Where("affiliate_id = ? AND status IN ?", affiliateID, []string{
 			string(domain.PayoutStatusRequested),
@@ -521,9 +602,45 @@ func (r *GormAffiliateRepository) GetAvailableBalance(ctx context.Context, affil
 func (r *GormAffiliateRepository) CreateEarning(ctx context.Context, earning *domain.AffiliateEarning) error {
 	model := earningDomainToModel(earning)
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Idempotent accrual: the same business period must never be
+		// commissioned twice (upstream retries, at-least-once delivery).
+		if earning.IdempotencyKey != "" {
+			var existing affiliateEarningModel
+			err := tx.Where("affiliate_id = ? AND idempotency_key = ?",
+				earning.AffiliateID, earning.IdempotencyKey).First(&existing).Error
+			switch {
+			case err == nil:
+				*earning = *earningModelToDomain(existing)
+				return nil
+			case err == gorm.ErrRecordNotFound:
+				// expected: no duplicate yet
+			default:
+				return fmt.Errorf("create earning: idempotency lookup: %w", err)
+			}
+		}
+
 		if err := tx.Create(&model).Error; err != nil {
 			return fmt.Errorf("create earning: %w", err)
 		}
+
+		// Ledger: accrued commission is credited to `pending` while held.
+		if err := r.postLedgerTx(tx, earning.ID, earning.AffiliateID,
+			[]ledgerPosting{{
+				AccountType:    LedgerAccountPending,
+				Direction:      LedgerDirectionCredit,
+				Amount:         earning.CommissionAmount,
+				ReferenceType:  LedgerRefEarning,
+				ReferenceID:    earning.ID.String(),
+				IdempotencyKey: ledgerIdempotencyKey("accrual", earning.AffiliateID, earning.IdempotencyKey, earning.ID),
+				Metadata: map[string]any{
+					"referred_user_id": earning.ReferredUserID,
+					"commission_rate":  earning.CommissionRate.String(),
+					"hold_until":       earning.HoldUntil,
+				},
+			}}); err != nil {
+			return err
+		}
+
 		return r.appendOutboxTx(tx, "affiliate_earning", earning.ID.String(), "affiliate.commission.accrued", earning.AffiliateID.String(), map[string]any{
 			"earning_id":         earning.ID.String(),
 			"affiliate_id":       earning.AffiliateID.String(),
@@ -560,6 +677,43 @@ func (r *GormAffiliateRepository) ListPayoutMethods(ctx context.Context, affilia
 func (r *GormAffiliateRepository) CreatePayout(ctx context.Context, payout *domain.AffiliatePayout) error {
 	model := payoutDomainToModel(payout)
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Serialize concurrent payout requests for the same affiliate:
+		// without this lock two requests both observe the same available
+		// balance and together overdraw the affiliate.
+		var profile affiliateProfileModel
+		if err := tx.Clauses(lockForUpdate).
+			Where("id = ?", payout.AffiliateID).
+			First(&profile).Error; err != nil {
+			return fmt.Errorf("create payout: lock affiliate profile: %w", err)
+		}
+
+		// Idempotent request: a retried call must not reserve twice.
+		if payout.IdempotencyKey != "" {
+			var existing affiliatePayoutModel
+			err := tx.Where("affiliate_id = ? AND idempotency_key = ?",
+				payout.AffiliateID, payout.IdempotencyKey).First(&existing).Error
+			switch {
+			case err == nil:
+				*payout = *payoutModelToDomain(existing)
+				return nil
+			case err == gorm.ErrRecordNotFound:
+				// expected: no duplicate yet
+			default:
+				return fmt.Errorf("create payout: idempotency lookup: %w", err)
+			}
+		}
+
+		// Re-check the balance under the lock: the service-level check is
+		// advisory and can be stale by the time we get here.
+		available, err := r.availableBalanceTx(tx, payout.AffiliateID)
+		if err != nil {
+			return err
+		}
+		if payout.Amount.GreaterThan(available) {
+			return fmt.Errorf("create payout: %w (requested %s, available %s)",
+				domain.ErrInvalidPayoutAmount, payout.Amount, available)
+		}
+
 		if err := tx.Create(&model).Error; err != nil {
 			return fmt.Errorf("create payout: %w", err)
 		}
@@ -630,6 +784,34 @@ func (r *GormAffiliateRepository) UpdatePayout(ctx context.Context, payout *doma
 		}
 		if payout.Status == domain.PayoutStatusRejected {
 			topic = "affiliate.payout.rejected"
+		}
+
+		// Ledger: money leaves the affiliate balance only when the payout
+		// is actually settled as paid.
+		if payout.Status == domain.PayoutStatusPaid {
+			postingKey := ledgerIdempotencyKey("payout_paid", payout.AffiliateID, payout.IdempotencyKey, payout.ID)
+			if err := r.postLedgerTx(tx, payout.ID, payout.AffiliateID, []ledgerPosting{
+				{
+					AccountType:    LedgerAccountAvailable,
+					Direction:      LedgerDirectionDebit,
+					Amount:         payout.Amount,
+					ReferenceType:  LedgerRefPayout,
+					ReferenceID:    payout.ID.String(),
+					IdempotencyKey: postingKey,
+					Metadata:       map[string]any{"method_id": payout.MethodID.String()},
+				},
+				{
+					AccountType:    LedgerAccountPaid,
+					Direction:      LedgerDirectionCredit,
+					Amount:         payout.Amount,
+					ReferenceType:  LedgerRefPayout,
+					ReferenceID:    payout.ID.String(),
+					IdempotencyKey: postingKey + ":credit",
+					Metadata:       map[string]any{"provider_reference": payout.ProviderReference},
+				},
+			}); err != nil {
+				return err
+			}
 		}
 
 		return r.appendOutboxTx(tx, "affiliate_payout", payout.ID.String(), topic, payout.AffiliateID.String(), map[string]any{
@@ -709,13 +891,70 @@ func (r *GormAffiliateRepository) UpdatePayoutMethod(ctx context.Context, method
 }
 
 func (r *GormAffiliateRepository) ReleaseEligibleEarnings(ctx context.Context, now time.Time) (int64, error) {
-	res := r.db.WithContext(ctx).Model(&affiliateEarningModel{}).
-		Where("status IN ? AND hold_until <= ?", []string{string(domain.EarningStatusAccrued), string(domain.EarningStatusPending)}, now).
-		Updates(map[string]any{"status": string(domain.EarningStatusAvailable)})
-	if res.Error != nil {
-		return 0, fmt.Errorf("release eligible earnings: %w", res.Error)
+	var released int64
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Lock the candidate rows first so two concurrent scheduler runs
+		// cannot release (and post to the ledger) twice.
+		var candidates []affiliateEarningModel
+		if err := tx.Clauses(lockForUpdate).
+			Where("status IN ? AND hold_until <= ?",
+				[]string{string(domain.EarningStatusAccrued), string(domain.EarningStatusPending)}, now).
+			Order("hold_until ASC").
+			Find(&candidates).Error; err != nil {
+			return fmt.Errorf("release eligible earnings: select: %w", err)
+		}
+
+		for _, model := range candidates {
+			if err := tx.Model(&affiliateEarningModel{}).
+				Where("id = ?", model.ID).
+				Update("status", string(domain.EarningStatusAvailable)).Error; err != nil {
+				return fmt.Errorf("release eligible earnings: update %s: %w", model.ID, err)
+			}
+
+			// Ledger: pending -> available.
+			postingKey := ledgerIdempotencyKey("release", model.AffiliateID, "", model.ID)
+			if err := r.postLedgerTx(tx, model.ID, model.AffiliateID, []ledgerPosting{
+				{
+					AccountType:    LedgerAccountPending,
+					Direction:      LedgerDirectionDebit,
+					Amount:         model.CommissionAmount,
+					ReferenceType:  LedgerRefRelease,
+					ReferenceID:    model.ID.String(),
+					IdempotencyKey: postingKey,
+					Metadata:       map[string]any{"referenced_user_id": model.ReferredUserID},
+				},
+				{
+					AccountType:    LedgerAccountAvailable,
+					Direction:      LedgerDirectionCredit,
+					Amount:         model.CommissionAmount,
+					ReferenceType:  LedgerRefRelease,
+					ReferenceID:    model.ID.String(),
+					IdempotencyKey: postingKey + ":credit",
+					Metadata:       map[string]any{"referenced_user_id": model.ReferredUserID},
+				},
+			}); err != nil {
+				return err
+			}
+
+			if err := r.appendOutboxTx(tx, "affiliate_earning", model.ID.String(),
+				"affiliate.commission.released", model.AffiliateID.String(), map[string]any{
+					"earning_id":        model.ID.String(),
+					"affiliate_id":      model.AffiliateID.String(),
+					"referred_user_id":  model.ReferredUserID,
+					"commission_amount": model.CommissionAmount.String(),
+					"status":            domain.EarningStatusAvailable,
+				}); err != nil {
+				return err
+			}
+
+			released++
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, err
 	}
-	return res.RowsAffected, nil
+	return released, nil
 }
 
 func (r *GormAffiliateRepository) ListPendingOutboxEvents(ctx context.Context, limit int) ([]domain.OutboxEvent, error) {
@@ -1107,15 +1346,18 @@ func outboxModelToDomain(model affiliateOutboxModel) domain.OutboxEvent {
 
 // ============ Admin operations ============
 
+// affiliateAdjustmentModel maps affiliate_adjustments. The type column is
+// named `type` in the schema (NOT `adjustment_type`) and there is no
+// `currency` column — a mismatch here silently breaks every adjustment.
 type affiliateAdjustmentModel struct {
-	ID             uuid.UUID       `gorm:"type:uuid;primaryKey"`
-	AffiliateID    uuid.UUID
-	AdjustmentType string
-	Amount         decimal.Decimal
-	Currency       string
-	Reason         string
-	CreatedBy      string
-	CreatedAt      time.Time
+	ID           uuid.UUID       `gorm:"type:uuid;primaryKey"`
+	AffiliateID  uuid.UUID
+	Type         string          `gorm:"column:type"`
+	Amount       decimal.Decimal
+	Reason       string
+	ReferenceID  string
+	CreatedBy    string
+	CreatedAt    time.Time
 }
 
 func (affiliateAdjustmentModel) TableName() string { return "affiliate_adjustments" }
@@ -1154,21 +1396,83 @@ func (r *GormAffiliateRepository) UpdateCommissionRate(ctx context.Context, affi
 	return nil
 }
 
+// ListCommissionPlans returns all plans (active and inactive) for admin
+// management. Ordering is stable by creation time.
+func (r *GormAffiliateRepository) ListCommissionPlans(ctx context.Context) ([]domain.AffiliateCommissionPlan, error) {
+	var models []commissionPlanModel
+	if err := r.db.WithContext(ctx).Order("created_at ASC").Find(&models).Error; err != nil {
+		return nil, fmt.Errorf("list commission plans: %w", err)
+	}
+	out := make([]domain.AffiliateCommissionPlan, 0, len(models))
+	for _, m := range models {
+		if p := commissionPlanModelToDomain(m); p != nil {
+			out = append(out, *p)
+		}
+	}
+	return out, nil
+}
+
+// UpdateProfilePlan snapshots a new commission plan onto an affiliate
+// profile: plan reference plus rate/hold/min-payout settings.
+// Plan switching applies to future accruals only; existing earnings keep
+// the rate they were accrued with.
+func (r *GormAffiliateRepository) UpdateProfilePlan(ctx context.Context, affiliateID uuid.UUID, plan *domain.AffiliateCommissionPlan) error {
+	if plan == nil {
+		return fmt.Errorf("update profile plan: nil plan")
+	}
+	res := r.db.WithContext(ctx).Model(&affiliateProfileModel{}).
+		Where("id = ?", affiliateID).
+		Updates(map[string]any{
+			"commission_plan_id": plan.ID,
+			"commission_rate":    plan.CommissionRate,
+			"hold_period_days":   plan.HoldPeriodDays,
+			"min_payout_amount":  plan.MinPayoutAmount,
+			"updated_at":         time.Now().UTC(),
+		})
+	if res.Error != nil {
+		return fmt.Errorf("update profile plan: %w", res.Error)
+	}
+	return nil
+}
+
 func (r *GormAffiliateRepository) CreateAdjustment(ctx context.Context, adj *domain.AffiliateAdjustment) error {
 	model := affiliateAdjustmentModel{
-		ID:             adj.ID,
-		AffiliateID:    adj.AffiliateID,
-		AdjustmentType: string(adj.AdjustmentType),
-		Amount:         adj.Amount,
-		Currency:       adj.Currency,
-		Reason:         adj.Reason,
-		CreatedBy:      adj.CreatedBy,
-		CreatedAt:      adj.CreatedAt,
+		ID:          adj.ID,
+		AffiliateID: adj.AffiliateID,
+		Type:        string(adj.AdjustmentType),
+		Amount:      adj.Amount,
+		Reason:      adj.Reason,
+		ReferenceID: adj.ReferenceID,
+		CreatedBy:   adj.CreatedBy,
+		CreatedAt:   adj.CreatedAt,
 	}
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(&model).Error; err != nil {
 			return fmt.Errorf("create adjustment: %w", err)
 		}
+
+		// Ledger: manual corrections are booked on the `adjusted` account.
+		posting := ledgerPosting{
+			AccountType:    LedgerAccountAdjusted,
+			Amount:         adj.Amount,
+			ReferenceType:  LedgerRefAdjustment,
+			ReferenceID:    adj.ID.String(),
+			IdempotencyKey: ledgerIdempotencyKey("adjustment", adj.AffiliateID, "", adj.ID),
+			Metadata: map[string]any{
+				"adjustment_type": string(adj.AdjustmentType),
+				"reason":          adj.Reason,
+				"created_by":      adj.CreatedBy,
+			},
+		}
+		if adj.AdjustmentType == domain.AdjustmentTypeCredit {
+			posting.Direction = LedgerDirectionCredit
+		} else {
+			posting.Direction = LedgerDirectionDebit
+		}
+		if err := r.postLedgerTx(tx, adj.ID, adj.AffiliateID, []ledgerPosting{posting}); err != nil {
+			return err
+		}
+
 		return r.appendOutboxTx(tx, "affiliate_adjustment", adj.ID.String(), "affiliate.adjustment.created", adj.AffiliateID.String(), map[string]any{
 			"adjustment_id":   adj.ID.String(),
 			"affiliate_id":   adj.AffiliateID.String(),

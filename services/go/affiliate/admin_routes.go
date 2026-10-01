@@ -272,6 +272,107 @@ func setupAdminRoutes(router fiber.Router, svc *service.AffiliateService) {
 		return c.JSON(paginatedResponse(flags, total, page, pageSize))
 	})
 
+	// List commission plans (admin).
+	affiliates.Get("/commission-plans", func(c *fiber.Ctx) error {
+		plans, err := svc.ListCommissionPlans(c.Context())
+		if err != nil {
+			return c.Status(500).JSON(fiber.Map{"error": "internal error"})
+		}
+
+		return c.JSON(fiber.Map{"plans": plans})
+	})
+
+	// Change affiliate commission plan (applies to future accruals only).
+	affiliates.Put("/:id/commission-plan", func(c *fiber.Ctx) error {
+		affiliateID, err := uuid.Parse(c.Params("id"))
+		if err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": "invalid affiliate id"})
+		}
+
+		var req struct {
+			CommissionPlanID string `json:"commission_plan_id"`
+		}
+		if err := c.BodyParser(&req); err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": "invalid request body"})
+		}
+		planID, err := uuid.Parse(req.CommissionPlanID)
+		if err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": "invalid commission_plan_id"})
+		}
+
+		profile, err := svc.ChangeCommissionPlan(c.Context(), affiliateID, planID)
+		if err != nil {
+			return handleDomainError(c, err)
+		}
+
+		return c.JSON(profile)
+	})
+
+	// Reverse a commission (fraud / chargeback / correction).
+	affiliates.Post("/:id/earnings/:earning_id/reverse", func(c *fiber.Ctx) error {
+		adminUserID := getAdminUserID(c)
+		affiliateID, err := uuid.Parse(c.Params("id"))
+		if err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": "invalid affiliate id"})
+		}
+		earningID, err := uuid.Parse(c.Params("earning_id"))
+		if err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": "invalid earning id"})
+		}
+
+		var req struct {
+			Reason string `json:"reason"`
+		}
+		if err := c.BodyParser(&req); err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": "invalid request body"})
+		}
+		if req.Reason == "" {
+			return c.Status(400).JSON(fiber.Map{"error": "reason is required"})
+		}
+
+		earning, err := svc.ReverseCommission(c.Context(), service.ReverseCommissionInput{
+			AffiliateID: affiliateID,
+			EarningID:   earningID,
+			Reason:      req.Reason,
+			ReversedBy:  adminUserID,
+		})
+		if err != nil {
+			return handleDomainError(c, err)
+		}
+
+		return c.JSON(earning)
+	})
+
+	// Affiliate ledger balances (admin/finance).
+	affiliates.Get("/:id/ledger", func(c *fiber.Ctx) error {
+		affiliateID, err := uuid.Parse(c.Params("id"))
+		if err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": "invalid affiliate id"})
+		}
+
+		balances, err := svc.ListLedgerBalances(c.Context(), affiliateID)
+		if err != nil {
+			return c.Status(500).JSON(fiber.Map{"error": "internal error"})
+		}
+
+		return c.JSON(fiber.Map{"affiliate_id": affiliateID.String(), "balances": balances})
+	})
+
+	// Ledger reconciliation: materialized vs derived balances.
+	affiliates.Get("/:id/ledger/reconciliation", func(c *fiber.Ctx) error {
+		affiliateID, err := uuid.Parse(c.Params("id"))
+		if err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": "invalid affiliate id"})
+		}
+
+		report, err := svc.ReconcileAffiliate(c.Context(), affiliateID)
+		if err != nil {
+			return handleDomainError(c, err)
+		}
+
+		return c.JSON(report)
+	})
+
 	// Get affiliate detail by ID (includes dashboard).
 	// Keep this route after static admin paths like /payouts and /fraud-flags
 	// so those paths are not captured as dynamic :id.

@@ -19,4 +19,8 @@ var (
 	ErrPayoutNotFound           = errors.New("affiliate payout not found")
 	ErrInvalidPayoutStatus      = errors.New("invalid affiliate payout status transition")
 	ErrInvalidCommissionAmount  = errors.New("invalid affiliate commission amount")
+	ErrCommissionPlanNotFound   = errors.New("affiliate commission plan not found")
+	ErrEarningNotFound         = errors.New("affiliate earning not found")
+	ErrEarningNotReversible    = errors.New("affiliate earning cannot be reversed in its current status")
+	ErrValidationFailed        = errors.New("validation failed")
 )

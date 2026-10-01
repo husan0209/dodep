@@ -171,6 +171,81 @@ Every ledger mutation must:
 - be published through outbox after commit;
 - be reconcilable against earnings and payouts.
 
+## Ledger Implementation
+
+The ledger accounts are created with the affiliate profile
+(`pending`, `available`, `paid`, `reversed`, `adjusted`) and every money
+movement is posted inside the same database transaction as the business row.
+
+Movement map:
+
+| Trigger | Ledger postings |
+| --- | --- |
+| `CalculateCommission` (accrual) | credit `pending` |
+| `ReleaseHeldCommissions` (hold expiry) | debit `pending` + credit `available` |
+| `ApproveAffiliatePayout` (paid) | debit `available` + credit `paid` |
+| `CreateAdjustment` | credit/debit `adjusted` |
+| `ReverseCommission` | debit `pending` (while held) or `available` → credit `reversed` |
+| `RejectAffiliatePayout` | none (no money moved) |
+
+Posting rules:
+
+- accounts are locked `FOR UPDATE`, so concurrent mutations serialize;
+- `(transaction_id, account_id, direction)` is unique — replaying the same
+  business transaction is a no-op;
+- `balance_after` stores the running balance of the affected account;
+- a posting that would drive an account negative aborts the transaction;
+- earnings accrual is idempotent on `idempotency_key`: a retried upstream
+  event returns the original earning instead of paying twice.
+
+## Payout Concurrency Safety
+
+Payout reservation must be serialized per affiliate:
+
+1. `CreatePayout` locks the affiliate profile row (`SELECT … FOR UPDATE`);
+2. it re-computes the available balance **inside** the same transaction —
+   the service-level check is advisory and can be stale;
+3. a request above the available amount is rejected with
+   `ErrInvalidPayoutAmount`, so concurrent requests can never reserve more
+   than the affiliate actually has;
+4. a repeated `idempotency_key` returns the original payout instead of
+   reserving the funds twice.
+
+`tests/integration/payout_concurrency_test.go` asserts this with real
+concurrency (8 parallel requests against 300 available) — without the lock
+the test observes an overdraw of 700.
+
+Reconciliation compares materialized ledger balances with balances derived
+from the business tables:
+
+- `pending` = SUM(earnings accrued|pending)
+- `available` = SUM(earnings available|paid) − SUM(payouts requested..paid)
+- `paid` = SUM(payouts paid)
+- `reversed` = SUM(earnings reversed)
+- `adjusted` = SUM(adjustments credit) − SUM(adjustments debit)
+
+Admin endpoints:
+
+- `GET /admin/affiliates/:id/ledger` — materialized balances
+- `GET /admin/affiliates/:id/ledger/reconciliation` — report with
+  `balanced` flag and per-account divergence descriptions
+- `POST /admin/affiliates/:id/earnings/:earning_id/reverse` — manual
+  commission reversal; `reason` is mandatory for the audit trail
+
+## Commission Reversal
+
+Used when an already accrued commission must be clawed back (fraud,
+chargeback, correction):
+
+- allowed only for `accrued`, `pending` and `available` earnings;
+  a `paid` earning is settled and cannot be reversed through this path;
+- the money is debited from the account that currently holds it
+  (`pending` while in hold, `available` after release) and credited to
+  `reversed`, so a reversed commission can never become withdrawable;
+- `reason` is mandatory (audit evidence) and the admin identity is recorded;
+- idempotent: reversing an already reversed earning changes nothing;
+- publishes `affiliate.commission.reversed`.
+
 ## Event Topics
 
 Affiliate event payloads live in:
@@ -215,15 +290,16 @@ Behavior:
 - marks successful events as published;
 - increments retry counter on publish failure.
 
-Current default publisher:
+Current publisher selection (in `main.go`):
 
-- `LogPublisher` (safe fallback): logs event payload and marks delivered.
-
-For production you should replace it with a real broker publisher
-(Redpanda/Kafka) by implementing `internal/event.Publisher`.
+- `REDPANDA_BROKERS` set (e.g. `redpanda.data:9092`) → `RedpandaPublisher`
+  (`internal/event/redpanda_publisher.go`): idempotent franz-go producer,
+  `acks=all`, 30s delivery timeout, aggregate ID as record key;
+- unset → `LogPublisher` fallback for local dev without a broker.
 
 Worker env configuration:
 
+- `REDPANDA_BROKERS` (default: unset → `LogPublisher`)
 - `OUTBOX_POLL_INTERVAL` (default: `2s`)
 - `OUTBOX_BATCH_SIZE` (default: `100`)
 
@@ -317,7 +393,7 @@ Admin actions:
 
 Mandatory affiliate checks:
 
-- self-referral detection;
+- self-referral detection (hard block on binding);
 - same KYC identity between affiliate and referred player;
 - same payment destination between source traffic and affiliate payout target;
 - device fingerprint overlap;
@@ -325,6 +401,26 @@ Mandatory affiliate checks:
 - abnormal click-to-registration ratio;
 - chargeback-heavy referred traffic;
 - bonus abuse concentration among referred players.
+
+### Automatic engine (`internal/fraud`)
+
+Implemented from iGaming fraud-research patterns (SEON, LexisNexis, Fraudlogix):
+multi-accounting via shared device hashes, IP clustering, click-velocity
+anomalies, clickless attributions, registration bursts. Conservative
+flag-first thresholds in `fraud.DefaultConfig()`, tunable via
+`AffiliateService.SetFraudConfig` without code changes.
+
+| Rule | Signal | Medium | High | Critical |
+| ---- | ------ | ------ | ---- | -------- |
+| `click_velocity` | clicks / 1h | 200 | 1000 | — |
+| `registration_velocity` | attributions / 24h | 20 | 50 | — |
+| `device_sharing` | distinct users / device / 30d | 2 | 5 | 10 (+suspend review) |
+| `ip_cluster` | distinct users / IP / 30d | 3 | 10 | 25 (+suspend review) |
+| `clickless_attribution` | empty click_id | low (review) | — | — |
+
+Runs after every successful `BindReferredUser`; one open flag per finding.
+Engine errors never break attribution. Open flags automatically gate payouts
+via the existing payout eligibility check.
 
 System actions:
 
