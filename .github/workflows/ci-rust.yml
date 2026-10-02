@@ -20,7 +20,12 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  RUST_VERSION: '1.75'
+  # 1.75 could not even read the workspace lock file ("lock file version `4`
+  # was found, but this version of Cargo does not understand this lock file"),
+  # so every Rust job died before compiling anything, and `cargo install
+  # cargo-audit` refused to run (0.22.2 requires rustc >= 1.88).
+  # v4 of the lock file format needs cargo >= 1.78; 1.88 satisfies both.
+  RUST_VERSION: '1.88'
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
@@ -78,9 +83,20 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
+      # Without fail-fast:false the first failing service cancels every other
+      # job in the matrix, so the remaining services report "cancelled" and
+      # never produce a verdict.
+      fail-fast: false
       matrix:
         service: [betting-engine, wallet-core, websocket-gateway]
-    
+
+    # wallet-core uses sqlx macros, which validate every query against a live
+    # database at COMPILE time. The variable must be set for the whole job,
+    # not only for the integration-test step, or the build itself fails.
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/test_db
+      REDIS_URL: redis://localhost:6379
+
     services:
       postgres:
         image: postgres:16-alpine
@@ -126,6 +142,16 @@ jobs:
             ~/.cargo/git
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      # wallet-core's tests exercise real reservations against the real schema,
+      # so the tables must exist before nextest runs.
+      - name: Apply wallet schema
+        if: matrix.service == 'wallet-core'
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+            -f libs/migrations/postgresql/015_wallet_core.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+            -f libs/migrations/postgresql/023_wallet_lock_settlement.sql
 
       - name: Run unit tests
         working-directory: services/rust/${{ matrix.service }}
