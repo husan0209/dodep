@@ -14,6 +14,9 @@ export type TelemetryEvent =
   | 'withdraw_submitted'
   | 'auth_login_submitted'
   | 'auth_register_submitted'
+  | 'affiliate_enroll'
+  | 'affiliate_link_copy'
+  | 'affiliate_payout_request'
 
 interface StoredTelemetryEvent {
   event: TelemetryEvent

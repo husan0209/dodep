@@ -1,10 +1,10 @@
 'use client'
 
-import { useEffect } from 'react'
+import { Suspense, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuthStore } from '@/stores/auth-store'
 
-export default function GoogleCallbackPage() {
+function GoogleCallbackInner() {
   const router = useRouter()
   const params = useSearchParams()
   const { setTokens, fetchUser } = useAuthStore()
@@ -31,12 +31,25 @@ export default function GoogleCallbackPage() {
       .catch(() => router.replace('/login?error=AUTH_OAUTH_USER_FETCH_FAILED'))
   }, [fetchUser, params, router, setTokens])
 
+  return null
+}
+
+export default function GoogleCallbackPage() {
+  // useSearchParams() opts the component out of static prerendering, so Next
+  // requires a Suspense boundary here. Without it `next build` fails with
+  // "useSearchParams() should be wrapped in a suspense boundary".
   return (
-    <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center px-4">
-      <div className="card !p-8 text-center">
-        <h1 className="text-2xl font-bold text-white">Signing you in...</h1>
-        <p className="mt-2 text-gray-400">Google authorization complete, redirecting to sportsbook.</p>
-      </div>
-    </div>
+    <Suspense
+      fallback={
+        <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center px-4">
+          <div className="card !p-8 text-center">
+            <h1 className="text-2xl font-bold text-white">Signing you in...</h1>
+            <p className="mt-2 text-gray-400">Google authorization complete, redirecting to sportsbook.</p>
+          </div>
+        </div>
+      }
+    >
+      <GoogleCallbackInner />
+    </Suspense>
   )
 }
