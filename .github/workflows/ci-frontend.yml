@@ -242,11 +242,16 @@ jobs:
           file: infra/docker/Dockerfile.web
           push: ${{ github.event_name != 'pull_request' }}
           # On a pull request the image is not pushed, so Trivy could not find
-          # it in the registry and failed with MANIFEST_UNKNOWN. Load the
-          # built image into the runner's local daemon instead, so the scan
-          # covers PRs too — which is the point of scanning before merge.
+          # it in the registry. Load it into the runner's local daemon
+          # instead, so the scan covers PRs too.
           load: ${{ github.event_name == 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
+          # metadata-action ranks type=ref,event=pr above type=sha, so on a
+          # PR the only tag it produced was "...:pr-2" while Trivy looked for
+          # "...:sha-<commit>" and reported "No such image". Tag the build
+          # with the sha explicitly so the name the scan asks for exists.
+          tags: |
+            ${{ steps.meta.outputs.tags }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
