@@ -50,6 +50,11 @@ type authRepository interface {
 	StoreRefreshToken(ctx context.Context, token string, userID string, sessionID string, ttl time.Duration) error
 	GetRefreshToken(ctx context.Context, token string) (userID string, sessionID string, err error)
 	DeleteRefreshToken(ctx context.Context, token string) error
+	// RotateRefreshToken consumes the current token and issues the next one.
+	// It returns domain.ErrRefreshTokenReuse when the token was already
+	// rotated, which means it was replayed and the family must be revoked.
+	RotateRefreshToken(ctx context.Context, currentToken, newToken string, ttl time.Duration) (userID string, sessionID string, err error)
+	RevokeRefreshTokenFamily(ctx context.Context, userID, sessionID string) error
 	TrackLoginAttempt(ctx context.Context, email, ip string) (attempts int, locked bool, err error)
 	IsAccountLocked(ctx context.Context, email string) (bool, error)
 	ClearLoginAttempts(ctx context.Context, email, ip string) error
@@ -577,17 +582,7 @@ func (s *AuthService) RefreshTokens(ctx context.Context, refreshToken, deviceID 
 		return nil, domain.ErrInvalidRefreshToken
 	}
 
-	// Delete old refresh token (rotation)
-	s.repo.DeleteRefreshToken(ctx, refreshToken)
-
-	// Get session
-	session, err := s.repo.GetSession(ctx, sessionID)
-	if err != nil || session == nil {
-		return nil, domain.ErrInvalidRefreshToken
-	}
-
-	// Verify user ID matches
-	if session.UserID != claims.UserID {
+	if userID != claims.UserID {
 		return nil, domain.ErrInvalidRefreshToken
 	}
 
@@ -602,11 +597,33 @@ func (s *AuthService) RefreshTokens(ctx context.Context, refreshToken, deviceID 
 		return nil, fmt.Errorf("%w: failed to generate refresh token", domain.ErrInternal)
 	}
 
-	// Store new refresh token
-	err = s.repo.StoreRefreshToken(ctx, newRefreshToken, userID, sessionID, 7*24*time.Hour)
+	// Rotate the token family atomically. If the presented token was already
+	// rotated, it has been stolen and replayed: revoke every refresh token of
+	// the user and drop all sessions instead of silently returning an error.
+	rotatedUserID, rotatedSessionID, err := s.repo.RotateRefreshToken(
+		ctx, refreshToken, newRefreshToken, 7*24*time.Hour)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to store refresh token", domain.ErrInternal)
+		if errors.Is(err, domain.ErrRefreshTokenReuse) {
+			s.handleRefreshTokenReuse(ctx, claims.UserID, sessionID)
+			return nil, domain.ErrInvalidRefreshToken
+		}
+		return nil, domain.ErrInvalidRefreshToken
 	}
+	if rotatedUserID != claims.UserID {
+		return nil, domain.ErrInvalidRefreshToken
+	}
+
+	// Get session
+	session, err := s.repo.GetSession(ctx, rotatedSessionID)
+	if err != nil || session == nil {
+		return nil, domain.ErrInvalidRefreshToken
+	}
+
+	// Verify user ID matches
+	if session.UserID != claims.UserID {
+		return nil, domain.ErrInvalidRefreshToken
+	}
+	userID, sessionID = rotatedUserID, rotatedSessionID
 
 	// Update session activity
 	session.LastActivity = time.Now()
@@ -619,6 +636,29 @@ func (s *AuthService) RefreshTokens(ctx context.Context, refreshToken, deviceID 
 		RefreshExpiresIn: 604800, // 7 days
 		TokenType:        "Bearer",
 	}, nil
+}
+
+// handleRefreshTokenReuse reacts to a replayed refresh token: the token family
+// and every session of that user are revoked, so an attacker holding a stolen
+// token cannot keep access and the legitimate user is forced to log in again.
+func (s *AuthService) handleRefreshTokenReuse(ctx context.Context, userID, sessionID string) {
+	s.log.Warn("refresh token reuse detected, revoking token family",
+		zap.String("user_id", userID),
+		zap.String("session_id", sessionID),
+	)
+
+	if err := s.repo.RevokeRefreshTokenFamily(ctx, userID, ""); err != nil {
+		s.log.Error("failed to revoke refresh token family",
+			zap.String("user_id", userID),
+			zap.Error(err),
+		)
+	}
+	if err := s.repo.DeleteAllUserSessions(ctx, userID); err != nil {
+		s.log.Error("failed to revoke sessions after token reuse",
+			zap.String("user_id", userID),
+			zap.Error(err),
+		)
+	}
 }
 
 // Logout invalidates a user session
