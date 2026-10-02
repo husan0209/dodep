@@ -105,15 +105,21 @@ jobs:
           name: proto-go-stubs
           path: libs/proto/gen/go
 
+      # golangci-lint v1 (action v4) is built with go1.24 and cannot type-check a
+      # module whose `go` directive is 1.26: it reported every protobuf-importing
+      # package as `undefined: <pkg> (typecheck)` plus `file requires newer Go
+      # version go1.26 (application built with go1.24)`, hundreds of lines of
+      # noise that masked the real findings. v2 reports three genuine errcheck
+      # issues in services/go/bonus and nothing else.
       - name: Install golangci-lint
-        uses: golangci/golangci-lint-action@v4
+        uses: golangci/golangci-lint-action@v9
         with:
-          version: latest
+          version: v2.1.0
           working-directory: services/go/${{ matrix.service }}
 
       - name: Run golangci-lint
         working-directory: services/go/${{ matrix.service }}
-        run: golangci-lint run --out-format=github-actions
+        run: golangci-lint run --output.text.path=stdout
 
   # ==========================================================================
   # Test
