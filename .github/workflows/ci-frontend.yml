@@ -156,8 +156,13 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
+          cache-dependency-path: apps/web/package-lock.json
 
       - name: Install dependencies
+        # Was the repo root, which installed the Nx workspace (346 packages)
+        # while the build below runs in apps/web — so `next build` failed with
+        # "next: not found". Install where the build runs.
+        working-directory: apps/web
         run: npm ci
 
       - name: Build application
