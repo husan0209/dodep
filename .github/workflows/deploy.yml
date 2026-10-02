@@ -181,14 +181,17 @@ jobs:
     timeout-minutes: 5
     needs: [deploy-web, deploy-backend, deploy-admin]
     if: always()
+    # A notification must never fail the build. Without the guard below the
+    # step errors out with "Specify secrets.SLACK_WEBHOOK_URL" on every pull
+    # request in a repository where the optional webhook is not configured, so
+    # a missing notification is reported as a red check. The webhook is exposed
+    # through env because a step condition cannot read the secrets context.
+    env:
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
     
     steps:
       - name: Notify Slack
-        # A notification must never fail the build. Without the guard the step
-        # errors out with "Specify secrets.SLACK_WEBHOOK_URL" on every pull
-        # request in a repository where the optional webhook is not configured,
-        # which turns a missing notification into a red check.
-        if: always() && secrets.SLACK_WEBHOOK != ''
+        if: always() && env.SLACK_WEBHOOK_URL != ''
         uses: 8398a7/action-slack@v3
         with:
           status: ${{ job.status }}
@@ -197,8 +200,6 @@ jobs:
             Web: ${{ needs.deploy-web.result }}
             Backend: ${{ needs.deploy-backend.result }}
             Admin: ${{ needs.deploy-admin.result }}
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
 
       - name: Notify Success
         if: success()
