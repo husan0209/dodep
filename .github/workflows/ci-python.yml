@@ -295,7 +295,10 @@ jobs:
           output: 'trivy-results-${{ matrix.service }}.sarif'
           severity: 'CRITICAL,HIGH'
 
+      # Same condition as the scan: on PRs no SARIF file exists, and uploading
+      # a missing file failed the build.
       - name: Upload Trivy scan results
+        if: github.event_name != 'pull_request'
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: 'trivy-results-${{ matrix.service }}.sarif'

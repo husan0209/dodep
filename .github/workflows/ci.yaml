@@ -18,6 +18,9 @@ jobs:
   rust-build:
     runs-on: ubuntu-latest
     strategy:
+      # Keep sibling legs running: one broken service must not hide
+      # the real result of every other language in the matrix.
+      fail-fast: false
       matrix:
         service: [betting-engine, wallet-core, websocket-gateway]
     defaults:
@@ -66,6 +69,9 @@ jobs:
   go-build:
     runs-on: ubuntu-latest
     strategy:
+      # Keep sibling legs running: one broken service must not hide
+      # the real result of every other language in the matrix.
+      fail-fast: false
       matrix:
         service: [auth, user, payment, bonus, casino, notification, kyc]
     defaults:
@@ -109,6 +115,9 @@ jobs:
   python-build:
     runs-on: ubuntu-latest
     strategy:
+      # Keep sibling legs running: one broken service must not hide
+      # the real result of every other language in the matrix.
+      fail-fast: false
       matrix:
         service: [fraud-ml, analytics]
     defaults:
@@ -150,6 +159,9 @@ jobs:
   frontend-build:
     runs-on: ubuntu-latest
     strategy:
+      # Keep sibling legs running: one broken service must not hide
+      # the real result of every other language in the matrix.
+      fail-fast: false
       matrix:
         app: [web, admin]
     defaults:
@@ -214,6 +226,9 @@ jobs:
     needs: [rust-build, go-build, python-build, security-scan]
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
     strategy:
+      # Keep sibling legs running: one broken service must not hide
+      # the real result of every other language in the matrix.
+      fail-fast: false
       matrix:
         include:
           - service: betting-engine
