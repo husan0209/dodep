@@ -1,5 +1,5 @@
 //! Domain models for Wallet Core
-//! 
+//!
 //! Standards: wallet-financial-ops.skill.md
 //! - Every financial operation creates debit+credit ledger entries
 //! - Idempotency checked FIRST
@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::Type;
 use uuid::Uuid;
 
-use super::{WalletType, TransactionType, TransactionStatus, LedgerEntryType, AccountType};
+use super::{AccountType, LedgerEntryType, TransactionStatus, TransactionType, WalletType};
 
 /// Wallet aggregate root
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -49,25 +49,28 @@ impl Wallet {
             updated_at: now,
         }
     }
-    
+
     /// Get total balance (available + locked + bonus)
     pub fn total_balance(&self) -> Decimal {
         self.balance_available + self.balance_locked + self.balance_bonus
     }
-    
+
     /// Check if wallet has sufficient available balance
     pub fn has_available_balance(&self, amount: Decimal) -> bool {
         self.balance_available >= amount
     }
-    
+
     /// Check if wallet has sufficient balance (available + bonus)
     pub fn has_sufficient_balance(&self, amount: Decimal) -> bool {
         self.balance_available + self.balance_bonus >= amount
     }
-    
+
     /// Get account ID for ledger entries
     pub fn ledger_account_id(&self) -> String {
-        format!("user_wallet:{}:{:?}:{}", self.user_id, self.wallet_type, self.currency)
+        format!(
+            "user_wallet:{}:{:?}:{}",
+            self.user_id, self.wallet_type, self.currency
+        )
     }
 }
 
@@ -81,9 +84,13 @@ pub struct Balance {
 
 impl Balance {
     pub fn new(available: Decimal, locked: Decimal, bonus: Decimal) -> Self {
-        Self { available, locked, bonus }
+        Self {
+            available,
+            locked,
+            bonus,
+        }
     }
-    
+
     pub fn total(&self) -> Decimal {
         self.available + self.locked + self.bonus
     }
@@ -145,20 +152,20 @@ impl Transaction {
             completed_at: None,
         }
     }
-    
+
     /// Mark transaction as completed
     pub fn complete(&mut self) {
         self.status = TransactionStatus::Completed;
         self.completed_at = Some(Utc::now());
         self.updated_at = Utc::now();
     }
-    
+
     /// Mark transaction as failed
     pub fn fail(&mut self) {
         self.status = TransactionStatus::Failed;
         self.updated_at = Utc::now();
     }
-    
+
     /// Mark transaction as cancelled
     pub fn cancel(&mut self) {
         self.status = TransactionStatus::Cancelled;
@@ -208,7 +215,7 @@ impl FundLock {
             settlement_transaction_id: None,
         }
     }
-    
+
     pub fn release(&mut self) {
         self.is_active = false;
         self.released_at = Some(Utc::now());
@@ -224,7 +231,7 @@ impl FundLock {
 }
 
 /// Ledger entry for double-entry bookkeeping
-/// 
+///
 /// CRITICAL: Every financial operation creates TWO entries:
 /// - One DEBIT (money leaves account)
 /// - One CREDIT (money enters account)
@@ -234,11 +241,11 @@ pub struct LedgerEntry {
     pub id: Uuid,
     pub transaction_id: Uuid,
     pub account_type: AccountType,
-    pub account_id: String,  // e.g., "user_wallet:123:main:USD"
+    pub account_id: String, // e.g., "user_wallet:123:main:USD"
     pub entry_type: LedgerEntryType,
     pub amount: Decimal,
     pub currency: String,
-    pub balance_after: Option<Decimal>,  // Snapshot of account balance
+    pub balance_after: Option<Decimal>, // Snapshot of account balance
     pub reference_type: Option<String>,
     pub reference_id: Option<String>,
     pub idempotency_key: Option<String>,
@@ -270,7 +277,7 @@ impl LedgerEntry {
             created_at: Utc::now(),
         }
     }
-    
+
     /// Create a credit entry (money enters account)
     pub fn credit(
         transaction_id: Uuid,
@@ -295,7 +302,7 @@ impl LedgerEntry {
             created_at: Utc::now(),
         }
     }
-    
+
     /// Create a debit entry with reference
     pub fn debit_with_ref(
         transaction_id: Uuid,
@@ -323,7 +330,7 @@ impl LedgerEntry {
             created_at: Utc::now(),
         }
     }
-    
+
     /// Create a credit entry with reference
     pub fn credit_with_ref(
         transaction_id: Uuid,
@@ -363,8 +370,14 @@ pub struct LedgerPair {
 impl LedgerPair {
     pub fn new(debit: LedgerEntry, credit: LedgerEntry) -> Self {
         // Validate: amounts must be equal
-        assert_eq!(debit.amount, credit.amount, "Debit and credit amounts must be equal");
-        assert_eq!(debit.currency, credit.currency, "Debit and credit currencies must be equal");
+        assert_eq!(
+            debit.amount, credit.amount,
+            "Debit and credit amounts must be equal"
+        );
+        assert_eq!(
+            debit.currency, credit.currency,
+            "Debit and credit currencies must be equal"
+        );
         Self { debit, credit }
     }
 }
@@ -414,6 +427,6 @@ pub struct ReconciliationResult {
 impl ReconciliationResult {
     /// Check if discrepancy is significant (> $0.01)
     pub fn is_significant(&self) -> bool {
-        self.discrepancy > Decimal::new(1, 2)  // 0.01
+        self.discrepancy > Decimal::new(1, 2) // 0.01
     }
 }

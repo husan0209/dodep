@@ -15,7 +15,7 @@ impl LedgerRepository {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
-    
+
     /// Insert a ledger entry pair (debit + credit)
     pub async fn insert_pair(
         &self,
@@ -23,14 +23,14 @@ impl LedgerRepository {
         credit: LedgerEntry,
     ) -> Result<(), sqlx::Error> {
         let mut tx = self.pool.begin().await?;
-        
+
         self.insert_pair_internal(&mut tx, debit, credit).await?;
-        
+
         tx.commit().await?;
-        
+
         Ok(())
     }
-    
+
     /// Insert a ledger entry pair within a transaction
     pub async fn insert_pair_internal(
         &self,
@@ -62,7 +62,7 @@ impl LedgerRepository {
         )
         .execute(&mut **tx)
         .await?;
-        
+
         // Insert credit entry
         sqlx::query!(
             r#"
@@ -87,12 +87,15 @@ impl LedgerRepository {
         )
         .execute(&mut **tx)
         .await?;
-        
+
         Ok(())
     }
-    
+
     /// Get entries by transaction ID
-    pub async fn get_by_transaction(&self, transaction_id: Uuid) -> Result<Vec<LedgerEntry>, sqlx::Error> {
+    pub async fn get_by_transaction(
+        &self,
+        transaction_id: Uuid,
+    ) -> Result<Vec<LedgerEntry>, sqlx::Error> {
         let entries = sqlx::query_as!(
             LedgerEntry,
             r#"
@@ -113,10 +116,10 @@ impl LedgerRepository {
         )
         .fetch_all(&self.pool)
         .await?;
-        
+
         Ok(entries)
     }
-    
+
     /// Get entries by account
     pub async fn get_by_account(
         &self,
@@ -147,10 +150,10 @@ impl LedgerRepository {
         )
         .fetch_all(&self.pool)
         .await?;
-        
+
         Ok(entries)
     }
-    
+
     /// Run reconciliation check
     pub async fn reconcile_wallet(
         &self,
@@ -174,10 +177,10 @@ impl LedgerRepository {
         )
         .fetch_optional(&self.pool)
         .await?;
-        
+
         result.ok_or(sqlx::Error::RowNotFound)
     }
-    
+
     /// Get all reconciliation alerts (discrepancy > $0.01)
     pub async fn get_reconciliation_alerts(
         &self,
@@ -198,7 +201,7 @@ impl LedgerRepository {
         )
         .fetch_all(&self.pool)
         .await?;
-        
+
         Ok(results)
     }
 }

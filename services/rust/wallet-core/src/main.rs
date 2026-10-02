@@ -1,5 +1,5 @@
 //! Wallet Core Service — Opus Casino
-//! 
+//!
 //! Financial operations service managing:
 //! - User wallets and balances
 //! - Transactions (deposits, withdrawals, bets, wins)
@@ -29,23 +29,23 @@ use wallet_core::telemetry::{init_tracing, MetricsState};
 async fn main() -> Result<()> {
     // Load configuration
     let config = Config::load()?;
-    
+
     // Initialize telemetry
     let _telemetry = init_tracing(&config);
     info!("Starting Wallet Core Service");
     info!("Environment: {}", config.app.env);
-    
+
     // Initialize database pool
     let db_pool = create_db_pool(&config.database).await?;
     info!("Database connection pool created");
-    
+
     // Initialize Redis client
     let redis_client = create_redis_client(&config.redis).await?;
     info!("Redis client created");
-    
+
     // Create metrics state
     let metrics_state = Arc::new(MetricsState::new());
-    
+
     // Create shared state
     let state = Arc::new(AppState {
         config: config.clone(),
@@ -53,29 +53,33 @@ async fn main() -> Result<()> {
         redis_client,
         metrics: metrics_state,
     });
-    
+
     // Start gRPC server
     let grpc_addr: SocketAddr = config.grpc.addr.parse()?;
     let grpc_state = state.clone();
     let grpc_handle = tokio::spawn(async move {
         tonic::transport::Server::builder()
-            .add_service(WalletCoreServiceServer::new(WalletGrpcService::new(grpc_state)))
+            .add_service(WalletCoreServiceServer::new(WalletGrpcService::new(
+                grpc_state,
+            )))
             .serve(grpc_addr)
             .await
             .map_err(|e| anyhow::anyhow!(e))
     });
     info!("gRPC server listening on {}", config.grpc.addr);
-    
+
     // Start HTTP server (health, metrics, admin)
     let http_addr: SocketAddr = config.http.addr.parse()?;
     let http_state = state.clone();
     let http_handle = tokio::spawn(async move {
         let app = create_router(http_state);
         let listener = tokio::net::TcpListener::bind(http_addr).await?;
-        axum::serve(listener, app).await.map_err(|e| anyhow::anyhow!(e))
+        axum::serve(listener, app)
+            .await
+            .map_err(|e| anyhow::anyhow!(e))
     });
     info!("HTTP server listening on {}", config.http.addr);
-    
+
     // Start metrics exporter
     let metrics_handle = if config.metrics.enabled {
         let metrics_addr: SocketAddr = config.metrics.addr.parse()?;
@@ -87,7 +91,7 @@ async fn main() -> Result<()> {
     } else {
         None
     };
-    
+
     // Start transactional outbox relay (DB outbox -> Redpanda).
     // Rows accumulate safely in Postgres when the broker is unreachable.
     let relay_handle = if config.kafka.enabled {
@@ -113,7 +117,7 @@ async fn main() -> Result<()> {
         info!("Outbox relay disabled by config");
         None
     };
-    
+
     // Wait for shutdown signal
     tokio::select! {
         result = grpc_handle => {
@@ -126,14 +130,14 @@ async fn main() -> Result<()> {
             info!("Shutdown signal received");
         }
     }
-    
+
     if let Some(handle) = relay_handle {
         handle.abort();
     }
     if let Some(handle) = metrics_handle {
         handle.abort();
     }
-    
+
     info!("Wallet Core Service stopped");
     Ok(())
 }

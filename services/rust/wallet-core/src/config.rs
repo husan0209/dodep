@@ -56,7 +56,10 @@ pub struct RedisConfig {
 impl RedisConfig {
     pub fn connection_string(&self) -> String {
         if let Some(password) = &self.password {
-            format!("redis://:{}@{}:{}/{}", password, self.host, self.port, self.db)
+            format!(
+                "redis://:{}@{}:{}/{}",
+                password, self.host, self.port, self.db
+            )
         } else {
             format!("redis://{}:{}/{}", self.host, self.port, self.db)
         }
@@ -100,13 +103,12 @@ impl Config {
     pub fn load() -> Result<Self, config::ConfigError> {
         // Load from .env file
         let _ = dotenvy::dotenv();
-        
+
         let config_builder = config::Config::builder()
             // Start with defaults
             .set_default("app.env", "development")?
             .set_default("app.name", "wallet-core")?
             .set_default("app.version", "0.1.0")?
-            
             // Database defaults
             .set_default("database.host", "localhost")?
             .set_default("database.port", 5432)?
@@ -117,36 +119,29 @@ impl Config {
             .set_default("database.min_connections", 5)?
             .set_default("database.connect_timeout_secs", 30)?
             .set_default("database.idle_timeout_secs", 600)?
-            
             // Redis defaults
             .set_default("redis.host", "localhost")?
             .set_default("redis.port", 6379)?
             .set_default("redis.db", 0)?
             .set_default("redis.max_connections", 10)?
-            
             // gRPC defaults
             .set_default("grpc.addr", "0.0.0.0:50053")?
             .set_default("grpc.max_message_size_mb", 4)?
-            
             // HTTP defaults
             .set_default("http.addr", "0.0.0.0:3003")?
-            
             // Metrics defaults
             .set_default("metrics.enabled", true)?
             .set_default("metrics.addr", "0.0.0.0:9003")?
-            
             // Tracing defaults
             .set_default("tracing.enabled", true)?
             .set_default("tracing.otlp_endpoint", "http://localhost:4317")?
             .set_default("tracing.service_name", "wallet-core")?
-            
             // Redpanda/Kafka defaults (transactional outbox relay)
             .set_default("kafka.brokers", "localhost:9092")?
             .set_default("kafka.enabled", true)?
             .set_default("kafka.poll_interval_secs", 5)?
             .set_default("kafka.batch_size", 100)?
             .set_default("kafka.max_retries", 10)?
-            
             // Override with environment variables
             .add_source(config::Environment::with_prefix("WALLET").separator("__"))
             .add_source(config::Environment::with_prefix("APP").separator("__"))
@@ -157,14 +152,14 @@ impl Config {
             .add_source(config::Environment::with_prefix("METRICS").separator("__"))
             .add_source(config::Environment::with_prefix("KAFKA").separator("__"))
             .add_source(config::Environment::with_prefix("TRACING").separator("__"));
-        
+
         config_builder.build()?.try_deserialize()
     }
-    
+
     pub fn is_development(&self) -> bool {
         self.app.env == "development"
     }
-    
+
     pub fn is_production(&self) -> bool {
         self.app.env == "production"
     }

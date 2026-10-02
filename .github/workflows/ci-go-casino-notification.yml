@@ -35,11 +35,37 @@ jobs:
             services/go/casino/go.mod
             services/go/notification/go.mod
 
-      - name: Install golangci-lint
-        uses: golangci/golangci-lint-action@v3
+      # libs/proto/gen is gitignored, so a clean checkout has no Go stubs and any
+      # service importing github.com/opus-casino/proto/gen/go/* fails to
+      # type-check ("no export data for ..."). buf is pinned, not "latest",
+      # so generation is reproducible for a build gate.
+      - name: Install buf (pinned)
+        run: |
+          BUF_VERSION=1.73.0
+          curl -fsSL -o /tmp/buf.tar.gz "https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/buf-Linux-x86_64.tar.gz"
+          sudo tar -xzf /tmp/buf.tar.gz -C /tmp
+          sudo install -m 0755 /tmp/buf/bin/buf /usr/local/bin/buf
+          buf --version
+
+      - name: Generate Proto stubs
+        run: make -C libs/proto gen-go
+
+      # services/go is not a Go module, so golangci-lint cannot be pointed at
+      # it as one working directory ("directory prefix . does not contain main
+      # module"). Each service is its own module and is linted from inside it.
+      - name: Lint Casino
+        uses: golangci/golangci-lint-action@v6
         with:
-          version: latest
-          working-directory: services/go
+          version: v1.64.8
+          working-directory: services/go/casino
+          args: --timeout=5m
+
+      - name: Lint Notification
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.64.8
+          working-directory: services/go/notification
+          args: --timeout=5m
 
       - name: Lint Casino Service
         run: |

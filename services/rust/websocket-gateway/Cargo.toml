@@ -60,6 +60,9 @@ tokio-test = "0.4"
 
 [build-dependencies]
 tonic-build = "0.10"
+# Supplies the protoc binary at build time, so the crate builds on machines
+# and CI images without a system protobuf-compiler installed.
+protoc-bin-vendored = "3.0.0"
 
 [[bin]]
 name = "websocket-gateway"

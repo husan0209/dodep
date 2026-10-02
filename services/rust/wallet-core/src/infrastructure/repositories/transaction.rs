@@ -15,7 +15,7 @@ impl TransactionRepository {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
-    
+
     /// Get transaction by ID
     pub async fn get_by_id(&self, id: Uuid) -> Result<Option<Transaction>, sqlx::Error> {
         let transaction = sqlx::query_as!(
@@ -36,10 +36,10 @@ impl TransactionRepository {
         )
         .fetch_optional(&self.pool)
         .await?;
-        
+
         Ok(transaction)
     }
-    
+
     /// Get transaction by idempotency key
     pub async fn get_by_idempotency_key(
         &self,
@@ -63,7 +63,7 @@ impl TransactionRepository {
         )
         .fetch_optional(&self.pool)
         .await?;
-        
+
         Ok(transaction)
     }
 

@@ -5,7 +5,7 @@ use rust_decimal::Decimal;
 use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
-use crate::domain::{Wallet, WalletType, WalletError};
+use crate::domain::{Wallet, WalletError, WalletType};
 
 /// Wallet repository
 pub struct WalletRepository {
@@ -16,7 +16,7 @@ impl WalletRepository {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
-    
+
     /// Get wallet by user and type
     pub async fn get_by_user_and_type(
         &self,
@@ -42,12 +42,16 @@ impl WalletRepository {
         .fetch_optional(&self.pool)
         .await
         .map_err(|e| WalletError::DatabaseError(e.to_string()))?;
-        
+
         match row {
             Some(r) => Ok(Some(Wallet {
                 id: r.id,
                 user_id: r.user_id,
-                wallet_type: r.wallet_type.as_deref().and_then(|s| s.parse().ok()).unwrap_or(WalletType::Main),
+                wallet_type: r
+                    .wallet_type
+                    .as_deref()
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(WalletType::Main),
                 currency: r.currency,
                 balance_available: r.balance_available,
                 balance_locked: r.balance_locked,
@@ -60,7 +64,7 @@ impl WalletRepository {
             None => Ok(None),
         }
     }
-    
+
     /// Get wallet by user and type within a transaction (with row lock)
     pub async fn get_by_user_and_type_internal(
         &self,
@@ -86,12 +90,16 @@ impl WalletRepository {
         .fetch_optional(&mut **tx)
         .await
         .map_err(|e| WalletError::DatabaseError(e.to_string()))?;
-        
+
         match row {
             Some(r) => Ok(Some(Wallet {
                 id: r.id,
                 user_id: r.user_id,
-                wallet_type: r.wallet_type.as_deref().and_then(|s| s.parse().ok()).unwrap_or(WalletType::Main),
+                wallet_type: r
+                    .wallet_type
+                    .as_deref()
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(WalletType::Main),
                 currency: r.currency,
                 balance_available: r.balance_available,
                 balance_locked: r.balance_locked,
@@ -104,7 +112,7 @@ impl WalletRepository {
             None => Ok(None),
         }
     }
-    
+
     /// Update wallet balance with optimistic locking
     pub async fn update_balances(
         &self,
@@ -135,11 +143,11 @@ impl WalletRepository {
         .fetch_optional(&self.pool)
         .await
         .map_err(|e| WalletError::DatabaseError(e.to_string()))?;
-        
+
         if result.is_none() {
             return Err(WalletError::ConcurrencyConflict);
         }
-        
+
         Ok(())
     }
 }

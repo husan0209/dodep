@@ -26,7 +26,7 @@ impl WalletType {
             WalletType::Cashback => "cashback",
         }
     }
-    
+
     pub fn from_str(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "main" => Some(WalletType::Main),
