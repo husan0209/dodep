@@ -116,6 +116,12 @@ jobs:
         uses: golangci/golangci-lint-action@v9
         with:
           version: v2.1.0
+          # Built from source with the job's Go toolchain on purpose. The
+          # published v2.1.0 release binary is compiled with go1.24 and refuses
+          # to analyse a module that declares `go 1.25`:
+          #   Error: can't load config: the Go language version (go1.24) used to
+          #   build golangci-lint is lower than the targeted Go version (1.25.0)
+          install-mode: goinstall
           working-directory: services/go/${{ matrix.service }}
 
       - name: Run golangci-lint

@@ -9,7 +9,11 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUST_VERSION: "1.75"
-  GO_VERSION: "1.21"
+  # Must satisfy the highest `go` directive among the Go services. Several of
+  # them are on 1.25/1.26 (their CVE-fixed pgx and grpc releases require it),
+  # and without an explicit toolchain every build silently depends on the
+  # GOTOOLCHAIN auto-download.
+  GO_VERSION: "1.26.8"
   PYTHON_VERSION: "3.11"
   NODE_VERSION: "20"
 
@@ -62,6 +66,8 @@ jobs:
   go-build:
     runs-on: ubuntu-latest
     strategy:
+      # One broken service must not hide the verdicts of the others.
+      fail-fast: false
       matrix:
         service: [auth, user, payment, bonus, casino, notification, kyc]
     defaults:
@@ -82,6 +88,21 @@ jobs:
           ~/.cache/go-build
           ~/go/pkg/mod
         key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+    
+    # libs/proto/gen is gitignored, so a clean checkout has no generated Go
+    # stubs and every service importing github.com/opus-casino/proto/gen/go/*
+    # fails to build with "no required module provides package ...".
+    - name: Install buf (pinned)
+      run: |
+        BUF_VERSION=1.73.0
+        curl -fsSL -o /tmp/buf.tar.gz \
+          "https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/buf-Linux-x86_64.tar.gz"
+        sudo tar -xzf /tmp/buf.tar.gz -C /tmp
+        sudo install -m 0755 /tmp/buf/bin/buf /usr/local/bin/buf
+    
+    - name: Generate Go stubs
+      # Absolute path: this job runs inside services/go/<service>.
+      run: make -C "${{ github.workspace }}/libs/proto" gen-go
     
     - name: Download dependencies
       run: go mod download
