@@ -13,11 +13,11 @@ import (
 )
 
 type AffiliateService struct {
-	repo   repository.AffiliateRepository
-	logger *zap.Logger
-	// fraudCfg holds the anti-fraud thresholds. Defaults are conservative and
-	// can be overridden with SetFraudConfig (risk tuning without code changes).
+	repo repository.AffiliateRepository
+	// fraudCfg holds the automatic anti-fraud thresholds. Defaults are
+	// conservative; override with SetFraudConfig to retune without a deploy.
 	fraudCfg fraud.Config
+	logger   *zap.Logger
 }
 
 func NewAffiliateService(repo repository.AffiliateRepository, logger *zap.Logger) *AffiliateService {

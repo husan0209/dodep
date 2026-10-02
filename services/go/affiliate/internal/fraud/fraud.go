@@ -29,11 +29,11 @@ import (
 
 // Rule IDs double as fraud flag types stored in affiliate_fraud_flags.
 const (
-	RuleClickVelocity         = "click_velocity"
-	RuleRegistrationVelocity  = "registration_velocity"
-	RuleDeviceSharing         = "device_sharing"
-	RuleIPCluster             = "ip_cluster"
-	RuleClicklessAttribution  = "clickless_attribution"
+	RuleClickVelocity        = "click_velocity"
+	RuleRegistrationVelocity = "registration_velocity"
+	RuleDeviceSharing        = "device_sharing"
+	RuleIPCluster            = "ip_cluster"
+	RuleClicklessAttribution = "clickless_attribution"
 )
 
 // Config holds tunable thresholds and observation windows.
@@ -42,8 +42,8 @@ type Config struct {
 	// ClickVelocityWindow is the sliding window for click counting.
 	ClickVelocityWindow time.Duration
 	// ClicksPerHourWarn raises a medium finding, ClicksPerHourHigh a high one.
-	ClicksPerHourWarn   int64
-	ClicksPerHourHigh   int64
+	ClicksPerHourWarn int64
+	ClicksPerHourHigh int64
 	// RegistrationVelocityWindow is the sliding window for attribution counting.
 	RegistrationVelocityWindow time.Duration
 	// RegistrationsPerDayWarn raises medium, RegistrationsPerDayHigh raises high.
@@ -52,9 +52,9 @@ type Config struct {
 	// DeviceWindow is the lookback for shared-device counting.
 	DeviceWindow time.Duration
 	// DeviceSharingMedium/High/Critical are distinct-user thresholds.
-	DeviceSharingMedium    int64
-	DeviceSharingHigh      int64
-	DeviceSharingCritical  int64
+	DeviceSharingMedium   int64
+	DeviceSharingHigh     int64
+	DeviceSharingCritical int64
 	// IPWindow is the lookback for shared-IP counting.
 	IPWindow time.Duration
 	// IPClusterMedium/High/Critical are distinct-user thresholds.
@@ -68,20 +68,20 @@ type Config struct {
 // review fraud-flag queues before tightening.
 func DefaultConfig() Config {
 	return Config{
-		ClickVelocityWindow:      time.Hour,
-		ClicksPerHourWarn:        200,
-		ClicksPerHourHigh:        1000,
+		ClickVelocityWindow:        time.Hour,
+		ClicksPerHourWarn:          200,
+		ClicksPerHourHigh:          1000,
 		RegistrationVelocityWindow: 24 * time.Hour,
-		RegistrationsPerDayWarn:  20,
-		RegistrationsPerDayHigh:  50,
-		DeviceWindow:             30 * 24 * time.Hour,
-		DeviceSharingMedium:      2,
-		DeviceSharingHigh:        5,
-		DeviceSharingCritical:    10,
-		IPWindow:                 30 * 24 * time.Hour,
-		IPClusterMedium:          3,
-		IPClusterHigh:            10,
-		IPClusterCritical:        25,
+		RegistrationsPerDayWarn:    20,
+		RegistrationsPerDayHigh:    50,
+		DeviceWindow:               30 * 24 * time.Hour,
+		DeviceSharingMedium:        2,
+		DeviceSharingHigh:          5,
+		DeviceSharingCritical:      10,
+		IPWindow:                   30 * 24 * time.Hour,
+		IPClusterMedium:            3,
+		IPClusterHigh:              10,
+		IPClusterCritical:          25,
 	}
 }
 
@@ -104,9 +104,9 @@ type Finding struct {
 
 // Verdict aggregates all findings of one evaluation.
 type Verdict struct {
-	Findings             []Finding
-	MaxSeverity          domain.FraudSeverity
-	RecommendSuspension  bool
+	Findings            []Finding
+	MaxSeverity         domain.FraudSeverity
+	RecommendSuspension bool
 }
 
 // SignalStore provides the historical counters rules need.

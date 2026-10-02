@@ -14,9 +14,9 @@ func evalClickVelocity(ctx context.Context, store SignalStore, cfg Config, in In
 		return nil, err
 	}
 	details := map[string]string{
-		"rule_id":     RuleClickVelocity,
-		"clicks":      itoa(n),
-		"window":      cfg.ClickVelocityWindow.String(),
+		"rule_id":      RuleClickVelocity,
+		"clicks":       itoa(n),
+		"window":       cfg.ClickVelocityWindow.String(),
 		"affiliate_id": in.AffiliateID.String(),
 	}
 	switch {
@@ -67,11 +67,11 @@ func evalDeviceSharing(ctx context.Context, store SignalStore, cfg Config, in In
 		return nil, err
 	}
 	details := map[string]string{
-		"rule_id":          RuleDeviceSharing,
+		"rule_id":            RuleDeviceSharing,
 		"device_fingerprint": in.DeviceFP,
-		"distinct_users":   itoa(n),
-		"window":           cfg.DeviceWindow.String(),
-		"affiliate_id":     in.AffiliateID.String(),
+		"distinct_users":     itoa(n),
+		"window":             cfg.DeviceWindow.String(),
+		"affiliate_id":       in.AffiliateID.String(),
 	}
 	switch {
 	case n >= cfg.DeviceSharingCritical:
