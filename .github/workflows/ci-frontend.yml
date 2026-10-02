@@ -252,9 +252,14 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
+        # Pinned to a release rather than @master: the action renamed its
+        # input, and @master is what silently broke here. `image-ref` is now
+        # ignored in favour of `scan-ref`, which defaults to ".", so the scan
+        # targeted the working directory and then failed with "unable to
+        # find the specified image".
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
+          scan-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH'
