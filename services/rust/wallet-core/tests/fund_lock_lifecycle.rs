@@ -19,7 +19,7 @@ use rust_decimal::Decimal;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use wallet_core::domain::{WalletType, WalletError};
+use wallet_core::domain::{WalletError, WalletType};
 use wallet_core::infrastructure::repositories::{
     LedgerRepository, LockRepository, OutboxRepository, TransactionRepository, WalletRepository,
 };
@@ -53,7 +53,8 @@ async fn fixture(amount: &str) -> Fixture {
     // Isolated user per test keeps balances independent.
     let user_id = -(i64::from(u16::from_be_bytes(
         Uuid::new_v4().as_bytes()[0..2].try_into().expect("2 bytes"),
-    )) as i64) - 10_000;
+    )) as i64)
+        - 10_000;
 
     let wallet = svc
         .credit(
@@ -74,7 +75,11 @@ async fn fixture(amount: &str) -> Fixture {
 }
 
 async fn balance_of(fx: &Fixture) -> (Decimal, Decimal) {
-    let b = fx.svc.get_balance(fx.user_id, WalletType::Main).await.expect("balance");
+    let b = fx
+        .svc
+        .get_balance(fx.user_id, WalletType::Main)
+        .await
+        .expect("balance");
     (b.available, b.locked)
 }
 
@@ -97,17 +102,32 @@ async fn lock_is_idempotent_for_the_same_reference() {
 
     let first = fx
         .svc
-        .lock(fx.user_id, WalletType::Main, Decimal::from(400), reference.clone(), "withdrawal".into())
+        .lock(
+            fx.user_id,
+            WalletType::Main,
+            Decimal::from(400),
+            reference.clone(),
+            "withdrawal".into(),
+        )
         .await
         .expect("first lock");
 
     let second = fx
         .svc
-        .lock(fx.user_id, WalletType::Main, Decimal::from(400), reference.clone(), "withdrawal".into())
+        .lock(
+            fx.user_id,
+            WalletType::Main,
+            Decimal::from(400),
+            reference.clone(),
+            "withdrawal".into(),
+        )
         .await
         .expect("replayed lock");
 
-    assert_eq!(first.id, second.id, "replay must return the same reservation");
+    assert_eq!(
+        first.id, second.id,
+        "replay must return the same reservation"
+    );
     let (available, locked) = balance_of(&fx).await;
     assert_eq!(available, Decimal::from(600), "funds reserved once");
     assert_eq!(locked, Decimal::from(400), "locked once, not twice");
@@ -122,19 +142,37 @@ async fn lock_rejects_amount_mismatch_for_active_reference() {
     let reference = format!("withdrawal:{}", Uuid::new_v4());
 
     fx.svc
-        .lock(fx.user_id, WalletType::Main, Decimal::from(400), reference.clone(), "withdrawal".into())
+        .lock(
+            fx.user_id,
+            WalletType::Main,
+            Decimal::from(400),
+            reference.clone(),
+            "withdrawal".into(),
+        )
         .await
         .expect("first lock");
 
     let err = fx
         .svc
-        .lock(fx.user_id, WalletType::Main, Decimal::from(700), reference.clone(), "withdrawal".into())
+        .lock(
+            fx.user_id,
+            WalletType::Main,
+            Decimal::from(700),
+            reference.clone(),
+            "withdrawal".into(),
+        )
         .await
         .expect_err("amount mismatch must be rejected");
 
-    assert!(matches!(err, WalletError::BusinessRuleViolation(_)), "got {err:?}");
+    assert!(
+        matches!(err, WalletError::BusinessRuleViolation(_)),
+        "got {err:?}"
+    );
     let (available, locked) = balance_of(&fx).await;
-    assert_eq!((available, locked), (Decimal::from(600), Decimal::from(400)));
+    assert_eq!(
+        (available, locked),
+        (Decimal::from(600), Decimal::from(400))
+    );
 }
 
 /// The regression this service exists for: a confirmed crypto payout must
@@ -145,7 +183,13 @@ async fn consume_lock_settles_the_reserved_amount_once() {
     let reference = format!("withdrawal:{}", Uuid::new_v4());
 
     fx.svc
-        .lock(fx.user_id, WalletType::Main, Decimal::from(400), reference.clone(), "withdrawal".into())
+        .lock(
+            fx.user_id,
+            WalletType::Main,
+            Decimal::from(400),
+            reference.clone(),
+            "withdrawal".into(),
+        )
         .await
         .expect("lock");
 
@@ -164,7 +208,11 @@ async fn consume_lock_settles_the_reserved_amount_once() {
 
     // The amount left the platform exactly once: total drops by 400, not 800.
     let (available, locked) = balance_of(&fx).await;
-    assert_eq!(available, Decimal::from(600), "available was reduced at lock time");
+    assert_eq!(
+        available,
+        Decimal::from(600),
+        "available was reduced at lock time"
+    );
     assert_eq!(locked, Decimal::ZERO, "reservation settled");
     assert_eq!(txn.amount, Decimal::from(400));
 
@@ -196,7 +244,10 @@ async fn consume_lock_settles_the_reserved_amount_once() {
     .fetch_one(&fx.pool)
     .await
     .expect("lock row");
-    assert!(consumed_at.is_some(), "settlement must be recorded on the lock");
+    assert!(
+        consumed_at.is_some(),
+        "settlement must be recorded on the lock"
+    );
 }
 
 /// A second settle with a *different* idempotency key must be refused: the
@@ -207,7 +258,13 @@ async fn consume_lock_refuses_an_already_settled_reservation() {
     let reference = format!("withdrawal:{}", Uuid::new_v4());
 
     fx.svc
-        .lock(fx.user_id, WalletType::Main, Decimal::from(400), reference.clone(), "withdrawal".into())
+        .lock(
+            fx.user_id,
+            WalletType::Main,
+            Decimal::from(400),
+            reference.clone(),
+            "withdrawal".into(),
+        )
         .await
         .expect("lock");
     fx.svc
@@ -232,7 +289,13 @@ async fn consume_lock_refuses_an_already_settled_reservation() {
         )
         .await
         .expect_err("second settlement must be refused");
-    assert!(matches!(err, WalletError::LockReferenceNotFound(_) | WalletError::LockAlreadySettled(_)), "got {err:?}");
+    assert!(
+        matches!(
+            err,
+            WalletError::LockReferenceNotFound(_) | WalletError::LockAlreadySettled(_)
+        ),
+        "got {err:?}"
+    );
 
     let (available, locked) = balance_of(&fx).await;
     assert_eq!((available, locked), (Decimal::from(600), Decimal::ZERO));
@@ -245,7 +308,13 @@ async fn unlock_restores_funds_and_is_replayable() {
     let reference = format!("withdrawal:{}", Uuid::new_v4());
 
     fx.svc
-        .lock(fx.user_id, WalletType::Main, Decimal::from(400), reference.clone(), "withdrawal".into())
+        .lock(
+            fx.user_id,
+            WalletType::Main,
+            Decimal::from(400),
+            reference.clone(),
+            "withdrawal".into(),
+        )
         .await
         .expect("lock");
 
@@ -265,9 +334,15 @@ async fn unlock_restores_funds_and_is_replayable() {
         .unlock(fx.user_id, "withdrawal".into(), reference.clone())
         .await
         .expect_err("already released reservation");
-    assert!(matches!(err, WalletError::LockReferenceNotFound(_)), "got {err:?}");
+    assert!(
+        matches!(err, WalletError::LockReferenceNotFound(_)),
+        "got {err:?}"
+    );
     let (available_after, locked_after) = balance_of(&fx).await;
-    assert_eq!((available_after, locked_after), (Decimal::from(1000), Decimal::ZERO));
+    assert_eq!(
+        (available_after, locked_after),
+        (Decimal::from(1000), Decimal::ZERO)
+    );
 }
 
 /// One user must never be able to release or settle another user's money.
@@ -278,7 +353,13 @@ async fn reservations_are_scoped_to_their_owner() {
     let reference = format!("withdrawal:{}", Uuid::new_v4());
 
     fx.svc
-        .lock(fx.user_id, WalletType::Main, Decimal::from(400), reference.clone(), "withdrawal".into())
+        .lock(
+            fx.user_id,
+            WalletType::Main,
+            Decimal::from(400),
+            reference.clone(),
+            "withdrawal".into(),
+        )
         .await
         .expect("lock");
 
@@ -287,18 +368,33 @@ async fn reservations_are_scoped_to_their_owner() {
         .unlock(attacker, "withdrawal".into(), reference.clone())
         .await
         .expect_err("cross-user unlock must fail");
-    assert!(matches!(unlock_err, WalletError::LockReferenceNotFound(_)), "got {unlock_err:?}");
+    assert!(
+        matches!(unlock_err, WalletError::LockReferenceNotFound(_)),
+        "got {unlock_err:?}"
+    );
 
     let settle_err = fx
         .svc
-        .consume_lock(attacker, "withdrawal".into(), reference.clone(), format!("x-{}", Uuid::new_v4()), None)
+        .consume_lock(
+            attacker,
+            "withdrawal".into(),
+            reference.clone(),
+            format!("x-{}", Uuid::new_v4()),
+            None,
+        )
         .await
         .expect_err("cross-user settle must fail");
-    assert!(matches!(settle_err, WalletError::LockReferenceNotFound(_)), "got {settle_err:?}");
+    assert!(
+        matches!(settle_err, WalletError::LockReferenceNotFound(_)),
+        "got {settle_err:?}"
+    );
 
     // The owner's reservation is untouched.
     let (available, locked) = balance_of(&fx).await;
-    assert_eq!((available, locked), (Decimal::from(600), Decimal::from(400)));
+    assert_eq!(
+        (available, locked),
+        (Decimal::from(600), Decimal::from(400))
+    );
 }
 
 /// A released reservation may be re-created for the same reference (the
@@ -309,7 +405,13 @@ async fn released_reference_can_be_locked_again() {
     let reference = format!("withdrawal:{}", Uuid::new_v4());
 
     fx.svc
-        .lock(fx.user_id, WalletType::Main, Decimal::from(400), reference.clone(), "withdrawal".into())
+        .lock(
+            fx.user_id,
+            WalletType::Main,
+            Decimal::from(400),
+            reference.clone(),
+            "withdrawal".into(),
+        )
         .await
         .expect("lock");
     fx.svc
@@ -319,13 +421,22 @@ async fn released_reference_can_be_locked_again() {
 
     let relock = fx
         .svc
-        .lock(fx.user_id, WalletType::Main, Decimal::from(250), reference.clone(), "withdrawal".into())
+        .lock(
+            fx.user_id,
+            WalletType::Main,
+            Decimal::from(250),
+            reference.clone(),
+            "withdrawal".into(),
+        )
         .await
         .expect("re-lock after release");
     assert!(relock.is_active);
 
     let (available, locked) = balance_of(&fx).await;
-    assert_eq!((available, locked), (Decimal::from(750), Decimal::from(250)));
+    assert_eq!(
+        (available, locked),
+        (Decimal::from(750), Decimal::from(250))
+    );
     assert_eq!(active_locks(&fx, &reference).await, 1);
 }
 
@@ -337,10 +448,19 @@ async fn lock_rejects_insufficient_available_balance() {
 
     let err = fx
         .svc
-        .lock(fx.user_id, WalletType::Main, Decimal::from(500), reference.clone(), "withdrawal".into())
+        .lock(
+            fx.user_id,
+            WalletType::Main,
+            Decimal::from(500),
+            reference.clone(),
+            "withdrawal".into(),
+        )
         .await
         .expect_err("insufficient funds must be rejected");
-    assert!(matches!(err, WalletError::InsufficientAvailableBalance { .. }), "got {err:?}");
+    assert!(
+        matches!(err, WalletError::InsufficientAvailableBalance { .. }),
+        "got {err:?}"
+    );
 
     let (available, locked) = balance_of(&fx).await;
     assert_eq!((available, locked), (Decimal::from(100), Decimal::ZERO));
