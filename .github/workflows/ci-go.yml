@@ -109,12 +109,17 @@ jobs:
       # module whose `go` directive is 1.26: it reported every protobuf-importing
       # package as `undefined: <pkg> (typecheck)` plus `file requires newer Go
       # version go1.26 (application built with go1.24)`, hundreds of lines of
-      # noise that masked the real findings. v2 reports three genuine errcheck
-      # issues in services/go/bonus and nothing else.
+      # noise that masked the real findings. v1 also reads `--out-format`, which
+      # v2 removed.
+      #
+      # The version is pinned deliberately. v2.1.0 is built with go1.24.2 and
+      # panics with "file requires newer Go version go1.25 (application built
+      # with go1.24)" on any dependency that raised its own `go` directive.
+      # v2.14.0 is built with go1.27.0 and type-checks the whole matrix.
       - name: Install golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.1.0
+          version: v2.14.0
           working-directory: services/go/${{ matrix.service }}
 
       - name: Run golangci-lint
