@@ -204,9 +204,12 @@ jobs:
       - name: Run bandit
         run: pip install bandit
 
+      # Honour the service's [tool.bandit] config: without -c bandit scanned
+      # the tests too, so B101 (assert) in test files failed the job and hid
+      # real findings in src/.
       - name: Scan with bandit
         working-directory: services/python/${{ matrix.service }}
-        run: bandit -r . -f json -o bandit-results.json
+        run: bandit -c pyproject.toml -r . -f json -o bandit-results.json
 
       - name: Upload bandit results
         uses: actions/upload-artifact@v4

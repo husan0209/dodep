@@ -36,6 +36,7 @@ def parse_requirements() -> dict[str, str]:
         match = _PIN_RE.match(line)
         if match is None:
             pytest.fail(f"Unpinned requirement (drift risk): {raw_line!r}")
+            continue  # unreachable; keeps mypy's narrowing of `match` intact
         pins[_normalize(match.group(1))] = match.group(2)
     return pins
 

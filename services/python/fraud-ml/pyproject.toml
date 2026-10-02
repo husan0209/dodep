@@ -82,6 +82,11 @@ warn_return_any = true
 warn_unused_configs = true
 ignore_missing_imports = true
 
+[tool.bandit]
+# Tests legitimately use assert and fake credentials; scanning them only
+# buries real findings.
+exclude_dirs = ["tests"]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
