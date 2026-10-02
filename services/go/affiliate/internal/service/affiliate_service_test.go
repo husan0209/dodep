@@ -43,6 +43,48 @@ type mockAffiliateRepository struct {
 	createFraudFlagFunc            func(context.Context, *domain.AffiliateFraudFlag) error
 	getOpenFraudFlagsFunc          func(context.Context, uuid.UUID) ([]domain.AffiliateFraudFlag, error)
 	releaseEligibleEarningsFunc    func(context.Context, time.Time) (int64, error)
+
+	// Anti-fraud signal queries (see internal/repository/fraud_signals.go)
+	getClickByClickIDFunc          func(context.Context, string) (*domain.AffiliateClick, error)
+	countClicksSinceFunc           func(context.Context, uuid.UUID, time.Time) (int64, error)
+	countAttributionsSinceFunc     func(context.Context, uuid.UUID, time.Time) (int64, error)
+	countReferredUsersByDeviceFunc func(context.Context, uuid.UUID, string, time.Time) (int64, error)
+	countReferredUsersByIPFunc     func(context.Context, uuid.UUID, string, time.Time) (int64, error)
+}
+
+func (m *mockAffiliateRepository) GetClickByClickID(ctx context.Context, clickID string) (*domain.AffiliateClick, error) {
+	if m.getClickByClickIDFunc != nil {
+		return m.getClickByClickIDFunc(ctx, clickID)
+	}
+	return nil, nil
+}
+
+func (m *mockAffiliateRepository) CountClicksSince(ctx context.Context, affiliateID uuid.UUID, since time.Time) (int64, error) {
+	if m.countClicksSinceFunc != nil {
+		return m.countClicksSinceFunc(ctx, affiliateID, since)
+	}
+	return 0, nil
+}
+
+func (m *mockAffiliateRepository) CountAttributionsSince(ctx context.Context, affiliateID uuid.UUID, since time.Time) (int64, error) {
+	if m.countAttributionsSinceFunc != nil {
+		return m.countAttributionsSinceFunc(ctx, affiliateID, since)
+	}
+	return 0, nil
+}
+
+func (m *mockAffiliateRepository) CountReferredUsersByDevice(ctx context.Context, affiliateID uuid.UUID, deviceFP string, since time.Time) (int64, error) {
+	if m.countReferredUsersByDeviceFunc != nil {
+		return m.countReferredUsersByDeviceFunc(ctx, affiliateID, deviceFP, since)
+	}
+	return 0, nil
+}
+
+func (m *mockAffiliateRepository) CountReferredUsersByIP(ctx context.Context, affiliateID uuid.UUID, ipHash string, since time.Time) (int64, error) {
+	if m.countReferredUsersByIPFunc != nil {
+		return m.countReferredUsersByIPFunc(ctx, affiliateID, ipHash, since)
+	}
+	return 0, nil
 }
 
 func (m *mockAffiliateRepository) GetEnrollmentByUserID(ctx context.Context, userID int64) (*domain.AffiliateEnrollmentRequest, error) {
