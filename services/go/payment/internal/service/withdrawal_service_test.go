@@ -96,7 +96,8 @@ func newTestWithdrawalService(
 		nil, // wallet
 		nil, // user
 		nil, // producer
-		nil, // tracer
+		noopTracer(),
+		"", // ipnCallbackURL
 	)
 }
 
