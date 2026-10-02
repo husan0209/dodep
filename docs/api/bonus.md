@@ -95,6 +95,15 @@ Prometheus exposition is served on the service HTTP port at `GET /metrics`
 (no auth; the endpoint is restricted by the Helm NetworkPolicy to the
 monitoring namespace and carries aggregate counters only — no PII).
 
+Alerts on these metrics live in
+`infra/k8s/monitoring/alerting/bonus-alerting-rules.yaml` (11 rules), with the
+operational procedures in `docs/infra/runbooks/bonus-service.md`.
+`tools/testing/helm/validate-bonus-alerts.py` cross-checks every metric name
+and every label value used in a rule against `internal/telemetry/metrics.go`
+and the enum constants in `internal/service/bonus_service.go`, and runs in the
+`Helm Lint and Render Bonus Chart` CI job. A typo in a PromQL expression
+therefore fails CI instead of silently producing a rule that can never fire.
+
 RED (traffic) metrics — `route` is always the registered route pattern, never a
 raw path, so path parameters cannot inflate cardinality:
 

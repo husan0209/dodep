@@ -342,6 +342,18 @@ jobs:
             exit 1
           fi
 
+      # The alert rules are the safety net for the money path, so they are
+      # gated in CI: a typo in a metric name or a label value produces a rule
+      # that can never fire. The validator cross-checks every PromQL metric
+      # and label value against telemetry/metrics.go and bonus_service.go.
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Validate bonus alert rules against the code
+        run: python tools/testing/helm/validate-bonus-alerts.py
+
   k6-smoke:
     name: k6 Performance Gate (Bonus)
     runs-on: ubuntu-latest
