@@ -1,0 +1,26 @@
+# Build output
+.next/
+out/
+build/
+dist/
+
+# Dependencies
+node_modules/
+
+# Test and coverage artifacts
+coverage/
+playwright-report/
+test-results/
+blob-report/
+.playwright/
+
+# Lockfile: generated, and reformatting it creates noisy diffs
+package-lock.json
+
+# Tooling caches
+*.tsbuildinfo
+.swc/
+
+# Logs
+npm-debug.log*
+yarn-error.log*
