@@ -184,7 +184,11 @@ jobs:
     
     steps:
       - name: Notify Slack
-        if: always()
+        # A notification must never fail the build. Without the guard the step
+        # errors out with "Specify secrets.SLACK_WEBHOOK_URL" on every pull
+        # request in a repository where the optional webhook is not configured,
+        # which turns a missing notification into a red check.
+        if: always() && secrets.SLACK_WEBHOOK != ''
         uses: 8398a7/action-slack@v3
         with:
           status: ${{ job.status }}
