@@ -286,11 +286,15 @@ func (h *AuthGRPCHandler) ChangePassword(ctx context.Context, req *pb.ChangePass
 	return &pb.ChangePasswordResponse{Success: true}, nil
 }
 
-// RequestPasswordReset initiates password reset flow
-func (h *AuthGRPCHandler) RequestPasswordReset(ctx context.Context, req *pb.RequestPasswordResetRequest) (*pb.RequestPasswordResetResponse, error) {
-	h.service.ResetPasswordRequest(ctx, req.Email, req.IpAddress)
+// InitiatePasswordReset initiates password reset flow
+func (h *AuthGRPCHandler) InitiatePasswordReset(ctx context.Context, req *pb.InitiatePasswordResetRequest) (*pb.InitiatePasswordResetResponse, error) {
+	if err := h.service.ResetPasswordRequest(ctx, req.Email, req.IpAddress); err != nil {
+		// The caller still receives success: the response must not reveal whether
+		// the address exists. The failure belongs in the logs.
+		h.log.Error("ResetPasswordRequest failed", zap.Error(err))
+	}
 	// Always return success to prevent email enumeration
-	return &pb.RequestPasswordResetResponse{Success: true}, nil
+	return &pb.InitiatePasswordResetResponse{Success: true}, nil
 }
 
 // ResetPassword completes password reset

@@ -62,6 +62,10 @@ const (
 	maxArgonMemory     = 1024 * 1024         // 1 GB
 	maxArgonIterations = 10
 	maxArgonParallel   = 255
+	// HashPassword always produces a 32 byte digest; a longer one is a
+	// malformed or tampered row and must not reach argon2.IDKey, whose key
+	// length parameter is a uint32 taken from the stored hash.
+	maxArgonKeyLength = 64
 )
 
 // VerifyPassword verifies a password against its Argon2id hash
@@ -110,16 +114,21 @@ func VerifyPassword(password, encodedHash string) (bool, error) {
 	if len(hash) < argonKeyLength {
 		return false, fmt.Errorf("invalid hash length: %d", len(hash))
 	}
+	// Cap the key length as well: it feeds a uint32 argon2 parameter, and an
+	// attacker-controlled row must not be able to request an arbitrary size.
+	if len(hash) > maxArgonKeyLength {
+		return false, fmt.Errorf("invalid hash length: %d", len(hash))
+	}
 
 	// Compute hash with same parameters (parallelism fits uint8 after the
-	// range check above).
+	// range check above, key length after the bounds check above).
 	otherHash := argon2.IDKey(
 		[]byte(password),
 		salt,
 		iterations,
 		memory,
 		uint8(parallelism),
-		uint32(len(hash)),
+		uint32(len(hash)), // #nosec G115 -- bounded by argonKeyLength..maxArgonKeyLength above
 	)
 
 	// Constant-time comparison

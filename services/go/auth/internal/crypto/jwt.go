@@ -24,7 +24,8 @@ type JWTClaims struct {
 // anything shorter is rejected instead of silently signing with weak keys.
 const MinHS256SecretLength = 32
 
-const tokenIssuer = "opus-casino-auth"
+// tokenIssuer is the `iss` claim every token of this service carries.
+const tokenIssuer = "opus-casino-auth" // #nosec G101 -- issuer name, not a credential
 
 type jwtMode int
 
