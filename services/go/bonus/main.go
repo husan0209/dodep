@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -40,6 +41,14 @@ import (
 
 // version is injected at build time (-ldflags "-X main.version=...").
 var version = "dev"
+
+// defaultHTTPPort is the CONVENTIONS.md port for bonus and the fallback when
+// PORT is unset. Named so the health probe and the listener cannot drift.
+const defaultHTTPPort = "8088"
+
+// healthProbeHost is the loopback address the container healthcheck uses.
+// A constant, never an env value: the probe must not be redirectable.
+const healthProbeHost = "127.0.0.1"
 
 func main() {
 	// `app health` is the Docker HEALTHCHECK contract (see infra/docker/Dockerfile.go):
@@ -271,13 +280,31 @@ func main() {
 
 // runHealthProbe GETs the local /health endpoint for Docker HEALTHCHECK.
 // It returns 0 when the service answers 200 OK, 1 otherwise.
+//
+// The probe target is loopback-only and the port must be numeric: PORT comes
+// from the environment, so it is untrusted input and gets validated rather
+// than interpolated into a URL (gosec G704). A non-numeric port makes the
+// probe fail closed, which is the safe direction for a health check.
 func runHealthProbe() int {
 	port := strings.TrimSpace(os.Getenv("PORT"))
 	if port == "" {
-		port = "8088"
+		port = defaultHTTPPort
+	}
+	portNum, err := strconv.Atoi(port)
+	if err != nil || portNum < 1 || portNum > 65535 {
+		return 1
 	}
 	client := &http.Client{Timeout: 5 * time.Second}
-	resp, err := client.Get(fmt.Sprintf("http://127.0.0.1:%s/health", port))
+	// gosec G704 (SSRF via taint analysis) fires here because PORT reaches
+	// this call through os.Getenv, and its dataflow cannot see the
+	// strconv.Atoi + range check above. The target is not attacker
+	// controlled: host is a package constant and the only variable part is an
+	// int already validated to [1,65535]. Anything else returned 1 above.
+	// TestRunHealthProbe_RejectsNonNumericPort pins that fail-closed path.
+	// nolint:gosec // G704: see above; input is validated before use.
+	probeURL := fmt.Sprintf("http://%s:%d/health", healthProbeHost, portNum)
+	// #nosec G704 -- gosec's own suppression, in case CI runs it without golangci-lint.
+	resp, err := client.Get(probeURL)
 	if err != nil {
 		return 1
 	}

@@ -1,4 +1,4 @@
-# Multi-stage Dockerfile for Go services
+﻿# Multi-stage Dockerfile for Go services
 # Opus Casino - Auth, User, Payment, Bonus, Casino, Notification, KYC
 
 # =============================================================================
@@ -6,8 +6,8 @@
 # =============================================================================
 # NOTE: builder must stay >= the highest `go` directive across services
 # (currently go 1.24: grpc v1.80 requires it). Go 1.22 is EOL since Feb 2025
-# and ships no security fixes — do NOT downgrade below go 1.24.
-FROM golang:1.25.14-alpine3.23 AS builder
+# and ships no security fixes вЂ” do NOT downgrade below go 1.24.
+FROM golang:1.26.8-alpine3.23 AS builder
 
 # Install build dependencies
 RUN apk add --no-cache \

@@ -5,9 +5,12 @@ name: CI - Go Bonus Service
 # render check -> deploy to dev.
 #
 # Notes:
-# - GO_VERSION is 1.25: the CVE-fixed dependency set (pgx v5.9.2) requires
-#   go >= 1.25, and the patched 1.25.x patch releases also clear the standard
-#   library advisories govulncheck reports.
+# - GO_VERSION is 1.26.8, pinned to a patch release rather than a bare
+#   minor: the CVE-fixed dependency set (pgx v5.9.2) needs go >= 1.25, and
+#   the stdlib advisories govulncheck reports (e.g. net@go1.25.10) are only
+#   cleared by a toolchain at or above the fix. A bare '1.25' would resolve to
+#   whatever patch happened to be newest and fail non-deterministically.
+#   Verified locally: govulncheck ./... -> "No vulnerabilities found" on 1.26.8.
 # - `go mod vendor` runs before the image build because go.mod replaces
 #   github.com/opus-casino/proto with ../../../libs/proto, which lives
 #   outside the docker build context (services/go/bonus). Vendoring keeps
@@ -41,7 +44,7 @@ on:
       - '.github/workflows/ci-go-bonus.yml'
 
 env:
-  GO_VERSION: '1.25'
+  GO_VERSION: '1.26.8'
   REGISTRY: ghcr.io
   IMAGE_PREFIX: opus-casino
 
@@ -350,6 +353,11 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+
+      # PyYAML is not in the standard library and setup-python does not
+      # preinstall it.
+      - name: Install PyYAML
+        run: python -m pip install --disable-pip-version-check "PyYAML==6.0.2"
 
       - name: Validate bonus alert rules against the code
         run: python tools/testing/helm/validate-bonus-alerts.py
