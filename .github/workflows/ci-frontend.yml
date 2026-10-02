@@ -241,6 +241,11 @@ jobs:
           context: apps/web
           file: infra/docker/Dockerfile.web
           push: ${{ github.event_name != 'pull_request' }}
+          # On a pull request the image is not pushed, so Trivy could not find
+          # it in the registry and failed with MANIFEST_UNKNOWN. Load the
+          # built image into the runner's local daemon instead, so the scan
+          # covers PRs too — which is the point of scanning before merge.
+          load: ${{ github.event_name == 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
