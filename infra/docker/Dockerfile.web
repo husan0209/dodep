@@ -7,7 +7,13 @@ RUN apk add --no-cache libc6-compat
 FROM base AS deps
 WORKDIR /app
 COPY package.json package-lock.json* ./
-RUN npm ci --omit=dev
+# Full install, not --omit=dev. `next build` needs devDependencies to
+# succeed: postcss resolves tailwindcss through next/font, and the @/* path
+# aliases come from tsconfig.json, which Next reads with the TypeScript
+# compiler from devDependencies. The runner stage copies only
+# .next/standalone, which contains production dependencies only, so nothing
+# from devDependencies reaches the final image.
+RUN npm ci
 
 # ─── builder stage ──────────────────────────────────────────────
 FROM base AS builder

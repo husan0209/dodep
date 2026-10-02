@@ -233,8 +233,13 @@ jobs:
         id: build
         uses: docker/build-push-action@v5
         with:
-          context: .
-          file: infra/docker/Dockerfile.frontend
+          # Dockerfile.frontend does not exist in this repository; the Next.js
+          # image is infra/docker/Dockerfile.web, alongside .admin/.go/.python/
+          # .rust. It also expects the build context to be apps/web/ — it does
+          # `COPY package.json package-lock.json* ./` — so a repo-root context
+          # cannot build it either.
+          context: apps/web
+          file: infra/docker/Dockerfile.web
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
