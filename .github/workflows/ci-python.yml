@@ -260,11 +260,13 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/${{ matrix.service }}
           tags: |
-            type=sha,prefix=
+            type=sha,format=long,prefix=sha-
             type=ref,event=branch
             type=ref,event=pr
             type=semver,pattern={{version}}
 
+      # On PRs nothing is pushed, so the image only exists in the local buildx
+      # cache and the Trivy step below has nothing to pull.
       - name: Build and push
         id: build
         uses: docker/build-push-action@v5
@@ -272,6 +274,7 @@ jobs:
           context: .
           file: infra/docker/Dockerfile.python
           push: ${{ github.event_name != 'pull_request' }}
+          load: ${{ github.event_name == 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
@@ -279,7 +282,12 @@ jobs:
           build-args: |
             SERVICE_NAME=${{ matrix.service }}
 
+      # `type=sha,prefix=` produced a short tag (c4e9e22), while this step asked
+      # for the never-created `sha-<full sha>` tag, so Trivy aborted with
+      # "No such image" on every run. It now scans a tag the build produces,
+      # and only on pushes, where that tag is really in the registry.
       - name: Run Trivy vulnerability scanner
+        if: github.event_name != 'pull_request'
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/${{ matrix.service }}:sha-${{ github.sha }}
