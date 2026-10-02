@@ -12,7 +12,14 @@ import (
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/trace"
 )
+
+// noopTracer keeps integration tests independent of the global tracer
+// provider while still exercising the tracing-injected code paths.
+func noopTracer() trace.Tracer {
+	return trace.NewNoopTracerProvider().Tracer("payment-service-integration-test")
+}
 
 // TestDepositFlow_Complete tests the complete deposit flow
 // Validates: Requirements 1.1-1.5, 2.1-2.7
@@ -57,7 +64,8 @@ func TestDepositFlow_Complete(t *testing.T) {
 		walletClient,
 		userClient,
 		nil, // producer
-		nil, // tracer
+		noopTracer(),
+		"", // ipnCallbackURL
 	)
 	_ = paymentService
 

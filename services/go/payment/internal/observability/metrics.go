@@ -21,6 +21,46 @@ const (
 	MetricErrorsTotal         = "errors_total"
 )
 
+// Deposit lifecycle states for MetricDepositsTotal.
+// A deposit is counted once per transition, so summing the counter across all
+// statuses yields the number of state changes, not the number of deposits —
+// use the completion rate (completed / pending) rather than a plain sum.
+const (
+	DepositStatusPending   = "pending"
+	DepositStatusCompleted = "completed"
+	DepositStatusFailed    = "failed"
+	DepositStatusExpired   = "expired"
+)
+
+// Withdrawal lifecycle states for MetricWithdrawalsTotal.
+const (
+	WithdrawalStatusProcessing = "processing"
+	WithdrawalStatusCompleted  = "completed"
+	WithdrawalStatusFailed     = "failed"
+	WithdrawalStatusCancelled  = "cancelled"
+)
+
+// Operations for MetricProviderLatency and MetricErrorsTotal.
+const (
+	ProviderOpCreatePayment = "create_payment"
+	ProviderOpCreatePayout  = "create_payout"
+	ProviderOpGetRate       = "get_rate"
+	ProviderOpGetCurrencies = "get_currencies"
+	ProviderOpVerifyWebhook = "verify_webhook"
+
+	OperationDeposit    = "deposit"
+	OperationWithdrawal = "withdrawal"
+	OperationWebhook    = "webhook"
+)
+
+// KYCLevelUnknown is the kyc_level sentinel for recording sites that do not
+// know the level — notably provider webhooks, which carry no user context.
+// KYCUnknownLabel is what it renders as, so the label stays a bounded value.
+const (
+	KYCLevelUnknown = -1
+	KYCUnknownLabel = "unknown"
+)
+
 // Label names
 const (
 	LabelStatus    = "status"
@@ -137,6 +177,24 @@ func RecordDeposit(status, currency string, kycLevel int, amountUSD decimal.Deci
 	DepositAmountUSD.Observe(amountUSD.InexactFloat64())
 }
 
+// RecordDepositTransition increments MetricDepositsTotal for a lifecycle state
+// change without observing the amount histogram.
+//
+// Use this for transitions after the initial request (webhook settling a
+// deposit, an expiry sweep). Observing the amount again would double-count it
+// in MetricDepositAmountUSD, which must describe requested deposits exactly
+// once each.
+func RecordDepositTransition(status, currency string, kycLevel int) {
+	DepositCounter.WithLabelValues(status, currency, kycLevelLabel(kycLevel)).Inc()
+}
+
+// RecordWithdrawalTransition increments MetricWithdrawalsTotal for a lifecycle
+// state change without observing the amount histogram. See
+// RecordDepositTransition for why the amount is not re-observed.
+func RecordWithdrawalTransition(status, currency string, kycLevel int) {
+	WithdrawalCounter.WithLabelValues(status, currency, kycLevelLabel(kycLevel)).Inc()
+}
+
 // RecordWithdrawal records a withdrawal operation metric.
 // status: processing, completed, failed, cancelled
 // currency: BTC, ETH, USDT_ERC20, USDT_TRC20, USDC, LTC, BCH
@@ -163,11 +221,13 @@ func RecordError(errorType, operation string) {
 }
 
 // kycLevelLabel converts KYC level int to string label.
+// Any value outside 0..3 collapses to KYCUnknownLabel: the level arrives over
+// gRPC, and an unmapped value must not become a new Prometheus label.
 func kycLevelLabel(level int) string {
 	switch level {
 	case 0, 1, 2, 3:
 		return string(rune('0' + level))
 	default:
-		return "unknown"
+		return KYCUnknownLabel
 	}
 }

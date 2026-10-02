@@ -2,12 +2,15 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/opus-casino/payment/internal/client"
 	"github.com/opus-casino/payment/internal/domain"
 	"github.com/opus-casino/payment/internal/event"
+	"github.com/opus-casino/payment/internal/observability"
 	"github.com/opus-casino/payment/internal/repository"
 	"github.com/rs/zerolog/log"
 	"github.com/shopspring/decimal"
@@ -80,7 +83,10 @@ type InitiateWithdrawalResponse struct {
 // InitiateWithdrawal creates a new withdrawal request
 func (s *WithdrawalService) InitiateWithdrawal(ctx context.Context, req InitiateWithdrawalRequest) (*InitiateWithdrawalResponse, error) {
 	// Check idempotency
+	// A replayed idempotency key is not a new withdrawal and must not be
+	// counted again.
 	if existingWithdrawal, err := s.withdrawalRepo.GetByIDempotencyKey(ctx, req.IdempotencyKey); err != nil {
+		observability.RecordError("idempotency_lookup_failed", observability.OperationWithdrawal)
 		return nil, fmt.Errorf("check idempotency: %w", err)
 	} else if existingWithdrawal != nil {
 		log.Info().
@@ -91,23 +97,28 @@ func (s *WithdrawalService) InitiateWithdrawal(ctx context.Context, req Initiate
 	}
 
 	// Validate KYC level (minimum level 2 for withdrawals)
-	if err := s.validateKYCLevel(ctx, req.UserID); err != nil {
+	kycLevel, err := s.validateKYCLevel(ctx, req.UserID)
+	if err != nil {
+		observability.RecordError(metricErrorType(err), observability.OperationWithdrawal)
 		return nil, err
 	}
 
 	// Validate currency
 	if !req.Currency.IsWithdrawalSupported() {
+		observability.RecordError("currency_not_supported", observability.OperationWithdrawal)
 		return nil, domain.ErrorCurrencyNotSupported(string(req.Currency))
 	}
 
 	// Validate withdrawal limits
 	if err := s.validateWithdrawalLimits(ctx, req.UserID, req.Amount); err != nil {
+		observability.RecordError(metricErrorType(err), observability.OperationWithdrawal)
 		return nil, err
 	}
 
 	// Get exchange rate for fiat amount
 	fiatAmount, err := s.getFiatAmount(ctx, req.Amount, req.Currency)
 	if err != nil {
+		observability.RecordError("provider_error", observability.OperationWithdrawal)
 		return nil, fmt.Errorf("get exchange rate: %w", err)
 	}
 
@@ -119,6 +130,7 @@ func (s *WithdrawalService) InitiateWithdrawal(ctx context.Context, req Initiate
 		IdempotencyKey: req.IdempotencyKey,
 	})
 	if err != nil {
+		observability.RecordError(walletErrorType(err), observability.OperationWithdrawal)
 		return nil, fmt.Errorf("lock funds: %w", err)
 	}
 
@@ -138,7 +150,12 @@ func (s *WithdrawalService) InitiateWithdrawal(ctx context.Context, req Initiate
 				Err(unlockErr).
 				Str("lock_id", lockResult.LockID).
 				Msg("Failed to unlock funds after payout failure")
+			// The lock is stranded: the player cannot bet this balance and the
+			// payout never happened. This needs a human, so it gets its own
+			// label rather than being folded into provider_error.
+			observability.RecordError("compensation_failed", observability.OperationWithdrawal)
 		}
+		observability.RecordError("provider_error", observability.OperationWithdrawal)
 		return nil, domain.ErrorProviderUnavailable("NOWPayments", err)
 	}
 
@@ -165,14 +182,26 @@ func (s *WithdrawalService) InitiateWithdrawal(ctx context.Context, req Initiate
 				Err(unlockErr).
 				Str("lock_id", lockResult.LockID).
 				Msg("Failed to unlock funds after withdrawal create failure")
+			observability.RecordError("compensation_failed", observability.OperationWithdrawal)
 		}
+		observability.RecordError("persistence_failed", observability.OperationWithdrawal)
 		return nil, fmt.Errorf("create withdrawal: %w", err)
 	}
 
 	// Track daily limit
 	if _, err := s.dailyLimitsRepo.Increment(ctx, req.UserID, "withdrawal", fiatAmount); err != nil {
 		log.Warn().Err(err).Msg("Failed to track daily withdrawal limit")
+		// The withdrawal exists and the payout is in flight, but the daily
+		// limit was not charged, so the player can exceed their limit today.
+		observability.RecordError("daily_limit_not_tracked", observability.OperationWithdrawal)
 	}
+
+	observability.RecordWithdrawal(
+		observability.WithdrawalStatusProcessing,
+		string(req.Currency),
+		kycLevel,
+		fiatAmount,
+	)
 
 	log.Info().
 		Int64("user_id", req.UserID).
@@ -209,18 +238,53 @@ func (s *WithdrawalService) ListWithdrawals(ctx context.Context, req ListPayment
 	return s.withdrawalRepo.ListByUserID(ctx, req.UserID, filter)
 }
 
-// validateKYCLevel validates minimum KYC level for withdrawals
-func (s *WithdrawalService) validateKYCLevel(ctx context.Context, userID int64) error {
+// validateKYCLevel validates minimum KYC level for withdrawals.
+// It returns the KYC level so callers can label metrics with it instead of
+// making a second gRPC round trip to User Service.
+func (s *WithdrawalService) validateKYCLevel(ctx context.Context, userID int64) (int, error) {
 	kycLevel, err := s.user.GetKYCLevel(ctx, userID)
 	if err != nil {
-		return fmt.Errorf("get KYC level: %w", err)
+		return observability.KYCLevelUnknown, fmt.Errorf("get KYC level: %w", err)
 	}
 
 	if kycLevel < 2 {
-		return domain.ErrorKYCRequiredLevel(kycLevel)
+		return kycLevel, domain.ErrorKYCRequiredLevel(kycLevel)
 	}
 
-	return nil
+	return kycLevel, nil
+}
+
+// walletErrorType maps a Wallet Service gRPC failure onto a bounded
+// error_type label. See metricErrorType for why the label must stay a constant
+// set: the raw gRPC message is upstream text and must never become a label
+// value, or one crafted error string would mint a new time series per request.
+func walletErrorType(err error) string {
+	if err == nil {
+		return "internal_error"
+	}
+	if errors.Is(err, domain.ErrInsufficientBalance) {
+		return "insufficient_balance"
+	}
+	if errors.Is(err, domain.ErrWalletLocked) {
+		return "wallet_locked"
+	}
+	// WalletClient.mapError flattens gRPC codes to text, so match the stable
+	// prefixes it emits rather than the upstream message.
+	msg := err.Error()
+	switch {
+	case strings.Contains(msg, "not found"):
+		return "wallet_not_found"
+	case strings.Contains(msg, "invalid argument"):
+		return "wallet_rejected_request"
+	case strings.Contains(msg, "failed precondition"):
+		return "wallet_locked"
+	case strings.Contains(msg, "resource exhausted"):
+		return "insufficient_balance"
+	case strings.Contains(msg, "service unavailable"), strings.Contains(msg, "deadline exceeded"):
+		return "wallet_unavailable"
+	default:
+		return "internal_error"
+	}
 }
 
 // validateWithdrawalLimits validates daily withdrawal limits
