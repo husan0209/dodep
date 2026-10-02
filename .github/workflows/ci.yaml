@@ -27,10 +27,14 @@ jobs:
     - uses: actions/checkout@v4
     
     - name: Install Rust
-      uses: dtolnay/rust-action@stable
-      with:
-        toolchain: ${{ env.RUST_VERSION }}
-        components: rustfmt, clippy
+      # `dtolnay/rust-action@stable` could not be resolved by the runner
+      # (the job failed at "Set up job"). ubuntu images ship rustup,
+      # so pin the toolchain directly instead of using that action.
+      run: |
+        rustup toolchain install ${{ env.RUST_VERSION }} --profile minimal \
+          --component rustfmt --component clippy
+        rustup default ${{ env.RUST_VERSION }}
+        rustc --version && cargo --version
     
     - name: Cache cargo registry
       uses: actions/cache@v4

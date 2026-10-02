@@ -35,6 +35,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
+      # Keep sibling legs running: fraud-ml and analytics are independent
+      # services, and cancelling one hides the other's real result.
+      fail-fast: false
       matrix:
         service: [fraud-ml, analytics]
     
@@ -76,6 +79,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
+      # Keep sibling legs running: fraud-ml and analytics are independent
+      # services, and cancelling one hides the other's real result.
+      fail-fast: false
       matrix:
         service: [fraud-ml, analytics]
     
@@ -164,6 +170,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
+      # Keep sibling legs running: fraud-ml and analytics are independent
+      # services, and cancelling one hides the other's real result.
+      fail-fast: false
       matrix:
         service: [fraud-ml, analytics]
     
@@ -179,9 +188,12 @@ jobs:
       - name: Install safety
         run: pip install safety
 
+      # `safety check` without -r audits the whole runner environment, which is
+      # safety's own dependency tree: it never looked at our dependencies and
+      # failed for unrelated advisories. -r scans what the service declares.
       - name: Run safety check
         working-directory: services/python/${{ matrix.service }}
-        run: safety check --json > safety-results.json
+        run: safety check -r requirements.txt --json > safety-results.json
 
       - name: Upload safety results
         uses: actions/upload-artifact@v4
@@ -211,6 +223,9 @@ jobs:
     timeout-minutes: 30
     needs: [lint, test, security]
     strategy:
+      # Keep sibling legs running: fraud-ml and analytics are independent
+      # services, and cancelling one hides the other's real result.
+      fail-fast: false
       matrix:
         service: [fraud-ml, analytics]
     
@@ -288,6 +303,9 @@ jobs:
       url: https://dev.opus.casino
     
     strategy:
+      # Keep sibling legs running: fraud-ml and analytics are independent
+      # services, and cancelling one hides the other's real result.
+      fail-fast: false
       matrix:
         service: [fraud-ml, analytics]
     
