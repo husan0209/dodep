@@ -37,7 +37,7 @@ jobs:
           cache: 'npm'
 
       - name: Setup Rust
-        uses: dtolnay/rust-action@stable
+        uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ env.RUST_VERSION }}
           components: clippy, rustfmt
@@ -183,8 +183,13 @@ jobs:
     if: always()
     
     steps:
+      # action-slack exits 1 with "Specify secrets.SLACK_WEBHOOK_URL" when the
+      # webhook is absent, which failed this job on every run - including
+      # pull_request runs, where secrets are not exposed by default at all.
+      # An unconfigured notification channel must not fail a build, so the step
+      # is skipped and the absence is reported as an annotation instead.
       - name: Notify Slack
-        if: always()
+        if: always() && secrets.SLACK_WEBHOOK != ''
         uses: 8398a7/action-slack@v3
         with:
           status: ${{ job.status }}
@@ -195,6 +200,11 @@ jobs:
             Admin: ${{ needs.deploy-admin.result }}
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+
+      - name: Notify Slack skipped
+        if: always() && secrets.SLACK_WEBHOOK == ''
+        run: |
+          echo "::notice title=Deployment notification::SLACK_WEBHOOK is not configured; skipping the Slack notification."
 
       - name: Notify Success
         if: success()
