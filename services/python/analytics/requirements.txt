@@ -1,0 +1,24 @@
+# Analytics service dependencies (Python 3.11, matches CI PYTHON_VERSION).
+# Installed by infra/docker/Dockerfile.python and by the CI test job.
+#
+# Pins are exact and must stay identical to pyproject.toml — see
+# tests/test_dependencies.py.
+
+# API
+fastapi==0.109.2
+uvicorn[standard]==0.27.0
+pydantic==2.5.3
+pydantic-settings==2.1.0
+
+# Storage
+clickhouse-connect==0.7.1
+
+# Observability
+structlog==24.1.0
+prometheus-client==0.20.0
+
+# Utils
+python-dotenv==1.2.4
+
+# Testing (httpx is required by fastapi.testclient)
+httpx==0.26.0

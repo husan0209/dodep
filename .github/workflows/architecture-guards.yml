@@ -69,12 +69,21 @@ jobs:
       - name: "G3: No hardcoded secrets or private keys"
         run: |
           echo "Проверка G3: отсутствие захардкоженных приватных ключей..."
-          if grep -rn "BEGIN RSA PRIVATE KEY" . 2>/dev/null | grep -v ".git"; then
-            echo "❌ Обнаружен приватный ключ в репозитории!"
-            exit 1
-          fi
-          if grep -rn "BEGIN OPENSSH PRIVATE KEY" . 2>/dev/null | grep -v ".git"; then
-            echo "❌ Обнаружен SSH приватный ключ в репозитории!"
+          # Scope: source and config files only. A repo-wide grep also matched
+          # the vendored agent-skill docs (e.g. kubernetes-specialist references,
+          # which legitimately show key examples) and this very workflow — so the
+          # guard failed on documentation while real keys were still scanned for.
+          MATCHES=$(grep -rnE "BEGIN (RSA |OPENSSH |EC |DSA )?PRIVATE KEY" \
+            --include='*.go' --include='*.py' --include='*.rs' --include='*.ts' \
+            --include='*.tsx' --include='*.js' --include='*.sh' \
+            --include='*.yaml' --include='*.yml' --include='*.json' \
+            --include='*.toml' --include='*.env' --include='*.env.*' \
+            . 2>/dev/null \
+            | grep -v '^\./\.git/' \
+            | grep -v 'architecture-guards.yml' || true)
+          if [ -n "$MATCHES" ]; then
+            echo "❌ Обнаружен приватный ключ в исходниках!"
+            echo "$MATCHES" | head -5
             exit 1
           fi
           echo "✅ G3 пройден: приватные ключи не обнаружены."

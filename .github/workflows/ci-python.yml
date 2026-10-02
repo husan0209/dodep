@@ -35,6 +35,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
+      # Keep sibling legs running: fraud-ml and analytics are independent
+      # services, and cancelling one hides the other's real result.
+      fail-fast: false
       matrix:
         service: [fraud-ml, analytics]
     
@@ -76,6 +79,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
+      # Keep sibling legs running: fraud-ml and analytics are independent
+      # services, and cancelling one hides the other's real result.
+      fail-fast: false
       matrix:
         service: [fraud-ml, analytics]
     
@@ -164,6 +170,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
+      # Keep sibling legs running: fraud-ml and analytics are independent
+      # services, and cancelling one hides the other's real result.
+      fail-fast: false
       matrix:
         service: [fraud-ml, analytics]
     
@@ -179,9 +188,12 @@ jobs:
       - name: Install safety
         run: pip install safety
 
+      # `safety check` without -r audits the whole runner environment, which is
+      # safety's own dependency tree: it never looked at our dependencies and
+      # failed for unrelated advisories. -r scans what the service declares.
       - name: Run safety check
         working-directory: services/python/${{ matrix.service }}
-        run: safety check --json > safety-results.json
+        run: safety check -r requirements.txt --json > safety-results.json
 
       - name: Upload safety results
         uses: actions/upload-artifact@v4
@@ -192,9 +204,12 @@ jobs:
       - name: Run bandit
         run: pip install bandit
 
+      # Honour the service's [tool.bandit] config: without -c bandit scanned
+      # the tests too, so B101 (assert) in test files failed the job and hid
+      # real findings in src/.
       - name: Scan with bandit
         working-directory: services/python/${{ matrix.service }}
-        run: bandit -r . -f json -o bandit-results.json
+        run: bandit -c pyproject.toml -r . -f json -o bandit-results.json
 
       - name: Upload bandit results
         uses: actions/upload-artifact@v4
@@ -211,6 +226,9 @@ jobs:
     timeout-minutes: 30
     needs: [lint, test, security]
     strategy:
+      # Keep sibling legs running: fraud-ml and analytics are independent
+      # services, and cancelling one hides the other's real result.
+      fail-fast: false
       matrix:
         service: [fraud-ml, analytics]
     
@@ -242,11 +260,13 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/${{ matrix.service }}
           tags: |
-            type=sha,prefix=
+            type=sha,format=long,prefix=sha-
             type=ref,event=branch
             type=ref,event=pr
             type=semver,pattern={{version}}
 
+      # On PRs nothing is pushed, so the image only exists in the local buildx
+      # cache and the Trivy step below has nothing to pull.
       - name: Build and push
         id: build
         uses: docker/build-push-action@v5
@@ -254,6 +274,7 @@ jobs:
           context: .
           file: infra/docker/Dockerfile.python
           push: ${{ github.event_name != 'pull_request' }}
+          load: ${{ github.event_name == 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
@@ -261,7 +282,12 @@ jobs:
           build-args: |
             SERVICE_NAME=${{ matrix.service }}
 
+      # `type=sha,prefix=` produced a short tag (c4e9e22), while this step asked
+      # for the never-created `sha-<full sha>` tag, so Trivy aborted with
+      # "No such image" on every run. It now scans a tag the build produces,
+      # and only on pushes, where that tag is really in the registry.
       - name: Run Trivy vulnerability scanner
+        if: github.event_name != 'pull_request'
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/${{ matrix.service }}:sha-${{ github.sha }}
@@ -269,7 +295,10 @@ jobs:
           output: 'trivy-results-${{ matrix.service }}.sarif'
           severity: 'CRITICAL,HIGH'
 
+      # Same condition as the scan: on PRs no SARIF file exists, and uploading
+      # a missing file failed the build.
       - name: Upload Trivy scan results
+        if: github.event_name != 'pull_request'
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: 'trivy-results-${{ matrix.service }}.sarif'
@@ -288,6 +317,9 @@ jobs:
       url: https://dev.opus.casino
     
     strategy:
+      # Keep sibling legs running: fraud-ml and analytics are independent
+      # services, and cancelling one hides the other's real result.
+      fail-fast: false
       matrix:
         service: [fraud-ml, analytics]
     

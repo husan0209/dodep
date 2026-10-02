@@ -1,4 +1,4 @@
-# Dependencies
+﻿# Dependencies
 node_modules/
 .pnpm-store/
 .rust-deps/
@@ -43,6 +43,13 @@ pnpm-debug.log*
 
 # Testing
 coverage/
+.coverage
+.coverage.*
+htmlcov/
+junit.xml
+bandit-results.json
+safety-results.json
+safety-report.json
 *.lcov
 .nyc_output/
 

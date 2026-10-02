@@ -17,9 +17,12 @@ RUN apt-get update && apt-get install -y \
 # Set working directory
 WORKDIR /build
 
-# Copy requirements first for caching
-COPY services/python/fraud-ml/requirements.txt .
-COPY services/python/analytics/requirements.txt .
+# Copy requirements first for caching.
+# Keep the service directory in the destination: both files are named
+# requirements.txt, so copying both to `.` made them overwrite each other and
+# the `pip install -r <service>/requirements.txt` below had nothing to read.
+COPY services/python/fraud-ml/requirements.txt fraud-ml/requirements.txt
+COPY services/python/analytics/requirements.txt analytics/requirements.txt
 
 # Create virtual environment
 RUN python -m venv /opt/venv
@@ -98,8 +101,9 @@ RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 # Install development dependencies
-COPY services/python/fraud-ml/requirements.txt .
-COPY services/python/analytics/requirements.txt .
+# Destination keeps the service directory: see the builder stage above.
+COPY services/python/fraud-ml/requirements.txt fraud-ml/requirements.txt
+COPY services/python/analytics/requirements.txt analytics/requirements.txt
 
 RUN pip install --no-cache-dir --upgrade pip
 RUN pip install --no-cache-dir -r fraud-ml/requirements.txt

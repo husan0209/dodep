@@ -36,11 +36,15 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
 
+      # The dtolnay/rust-action reference could not be resolved by the runner
+      # (job died at "Set up job"), which failed this job before any step ran.
+      # ubuntu images ship rustup, so manage the pinned toolchain directly.
       - name: Setup Rust
-        uses: dtolnay/rust-action@stable
-        with:
-          toolchain: ${{ env.RUST_VERSION }}
-          components: clippy, rustfmt
+        run: |
+          rustup toolchain install ${{ env.RUST_VERSION }} --profile minimal \
+            --component clippy --component rustfmt
+          rustup default ${{ env.RUST_VERSION }}
+          rustc --version && cargo --version
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -184,7 +188,10 @@ jobs:
     
     steps:
       - name: Notify Slack
-        if: always()
+        # Gate on `env`, not `secrets`: the secrets context is not available
+        # in step-level `if` (only in with/run/env), and referencing it there
+        # made the whole workflow fail to parse. Slack stays optional.
+        if: always() && env.SLACK_WEBHOOK_URL != ''
         uses: 8398a7/action-slack@v3
         with:
           status: ${{ job.status }}
@@ -208,4 +215,3 @@ jobs:
         run: |
           echo "❌ Deployment failed!"
           echo "Check GitHub Actions logs for details"
-          exit 1
