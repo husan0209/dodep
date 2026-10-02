@@ -1,33 +1,43 @@
 [project]
 name = "analytics"
-version = "0.1.0"
+version = "1.0.0"
 description = "Analytics pipelines and reporting for Opus Casino platform"
 requires-python = ">=3.11"
+# Pins are exact and must stay identical to requirements.txt: CI installs
+# through both paths (pip install -r requirements.txt and
+# pip install -e ".[dev]"), and open ranges made them resolve different
+# stacks. tests/test_dependencies.py enforces the match.
+#
+# apache-airflow was removed: it is not used by this service and its
+# transitive constraints made the CI install step fail.
 dependencies = [
-    "fastapi>=0.109.0",
-    "uvicorn[standard]>=0.27.0",
-    "pydantic>=2.5.0",
-    "pydantic-settings>=2.1.0",
-    "pandas>=2.2.0",
-    "polars>=0.20.0",
-    "numpy>=1.26.0",
-    "sqlalchemy[asyncio]>=2.0.0",
-    "asyncpg>=0.29.0",
-    "clickhouse-connect>=0.7.0",
-    "redis>=5.0.0",
-    "confluent-kafka>=2.3.0",
-    "structlog>=24.1.0",
-    "prometheus-client>=0.19.0",
-    "opentelemetry-api>=1.22.0",
-    "opentelemetry-sdk>=1.22.0",
-    "opentelemetry-exporter-otlp>=1.22.0",
-    "apache-airflow>=2.8.0",
+    # API
+    "fastapi==0.109.0",
+    "uvicorn[standard]==0.27.0",
+    "pydantic==2.5.3",
+    "pydantic-settings==2.1.0",
+
+    # Storage
+    "clickhouse-connect==0.7.1",
+
+    # Observability
+    "structlog==24.1.0",
+    "prometheus-client==0.20.0",
+
+    # Utils
+    "python-dotenv==1.0.0",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=7.4.0",
-    "pytest-asyncio>=0.23.0",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.4",
+    "pytest-cov>=4.1.0",
+    "ruff>=0.1.0",
+    "black>=24.1.0",
+    "mypy>=1.8.0",
+    # Required by fastapi.testclient (TestClient) for the API tests.
+    "httpx==0.26.0",
 ]
 
 [build-system]
@@ -36,3 +46,33 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/analytics"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B"]
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+# Import the package exactly as production does (`analytics.*` from src/),
+# so tests and the container share one module instance — registering the
+# Prometheus collectors twice would raise a duplicate-timeseries error.
+pythonpath = ["src"]
+
+[tool.bandit]
+# Tests legitimately use assert and fake credentials; scanning them only
+# buries real findings.
+exclude_dirs = ["tests"]
