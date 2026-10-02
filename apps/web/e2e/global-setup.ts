@@ -1,4 +1,4 @@
-import type { FullConfig } from '@playwright/test';
+import type { FullConfig } from "@playwright/test";
 
 /**
  * Global setup — warms the dev server before any test runs.
@@ -15,39 +15,41 @@ import type { FullConfig } from '@playwright/test';
  * timeouts.
  */
 const WARM_ROUTES = [
-  '/',
-  '/login',
-  '/register',
-  '/sportsbook',
-  '/casino',
-  '/wallet',
-  '/affiliate',
+  "/",
+  "/login",
+  "/register",
+  "/sportsbook",
+  "/casino",
+  "/wallet",
+  "/affiliate",
 ];
 
 export default async function globalSetup(config: FullConfig) {
   const baseURL =
     process.env.E2E_BASE_URL ??
-    (config.projects.find((p) => p.name !== 'setup')?.use?.baseURL as string | undefined) ??
-    'http://localhost:3100';
-  const apiURL = process.env.E2E_API_URL ?? 'http://localhost:18080';
+    (config.projects.find((p) => p.name !== "setup")?.use?.baseURL as
+      | string
+      | undefined) ??
+    "http://localhost:3100";
+  const apiURL = process.env.E2E_API_URL ?? "http://localhost:18080";
 
   // 1. Mock API must be up (auth is proxied to it).
   const apiHealth = await fetch(`${apiURL}/health`).catch(() => null);
   if (!apiHealth?.ok) {
     throw new Error(
       `E2E global setup: mock API is not reachable at ${apiURL}. ` +
-        'It is started by playwright.config webServer — check the [WebServer] logs above.',
+        "It is started by playwright.config webServer — check the [WebServer] logs above.",
     );
   }
 
   // 2. Warm every route so the dev server compiles them before the suite.
   for (const route of WARM_ROUTES) {
     const res = await fetch(`${baseURL}${route}`).catch(() => null);
-    const status = res ? String(res.status) : 'no response';
+    const status = res ? String(res.status) : "no response";
     if (!res?.ok) {
       throw new Error(
         `E2E global setup: ${baseURL}${route} returned ${status}. ` +
-          'The Next.js dev server did not start correctly.',
+          "The Next.js dev server did not start correctly.",
       );
     }
   }

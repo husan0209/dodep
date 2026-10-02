@@ -1,5 +1,5 @@
-import { expect, type Locator, type Page } from '@playwright/test';
-import { waitForHydration } from '../fixtures';
+import { expect, type Locator, type Page } from "@playwright/test";
+import { waitForHydration } from "../fixtures";
 
 /**
  * AffiliatePage — /affiliate (partner cabinet).
@@ -31,13 +31,15 @@ export class AffiliatePage {
 
   constructor(page: Page) {
     this.page = page;
-    this.heading = page.getByRole('heading', { name: 'Партнерский кабинет' });
-    this.activeBadge = page.getByText('Affiliate Active');
-    this.payoutSettingsHeading = page.getByRole('heading', { name: 'Payout Settings' });
+    this.heading = page.getByRole("heading", { name: "Партнерский кабинет" });
+    this.activeBadge = page.getByText("Affiliate Active");
+    this.payoutSettingsHeading = page.getByRole("heading", {
+      name: "Payout Settings",
+    });
   }
 
   async goto() {
-    await this.page.goto('/affiliate');
+    await this.page.goto("/affiliate");
     await expect(this.heading).toBeVisible();
     await waitForHydration(this.page);
   }
@@ -52,7 +54,7 @@ export class AffiliatePage {
   statValue(label: string): Locator {
     return this.page
       .getByText(label, { exact: true })
-      .locator('xpath=following-sibling::p[1]');
+      .locator("xpath=following-sibling::p[1]");
   }
 
   summaryValue(label: string): Locator {
@@ -66,7 +68,7 @@ export class AffiliatePage {
   /** A referral-link card identified by its campaign name. */
   linkCard(campaignName: string): Locator {
     return this.page
-      .locator('div.rounded')
+      .locator("div.rounded")
       .filter({ has: this.page.getByText(campaignName, { exact: true }) })
       .first();
   }
@@ -74,7 +76,7 @@ export class AffiliatePage {
   /** A payout-history row identified by its amount. */
   payoutRow(amount: string): Locator {
     return this.page
-      .locator('div.rounded')
+      .locator("div.rounded")
       .filter({ has: this.page.getByText(amount, { exact: true }) })
       .first();
   }
@@ -82,7 +84,7 @@ export class AffiliatePage {
   /** An earnings row identified by its period date. */
   earningRow(period: string): Locator {
     return this.page
-      .locator('div.rounded')
+      .locator("div.rounded")
       .filter({ has: this.page.getByText(period, { exact: true }) })
       .first();
   }

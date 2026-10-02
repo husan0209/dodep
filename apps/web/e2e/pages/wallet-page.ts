@@ -1,5 +1,5 @@
-import { expect, type Locator, type Page } from '@playwright/test';
-import { waitForHydration } from '../fixtures';
+import { expect, type Locator, type Page } from "@playwright/test";
+import { waitForHydration } from "../fixtures";
 
 /**
  * WalletPage — /wallet (deposit tab is default).
@@ -17,18 +17,20 @@ export class WalletPage {
 
   constructor(page: Page) {
     this.page = page;
-    this.depositHeading = page.getByRole('heading', { name: 'Выберите способ оплаты' });
+    this.depositHeading = page.getByRole("heading", {
+      name: "Выберите способ оплаты",
+    });
     this.amountInput = page.locator('input[placeholder="0"]');
     this.limitsHint = page.getByText(/Мин: .*₽ \| Макс: .*₽/);
   }
 
   async goto() {
-    await this.page.goto('/wallet');
+    await this.page.goto("/wallet");
     await expect(this.depositHeading).toBeVisible();
     await waitForHydration(this.page);
   }
 
   methodButton(name: string): Locator {
-    return this.page.getByRole('button', { name: new RegExp(name) });
+    return this.page.getByRole("button", { name: new RegExp(name) });
   }
 }

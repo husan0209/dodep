@@ -1,5 +1,5 @@
-import { expect, type Locator, type Page } from '@playwright/test';
-import { waitForHydration } from '../fixtures';
+import { expect, type Locator, type Page } from "@playwright/test";
+import { waitForHydration } from "../fixtures";
 
 /**
  * LoginPage — /login.
@@ -17,23 +17,26 @@ export class LoginPage {
 
   constructor(page: Page) {
     this.page = page;
-    this.identifierInput = page.locator('#identifier');
-    this.passwordInput = page.locator('#password');
-    this.submitButton = page.getByRole('button', { name: 'Войти', exact: true });
+    this.identifierInput = page.locator("#identifier");
+    this.passwordInput = page.locator("#password");
+    this.submitButton = page.getByRole("button", {
+      name: "Войти",
+      exact: true,
+    });
   }
 
   async goto() {
-    await this.page.goto('/login');
+    await this.page.goto("/login");
     await expect(this.getHeading()).toBeVisible();
     await waitForHydration(this.page);
   }
 
   getHeading() {
-    return this.page.getByRole('heading', { name: 'Вход в аккаунт' });
+    return this.page.getByRole("heading", { name: "Вход в аккаунт" });
   }
 
   errorBox() {
-    return this.page.locator('form div.rounded-xl p.text-red-200');
+    return this.page.locator("form div.rounded-xl p.text-red-200");
   }
 
   /**
@@ -47,7 +50,7 @@ export class LoginPage {
     await this.identifierInput.fill(identifier);
     await this.passwordInput.fill(password);
     const authResponse = this.page.waitForResponse((res) =>
-      res.url().includes('/api/v1/auth/login'),
+      res.url().includes("/api/v1/auth/login"),
     );
     await this.submitButton.click();
     return authResponse;

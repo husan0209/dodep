@@ -1,4 +1,4 @@
-import { defineConfig, devices } from '@playwright/test';
+import { defineConfig, devices } from "@playwright/test";
 
 /**
  * E2E suite for the Next.js web app (dod-web).
@@ -21,9 +21,9 @@ import { defineConfig, devices } from '@playwright/test';
  *   (deterministic, no shared state, parallel-safe).
  */
 export default defineConfig({
-  testDir: './e2e',
-  outputDir: './e2e/test-results',
-  globalSetup: './e2e/global-setup.ts',
+  testDir: "./e2e",
+  outputDir: "./e2e/test-results",
+  globalSetup: "./e2e/global-setup.ts",
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
@@ -33,50 +33,50 @@ export default defineConfig({
     timeout: 10_000,
   },
   reporter: [
-    ['list'],
-    ['html', { open: 'never', outputFolder: './e2e/playwright-report' }],
-    ['junit', { outputFile: './e2e/test-results/junit.xml' }],
+    ["list"],
+    ["html", { open: "never", outputFolder: "./e2e/playwright-report" }],
+    ["junit", { outputFile: "./e2e/test-results/junit.xml" }],
   ],
   use: {
-    baseURL: process.env.E2E_BASE_URL ?? 'http://localhost:3100',
-    trace: 'on-first-retry',
-    screenshot: 'only-on-failure',
-    video: 'off',
+    baseURL: process.env.E2E_BASE_URL ?? "http://localhost:3100",
+    trace: "on-first-retry",
+    screenshot: "only-on-failure",
+    video: "off",
     actionTimeout: 15_000,
     navigationTimeout: 30_000,
   },
   projects: [
     {
-      name: 'setup',
-      testDir: './e2e/setup',
+      name: "setup",
+      testDir: "./e2e/setup",
       testMatch: /.*\.setup\.ts/,
     },
     {
-      name: 'chromium',
+      name: "chromium",
       use: {
-        ...devices['Desktop Chrome'],
-        storageState: './e2e/.auth/player.json',
+        ...devices["Desktop Chrome"],
+        storageState: "./e2e/.auth/player.json",
       },
-      dependencies: ['setup'],
+      dependencies: ["setup"],
     },
     {
-      name: 'mobile',
+      name: "mobile",
       use: {
-        ...devices['Pixel 7'],
-        storageState: './e2e/.auth/player.json',
+        ...devices["Pixel 7"],
+        storageState: "./e2e/.auth/player.json",
       },
-      dependencies: ['setup'],
+      dependencies: ["setup"],
     },
   ],
   webServer: [
     {
-      command: 'node mock-api-server.js',
+      command: "node mock-api-server.js",
       cwd: __dirname,
       port: 18080,
       reuseExistingServer: !process.env.CI,
       timeout: 60_000,
       env: {
-        MOCK_PORT: '18080',
+        MOCK_PORT: "18080",
       },
     },
     {
@@ -84,7 +84,7 @@ export default defineConfig({
       // NEXT_PUBLIC_* env: every backend call is intercepted in
       // e2e/fixtures.ts (auth proxied to the mock API, everything else
       // stubbed), so the app's default API bases never matter.
-      command: 'npx next dev -p 3100',
+      command: "npx next dev -p 3100",
       cwd: __dirname,
       port: 3100,
       reuseExistingServer: !process.env.CI,
