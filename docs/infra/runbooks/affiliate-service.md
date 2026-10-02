@@ -137,6 +137,50 @@ kubectl get authorizationpolicy affiliate-service-policy -n platform -o yaml
 
 ---
 
+## AFF-RB-05: Scheduled reconciliation failing
+
+**Критичность:** P1
+**Симптомы:** CronJob `affiliate-ledger-reconciliation` в `data` падает
+(`diverging_affiliates > 0`), либо в логах `FAIL: affiliate ledger divergence`.
+
+Это единственная автоматическая проверка баланса affiliate-ledger. Go-эквивалент
+(`ReconcileLedger`) существует только как admin-эндпоинт и запускается только
+если его вручную дёрнуть.
+
+### Диагностика
+
+```bash
+# 1. Недавние прогоны
+kubectl get jobs -n data -l app.kubernetes.io/component=affiliate-reconciliation
+kubectl logs -n data job/affiliate-ledger-reconciliation-<ts> | tail -50
+
+# 2. Конкретные расхождения (постранично)
+kubectl logs -n data job/affiliate-ledger-reconciliation-<ts> \
+  | sed -n '/divergence detail/,/FAIL/p'
+```
+
+### Действия
+
+1. **Не «чинить» баланс руками.** Расхождение materialized vs derived означает
+   либо потерянную проводку, либо лишнюю. Сначала найти источник:
+   - нет строки в `affiliate_ledger_entries` → пропала проводка (`postLedgerTx`)
+   - строка есть, а баланс не изменился → не сработал `version`/optimistic lock
+   - расходится только `paid` → payout прошёл у PSP, а проводка упала (см. AFF-RB-02)
+2. Сверять с `GET /admin/affiliates/{id}/ledger/reconciliation` — тот же расчёт
+   по конкретному партнёру.
+3. `backoffLimit: 0` намеренно: повторные прогоны замаскировали бы реальное
+   расхождение за ретраями. Не поднимать без разбора.
+4. Эскалация: не resolved за 30 мин → On-call lead + Finance.
+
+### Почему нельзя «откатить» расхождение
+
+Ledger — источник правды для affiliate-денег, но он производный от
+earnings/payouts/adjustments. Откат баланса в `affiliate_ledger_accounts`
+разорвёт соответствие и замаскирует баг. Правильный порядок: починить
+проводку, затем пересчитать.
+
+---
+
 ## Откат релиза
 
 ```bash

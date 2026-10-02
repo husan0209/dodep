@@ -18,38 +18,46 @@ const path = require('path');
 
 const repoRoot = path.resolve(__dirname, '..', '..', '..');
 
-// Some inputs are owned by other stages and may not be present in every
-// checkout (e.g. the affiliate schema lands with the DATA_ENGINEER stage).
-// Missing input => SKIP with a clear reason, never a crash and never a silent
-// pass, because "no findings" from an absent schema would be a false green.
-const DEPENDENCIES = {
-  reconSql: 'libs/migrations/postgresql/queries/affiliate_ledger_reconciliation.sql',
-  schema: 'libs/migrations/postgresql/021_affiliates.sql',
-  ledgerGo: 'services/go/affiliate/internal/repository/ledger.go',
-};
-
+// Two tiers of checks:
+//   A) SQL-internal  — only needs files owned by this guard. Always runs.
+//   B) Cross-boundary— also needs the schema and the Go derived model, which
+//      live in other agents' areas and get refactored. Skipped, loudly, when
+//      absent, so a concurrent refactor cannot silently turn this guard green.
 const missing = [];
-const read = (key) => {
-  const p = path.join(repoRoot, DEPENDENCIES[key]);
-  if (!fs.existsSync(p)) {
-    missing.push(DEPENDENCIES[key]);
+const readOptional = (p) => {
+  const abs = path.join(repoRoot, p);
+  if (!fs.existsSync(abs)) {
+    missing.push(p);
     return '';
   }
-  return fs.readFileSync(p, 'utf8');
+  return fs.readFileSync(abs, 'utf8');
 };
+const read = (p) => fs.readFileSync(path.join(repoRoot, p), 'utf8');
 
-const reconSql = read('reconSql');
-const schema = read('schema');
-const ledgerGo = read('ledgerGo');
-// Ledger account type constants live next to the derived model, in ledger.go.
-const ledgerAccounts = ledgerGo;
-
-if (missing.length) {
-  console.log('AFFILIATE CONSISTENCY: SKIP — missing required input(s):');
-  for (const m of missing) console.log('  - ' + m);
-  console.log('This guard only runs once the affiliate schema and ledger exist.');
-  process.exit(0);
+// The Go derived model has moved more than once (ledger.go was folded into
+// gorm_repository.go). Search for it rather than hardcoding a path.
+const GO_CANDIDATES = [
+  'services/go/affiliate/internal/repository/ledger.go',
+  'services/go/affiliate/internal/repository/gorm_repository.go',
+];
+let ledgerGo = '';
+let ledgerGoFrom = '';
+for (const c of GO_CANDIDATES) {
+  const abs = path.join(repoRoot, c);
+  if (!fs.existsSync(abs)) continue;
+  const content = fs.readFileSync(abs, 'utf8');
+  if (/LedgerAccountPending\s*=/.test(content) || /ReconcileLedger/.test(content)) {
+    ledgerGo = content;
+    ledgerGoFrom = c;
+    break;
+  }
 }
+if (!ledgerGo) missing.push(`${GO_CANDIDATES.join(' | ')} (no LedgerAccountPending / ReconcileLedger found)`);
+
+const reconSql = read('libs/migrations/postgresql/queries/affiliate_ledger_reconciliation.sql');
+const schema = readOptional('libs/migrations/postgresql/021_affiliates.sql');
+// Ledger account type constants live next to the derived model.
+const ledgerAccounts = ledgerGo;
 
 const failures = [];
 const fail = (msg) => failures.push(msg);
@@ -154,23 +162,74 @@ for (const t of goTables) {
 }
 
 // ---------------------------------------------------------------------------
-// 4. Ledger account types: SQL <-> Go constants <-> CHECK/domain values.
+// 3b. The PASS/FAIL gate must implement the SAME derived model as the report.
+//     These are two files with the same status lists; if they drift, the CronJob
+//     can report "balanced" while the report would show a divergence — i.e. the
+//     automated gate would be lying.
 // ---------------------------------------------------------------------------
-// LedgerAccountPending   = "pending"   (const block in ledger.go)
+const gatePath = 'libs/migrations/postgresql/queries/affiliate_ledger_reconciliation_gate.sql';
+if (fs.existsSync(path.join(repoRoot, gatePath))) {
+  const gate = read(gatePath);
+  const setsIn = (src) =>
+    new Set(
+      [...src.matchAll(/status\s+(?:NOT\s+)?IN\s*\(([^)]*)\)/g)]
+        .flatMap((m) => m[1].match(/'[a-z]+'/g) || [])
+        .map((s) => s.replace(/'/g, ''))
+    );
+  const reportStatuses = setsIn(reconSql);
+  const gateStatuses = setsIn(gate);
+  for (const s of gateStatuses) {
+    if (!reportStatuses.has(s)) {
+      fail(`gate uses status "${s}" which the report does not — derived models diverged`);
+    }
+  }
+  for (const s of reportStatuses) {
+    if (!gateStatuses.has(s)) {
+      fail(`report uses status "${s}" which the gate does not — derived models diverged`);
+    }
+  }
+  // The gate must carry the SAME divergence threshold as the report.
+  // A gate with no threshold at all is worse than a wrong one: it would report
+  // "balanced" for every affiliate. So emptiness is a failure, not a skip.
+  const thresholdsIn = (src) =>
+    new Set([...src.matchAll(/>\s*(0\.\d+|\d+\.\d+)/g)].map((m) => m[1]));
+  const rTh = thresholdsIn(reconSql);
+  const gTh = thresholdsIn(gate);
+  if (!gTh.size) {
+    fail('gate declares no divergence threshold — it would report "balanced" for every affiliate');
+  }
+  for (const t of rTh) {
+    if (!gTh.has(t)) {
+      fail(`gate threshold (${[...gTh].join(',') || 'none'}) differs from the report (${[...rTh].join(',')})`);
+    }
+  }
+  if (!/count\(\*\)\s+AS\s+diverging_affiliates/i.test(gate)) {
+    fail('gate must expose count(*) AS diverging_affiliates so the runner can read the exit signal');
+  }
+} else {
+  fail(`${gatePath} is missing — the reconciliation CronJob has no gate to run`);
+}
+
+// ---------------------------------------------------------------------------
+// 4. Ledger account types: SQL <-> Go constants.
+// ---------------------------------------------------------------------------
+// LedgerAccountPending   = "pending"   (const block next to the derived model)
 const goAccountTypes = new Set(
   [...ledgerAccounts.matchAll(/LedgerAccount[A-Z][a-zA-Z]*\s*=\s*"([a-z]+)"/g)].map((m) => m[1])
 );
 const sqlAccountTypes = new Set(
   [...reconSql.matchAll(/account_type\s*=\s*'([a-z]+)'/g)].map((m) => m[1])
 );
-for (const t of goAccountTypes) {
-  if (!sqlAccountTypes.has(t)) {
-    fail(`Go ledger account type "${t}" is not reconciled by the SQL`);
+if (ledgerGo) {
+  for (const t of goAccountTypes) {
+    if (!sqlAccountTypes.has(t)) {
+      fail(`Go ledger account type "${t}" is not reconciled by the SQL`);
+    }
   }
-}
-for (const t of sqlAccountTypes) {
-  if (!goAccountTypes.has(t)) {
-    fail(`SQL reconciles account type "${t}" which Go does not define`);
+  for (const t of sqlAccountTypes) {
+    if (!goAccountTypes.has(t)) {
+      fail(`SQL reconciles account type "${t}" which Go does not define`);
+    }
   }
 }
 
@@ -182,11 +241,10 @@ const writes = reconSql.match(/^\s*(INSERT|UPDATE|DELETE|ALTER|DROP|TRUNCATE)\b/
 if (writes) fail(`reconciliation SQL is not read-only (found ${writes[1]})`);
 
 // ---------------------------------------------------------------------------
-// 6. Double-entry pairing: Go posts debit+credit with a ":credit" idempotency
-//    suffix. The SQL must check the same invariant via the direction column,
-//    and the schema must actually have that column.
+// 6. Double-entry pairing: the SQL checks it via the direction column, and the
+//    schema must actually have that column.
 // ---------------------------------------------------------------------------
-if (!/direction/.test(schema)) {
+if (schema && !/direction/.test(schema)) {
   fail('affiliate_ledger_entries has no direction column; double-entry check is impossible');
 }
 if (!/CASE WHEN direction = 'debit'/.test(reconSql)) {
@@ -210,6 +268,16 @@ if (failures.length) {
   console.error('AFFILIATE CONSISTENCY: FAIL');
   for (const f of failures) console.error('  - ' + f);
   process.exit(1);
+}
+
+// Cross-boundary checks are SKIPPED, never silently passed. This must be visible:
+// a green run without these would mean "the SQL is self-consistent", not
+// "the ledger is correct".
+if (missing.length) {
+  console.log('AFFILIATE CONSISTENCY: OK (SQL-internal checks only)');
+  console.log('SKIPPED cross-boundary checks, required input(s) absent:');
+  for (const m of missing) console.log('  - ' + m);
+  process.exit(0);
 }
 console.log(
   'AFFILIATE CONSISTENCY: OK (tables=' +
