@@ -4,9 +4,13 @@
 name: Deploy
 
 on:
+  # Deploy is a delivery workflow, not a quality gate. Every deploy job below is
+  # already guarded by `if: github.ref == 'refs/heads/main'`, so on a pull_request
+  # only `build-and-test` ran - duplicating the per-stack CI workflows while
+  # failing on repo-root scripts that have no configured projects.
+  # PR verification lives in ci-go.yml / ci-rust.yml / ci-python.yml /
+  # ci-nextjs-web.yml / ci-admin-panel.yml.
   push:
-    branches: [main]
-  pull_request:
     branches: [main]
   workflow_dispatch:
 
@@ -15,7 +19,8 @@ env:
   # Floor imposed by the committed lockfile; see the comment in ci.yaml
   # for the 1.75 / 1.78 / 1.85 evidence. Do not lower without re-checking.
   RUST_VERSION: "1.85"
-  GO_VERSION: '1.21'
+  # Must satisfy the highest `go` directive in services/go/*/go.mod (>= 1.24).
+  GO_VERSION: '1.26'
   PYTHON_VERSION: '3.11'
   NODE_VERSION: '20'
 

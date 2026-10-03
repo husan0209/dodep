@@ -1,10 +1,27 @@
 name: CI Pipeline
 
 on:
+  # This workflow is the pre-split catch-all. Every job in it is duplicated, and
+  # more strictly, by a path-filtered dedicated workflow:
+  #   rust-build       -> ci-rust.yml
+  #   go-build         -> ci-go.yml
+  #   python-build     -> ci-python.yml, ci-python-fraud-ml.yml
+  #   frontend-build   -> ci-nextjs-web.yml, ci-admin-panel.yml
+  #   security-scan    -> security-scan.yml
+  #   docker-build     -> cd.yaml / deploy.yml
+  #
+  # It carries no `paths:` filter, so on pull_request it built and tested the
+  # entire monorepo regardless of what the PR touched. That made every PR pay
+  # for pre-existing breakage in code it never modified: a Python-only change
+  # was reported red because the Go modules on main could not resolve their
+  # protobuf stubs and apps/admin had no committed ESLint config.
+  #
+  # PR gating therefore belongs to the path-filtered workflows, which verify the
+  # code a PR actually changes. This file keeps producing release images on main,
+  # where the full matrix still runs.
   push:
     branches: [main, develop]
-  pull_request:
-    branches: [main]
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
@@ -17,7 +34,8 @@ env:
   #   1.85 -> resolves the whole workspace
   # Do not lower this without re-running that check.
   RUST_VERSION: "1.85"
-  GO_VERSION: "1.21"
+  # Must satisfy the highest `go` directive in services/go/*/go.mod (>= 1.24).
+  GO_VERSION: "1.26"
   PYTHON_VERSION: "3.11"
   NODE_VERSION: "20"
 
@@ -91,6 +109,21 @@ jobs:
           ~/go/pkg/mod
         key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
     
+    # libs/proto/gen is gitignored, so a fresh checkout cannot compile any
+    # service that imports github.com/opus-casino/proto/gen/go/*.
+    # working-directory is pinned to the repo root: this job defaults every
+    # `run` to services/go/${{ matrix.service }}, where `libs/proto` does not
+    # resolve.
+    - name: Install buf (pinned)
+      working-directory: .
+      run: |
+        BUF_VERSION=1.73.0
+        curl -fsSL -o /tmp/buf.tar.gz \
+          "https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/buf-Linux-x86_64.tar.gz"
+        sudo tar -xzf /tmp/buf.tar.gz -C /tmp
+        sudo install -m 0755 /tmp/buf/bin/buf /usr/local/bin/buf
+        make -C libs/proto gen-go
+
     - name: Download dependencies
       run: go mod download
     
