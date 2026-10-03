@@ -1,10 +1,10 @@
 'use client'
 
-import { useEffect } from 'react'
+import { Suspense, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuthStore } from '@/stores/auth-store'
 
-export default function GoogleCallbackPage() {
+function CallbackRedirect() {
   const router = useRouter()
   const params = useSearchParams()
   const { setTokens, fetchUser } = useAuthStore()
@@ -31,6 +31,10 @@ export default function GoogleCallbackPage() {
       .catch(() => router.replace('/login?error=AUTH_OAUTH_USER_FETCH_FAILED'))
   }, [fetchUser, params, router, setTokens])
 
+  return null
+}
+
+function SigningIn() {
   return (
     <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center px-4">
       <div className="card !p-8 text-center">
@@ -38,5 +42,20 @@ export default function GoogleCallbackPage() {
         <p className="mt-2 text-gray-400">Google authorization complete, redirecting to sportsbook.</p>
       </div>
     </div>
+  )
+}
+
+// useSearchParams() opts a client component out of static rendering, so Next
+// refuses to prerender it:
+//   useSearchParams() should be wrapped in a suspense boundary at page
+//   "/auth/google/callback"
+//   Error occurred prerendering page "/auth/google/callback"
+// which failed `next build` outright. The boundary has to sit above the hook,
+// so the component that reads the query string is a child of this page.
+export default function GoogleCallbackPage() {
+  return (
+    <Suspense fallback={<SigningIn />}>
+      <CallbackRedirect />
+    </Suspense>
   )
 }
