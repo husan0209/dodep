@@ -260,8 +260,27 @@ jobs:
     timeout-minutes: 30
     needs: [lint, test, security]
     strategy:
+      fail-fast: false
       matrix:
         service: [auth, user, payment, bonus, casino, notification, kyc]
+        include:
+          # payment keeps its main package under cmd/server; every other service
+          # builds the module root. The Dockerfile needs the path because the
+          # build context is the repository root, not the service directory.
+          - service: payment
+            cmd_path: ./cmd/server
+          - service: auth
+            cmd_path: .
+          - service: user
+            cmd_path: .
+          - service: bonus
+            cmd_path: .
+          - service: casino
+            cmd_path: .
+          - service: notification
+            cmd_path: .
+          - service: kyc
+            cmd_path: .
     
     permissions:
       contents: read
@@ -309,9 +328,14 @@ jobs:
           cache-to: type=gha,mode=max
           build-args: |
             SERVICE_PATH=services/go/${{ matrix.service }}
+            CMD_PATH=${{ matrix.cmd_path }}
             VERSION=${{ github.sha }}
 
+      # push is false on a pull request, so no image exists in the registry and
+      # trivy-action fails with "image not found". A PR build therefore has
+      # nothing to scan; the scan runs on the push to main, where the tag is real.
       - name: Run Trivy vulnerability scanner
+        if: github.event_name != 'pull_request'
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/${{ matrix.service }}:sha-${{ github.sha }}
@@ -320,6 +344,7 @@ jobs:
           severity: 'CRITICAL,HIGH'
 
       - name: Upload Trivy scan results
+        if: github.event_name != 'pull_request'
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: 'trivy-results-${{ matrix.service }}.sarif'

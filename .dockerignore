@@ -1,0 +1,56 @@
+# Docker build context exclusions.
+#
+# The Go build context is the repository root, which is ~11 GB of Go module
+# caches and build output plus a 78 MB node_modules. Without this file every
+# one of the 7 Build matrix jobs uploads gigabytes to the runner before it can
+# start, and the local checkout does not fit in the transfer budget.
+
+# Everything the Go images do not need
+node_modules/
+**/node_modules/
+apps/mobile/build/
+apps/web/.next/
+apps/admin/build/
+libs/shared/typescript/*.tsbuildinfo
+libs/shared/typescript/node_modules/
+
+# Rust / Python toolchains and caches
+services/rust/target/
+libs/shared/rust/target/
+**/target/
+**/__pycache__/
+**/*.pyc
+.venv/
+venv/
+
+# Generated protobuf stubs: Dockerfile.go regenerates them inside the image
+# with `make -C libs/proto gen-go`, because libs/proto/.gitignore keeps them
+# out of the repository.
+libs/proto/gen/
+
+# Root-level generated output, also produced by buf
+gen/
+
+# CI/CD state
+.github/
+.git/
+.gitignore
+
+# Docs and local environment
+docs/
+*.md
+!README.md
+.env
+.env.*
+!.env.example
+*.local
+
+# Editor / OS noise
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# k6 load tests and misc tooling sources, not needed to compile a Go binary
+tools/
+tasks/

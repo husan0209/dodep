@@ -22,9 +22,52 @@ env:
   IMAGE_PREFIX: opus-casino
 
 jobs:
+  # libs/proto/gen is gitignored on purpose (libs/proto/.gitignore), so a clean
+  # checkout has no generated Go stubs. Both services import
+  # github.com/opus-casino/proto/gen/go/* through the `replace` directive in their
+  # go.mod, so without this job every lint and test step fails to load packages
+  # with "no required module provides package" — golangci-lint exits 7
+  # ("error during setup") rather than reporting findings.
+  protos:
+    name: Generate Protobuf Stubs (Go)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # `protoc` is not on ubuntu-latest, and the plugin versions must match the
+      # protobuf runtime in go.mod, so use the repo's own buf config instead of
+      # a hand-written protoc invocation. Pinned to the same version ci-go.yml
+      # uses, so both workflows emit identical stubs.
+      - name: Install buf (pinned)
+        run: |
+          BUF_VERSION=1.73.0
+          curl -fsSL -o /tmp/buf.tar.gz \
+            "https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/buf-Linux-x86_64.tar.gz"
+          sudo tar -xzf /tmp/buf.tar.gz -C /tmp
+          sudo install -m 0755 /tmp/buf/bin/buf /usr/local/bin/buf
+          buf --version
+
+      - name: Generate Go stubs
+        run: make -C libs/proto gen-go
+
+      - name: Assert the stubs exist
+        run: |
+          test -d libs/proto/gen/go/casino/v1
+          test -d libs/proto/gen/go/notification/v1
+
+      - name: Upload generated stubs
+        uses: actions/upload-artifact@v4
+        with:
+          name: proto-go-stubs
+          path: libs/proto/gen/go
+          retention-days: 1
+
   lint:
     name: Lint Go Services
     runs-on: ubuntu-latest
+    needs: protos
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -34,8 +77,14 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: |
-            services/go/casino/go.mod
-            services/go/notification/go.mod
+            services/go/casino/go.sum
+            services/go/notification/go.sum
+
+      - name: Download generated protobuf stubs
+        uses: actions/download-artifact@v4
+        with:
+          name: proto-go-stubs
+          path: libs/proto/gen/go
 
       # v1 (action v3 with `version: latest`) is built with go1.24 and cannot
       # type-check a module whose `go` directive is 1.25: it reports every
@@ -95,32 +144,14 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: |
-            services/go/casino/go.mod
-            services/go/notification/go.mod
+            services/go/casino/go.sum
+            services/go/notification/go.sum
 
-      # libs/proto/gen is gitignored, so a clean checkout has no Go stubs and
-      # both services fail to build with "no required module provides package
-      # github.com/opus-casino/proto/gen/go/...". `protoc` is not on
-      # ubuntu-latest, and the plugin versions must match the protobuf runtime
-      # in go.mod, so use the repo's own buf config instead of a hand-written
-      # protoc invocation. buf is not preinstalled either, hence the pin —
-      # same version as ci-go.yml, so both workflows emit identical stubs.
-      - name: Install buf (pinned)
-        run: |
-          BUF_VERSION=1.73.0
-          curl -fsSL -o /tmp/buf.tar.gz \
-            "https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/buf-Linux-x86_64.tar.gz"
-          sudo tar -xzf /tmp/buf.tar.gz -C /tmp
-          sudo install -m 0755 /tmp/buf/bin/buf /usr/local/bin/buf
-          buf --version
-
-      - name: Generate Proto files
-        run: make -C libs/proto gen-go
-
-      - name: Assert the stubs exist
-        run: |
-          test -d libs/proto/gen/go/casino/v1
-          test -d libs/proto/gen/go/notification/v1
+      - name: Download generated protobuf stubs
+        uses: actions/download-artifact@v4
+        with:
+          name: proto-go-stubs
+          path: libs/proto/gen/go
 
       - name: Test Casino Service
         run: |
