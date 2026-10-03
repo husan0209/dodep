@@ -18,7 +18,11 @@ tower-http = { version = "0.5", features = ["trace", "cors", "compression-gzip",
 # gRPC
 tonic = { version = "0.11", features = ["gzip"] }
 prost = "0.12"
+prost-types = "0.12"
 tonic-build = "0.11"
+tokio-stream = "0.1"
+futures-util = "0.3"
+tokio-tungstenite = "0.21"
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
@@ -54,7 +58,10 @@ rand = "0.8"
 bytes = "1.7"
 
 # JWT (Ed25519 / EdDSA)
-jwt-simple = "0.12"
+# `default-features = false` + `pure-rust` swaps the default `optimal` feature
+# (which pulls in BoringSSL via `boring`, requiring cmake **and** NASM to build)
+# for the pure-Rust `superboring` backend. Same crypto, no C toolchain needed.
+jwt-simple = { version = "0.12", default-features = false, features = ["jwe", "pure-rust"] }
 base64 = "0.22"
 
 # Metrics
