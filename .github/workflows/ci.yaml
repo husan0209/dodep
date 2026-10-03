@@ -138,8 +138,15 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -e ".[dev]"
-    
+        # Install requirements.txt, not `pip install -e ".[dev]"`. pyproject
+        # only carries lower bounds, so the editable install resolved a different
+        # environment from the one .github/workflows/ci-python.yml and
+        # infra/docker/Dockerfile.python use - for fraud-ml it pulled xgboost
+        # 3.x, polars 1.x and onnx 1.23 (which carries advisories) while
+        # requirements.txt pins the set that pip-audit has actually cleared. The
+        # same suite was therefore being run against two dependency graphs.
+        pip install -r requirements.txt
+
     - name: Lint with ruff
       run: |
         pip install ruff
