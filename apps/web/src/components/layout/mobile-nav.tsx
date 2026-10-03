@@ -20,8 +20,8 @@ export function MobileNav() {
   ]
 
   return (
-    <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-[rgb(var(--bg-secondary))/0.98] border-t border-[rgb(var(--border))] z-40 pb-safe backdrop-blur">
-      <div className="grid grid-cols-4 h-12">
+    <nav className="pb-safe fixed bottom-0 left-0 right-0 z-40 border-t border-[rgb(var(--border))] bg-[rgb(var(--bg-secondary))/0.98] backdrop-blur lg:hidden">
+      <div className="grid h-12 grid-cols-4">
         {navigation.map((item) => {
           const isActive = pathname === item.href
           return (

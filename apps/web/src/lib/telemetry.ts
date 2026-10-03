@@ -32,7 +32,7 @@ export function trackEvent(event: TelemetryEvent, payload: TelemetryPayload = {}
   }
 
   const normalizedPayload = Object.fromEntries(
-    Object.entries(payload).map(([key, value]) => [key, value ?? null])
+    Object.entries(payload).map(([key, value]) => [key, value ?? null]),
   )
 
   const entry: StoredTelemetryEvent = {
@@ -65,4 +65,3 @@ export function trackEvent(event: TelemetryEvent, payload: TelemetryPayload = {}
     console.info('[telemetry]', event, normalizedPayload)
   }
 }
-

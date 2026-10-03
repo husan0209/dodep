@@ -54,6 +54,12 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
+      # tonic-build shells out to protoc during cargo clippy/test/build.
+      - name: Install protoc
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+
       - name: Install dependencies
         run: |
           npm --prefix apps/web ci
@@ -74,15 +80,16 @@ jobs:
       - name: Install lint tools
         run: |
           go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0
-          pip install ruff
+          pip install ruff black
 
       - name: Run linters
         run: |
           cd apps/web && npm run lint
           cd ../admin && npm run lint
-          cd ../../services/rust && cargo clippy -- -D warnings
+          cd ../../services/rust && cargo clippy --all-targets -- -D warnings
           cd ../go/auth && golangci-lint run
           cd ../../python/fraud-ml && ruff check .
+          cd ../../python/fraud-ml && black --check .
 
       - name: Run tests
         run: |

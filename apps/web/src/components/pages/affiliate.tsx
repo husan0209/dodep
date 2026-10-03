@@ -19,9 +19,21 @@ const funnelDefault = [
 ]
 
 const earningsDefault = [
-  { period: '2026-04-15', ggr: '$310.20', ngr: '$198.40', commission: '$39.68', status: 'available' },
+  {
+    period: '2026-04-15',
+    ggr: '$310.20',
+    ngr: '$198.40',
+    commission: '$39.68',
+    status: 'available',
+  },
   { period: '2026-04-14', ggr: '$280.00', ngr: '$140.10', commission: '$28.02', status: 'pending' },
-  { period: '2026-04-13', ggr: '$154.90', ngr: '$0.00', commission: '$0.00', status: 'released_zero_floor' },
+  {
+    period: '2026-04-13',
+    ggr: '$154.90',
+    ngr: '$0.00',
+    commission: '$0.00',
+    status: 'released_zero_floor',
+  },
 ]
 
 const linksDefault = [
@@ -41,7 +53,13 @@ const linksDefault = [
 
 const payoutsDefault = [
   { id: 'pay_001', amount: '$250.00', status: 'paid', date: '2026-04-01', method: 'USDT TRC20' },
-  { id: 'pay_002', amount: '$180.00', status: 'reviewing', date: '2026-04-15', method: 'Bank transfer' },
+  {
+    id: 'pay_002',
+    amount: '$180.00',
+    status: 'reviewing',
+    date: '2026-04-15',
+    method: 'Bank transfer',
+  },
 ]
 
 export function AffiliatePage() {
@@ -65,10 +83,26 @@ export function AffiliatePage() {
 
         const d = dashboard || {}
         setSummaryCards([
-          { label: 'Сегодня', value: `$${d.earnings_today ?? '0.00'}`, hint: 'Начислено по финализированному NGR' },
-          { label: 'За месяц', value: `$${d.earnings_this_month ?? '0.00'}`, hint: 'После бонусов, fees, chargebacks и taxes' },
-          { label: 'В ожидании', value: `$${d.pending_amount ?? '0.00'}`, hint: 'Удержание до конца hold period' },
-          { label: 'Доступно', value: `$${d.available_amount ?? '0.00'}`, hint: 'Можно отправить payout request' },
+          {
+            label: 'Сегодня',
+            value: `$${d.earnings_today ?? '0.00'}`,
+            hint: 'Начислено по финализированному NGR',
+          },
+          {
+            label: 'За месяц',
+            value: `$${d.earnings_this_month ?? '0.00'}`,
+            hint: 'После бонусов, fees, chargebacks и taxes',
+          },
+          {
+            label: 'В ожидании',
+            value: `$${d.pending_amount ?? '0.00'}`,
+            hint: 'Удержание до конца hold period',
+          },
+          {
+            label: 'Доступно',
+            value: `$${d.available_amount ?? '0.00'}`,
+            hint: 'Можно отправить payout request',
+          },
         ])
         setFunnel([
           { label: 'Клики', value: String(d.clicks ?? '0') },
@@ -118,14 +152,15 @@ export function AffiliatePage() {
 
   return (
     <div className="section max-w-5xl">
-      <div className="flex flex-col gap-2 mb-5">
+      <div className="mb-5 flex flex-col gap-2">
         <h1 className="text-sm font-bold text-white">Партнерский кабинет</h1>
         <div className="card p-3">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-[10px] uppercase tracking-wide text-gray-500">RevShare From NGR</p>
-              <p className="text-xs text-gray-300 mt-1">
-                Комиссия считается только по финализированному `NGR`, отрицательные периоды на MVP обрезаются до `0`.
+              <p className="mt-1 text-xs text-gray-300">
+                Комиссия считается только по финализированному `NGR`, отрицательные периоды на MVP
+                обрезаются до `0`.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -137,12 +172,12 @@ export function AffiliatePage() {
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4 mb-5">
+      <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {summaryCards.map((card) => (
           <div key={card.label} className="card p-3">
             <p className="text-[10px] uppercase tracking-wide text-gray-500">{card.label}</p>
-            <p className="text-lg font-semibold text-white mt-2">{card.value}</p>
-            <p className="text-[10px] text-gray-600 mt-1">{card.hint}</p>
+            <p className="mt-2 text-lg font-semibold text-white">{card.value}</p>
+            <p className="mt-1 text-[10px] text-gray-600">{card.hint}</p>
           </div>
         ))}
       </div>
@@ -150,10 +185,13 @@ export function AffiliatePage() {
       <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
         <div className="space-y-4">
           <div className="card p-3">
-            <h2 className="text-xs font-semibold text-white mb-3">Funnel</h2>
+            <h2 className="mb-3 text-xs font-semibold text-white">Funnel</h2>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {funnel.map((item) => (
-                <div key={item.label} className="rounded border border-[rgb(var(--border))] bg-[rgb(var(--bg-primary))] p-3">
+                <div
+                  key={item.label}
+                  className="rounded border border-[rgb(var(--border))] bg-[rgb(var(--bg-primary))] p-3"
+                >
                   <p className="text-[10px] text-gray-500">{item.label}</p>
                   <p className="mt-1 text-sm font-semibold text-white">{item.value}</p>
                 </div>
@@ -162,7 +200,7 @@ export function AffiliatePage() {
           </div>
 
           <div className="card p-3">
-            <div className="flex items-center justify-between mb-3">
+            <div className="mb-3 flex items-center justify-between">
               <h2 className="text-xs font-semibold text-white">Начисления</h2>
               <button className="btn-outline">Запросить выплату</button>
             </div>
@@ -178,7 +216,9 @@ export function AffiliatePage() {
                   </div>
                   <div>
                     <p className="text-[10px] text-gray-500">GGR / NGR</p>
-                    <p className="mt-1">{item.ggr} / {item.ngr}</p>
+                    <p className="mt-1">
+                      {item.ggr} / {item.ngr}
+                    </p>
                   </div>
                   <div>
                     <p className="text-[10px] text-gray-500">Комиссия</p>
@@ -187,9 +227,15 @@ export function AffiliatePage() {
                   <div>
                     <p className="text-[10px] text-gray-500">Статус</p>
                     <p className="mt-1">
-                      {item.status === 'available' && <span className="badge badge-green">available</span>}
-                      {item.status === 'pending' && <span className="badge badge-yellow">pending</span>}
-                      {item.status === 'released_zero_floor' && <span className="badge badge-blue">zero floor</span>}
+                      {item.status === 'available' && (
+                        <span className="badge badge-green">available</span>
+                      )}
+                      {item.status === 'pending' && (
+                        <span className="badge badge-yellow">pending</span>
+                      )}
+                      {item.status === 'released_zero_floor' && (
+                        <span className="badge badge-blue">zero floor</span>
+                      )}
                     </p>
                   </div>
                 </div>
@@ -198,14 +244,17 @@ export function AffiliatePage() {
           </div>
 
           <div className="card p-3">
-            <h2 className="text-xs font-semibold text-white mb-3">Referral Links</h2>
+            <h2 className="mb-3 text-xs font-semibold text-white">Referral Links</h2>
             <div className="space-y-2">
               {links.map((link) => (
-                <div key={link.code} className="rounded border border-[rgb(var(--border))] bg-[rgb(var(--bg-primary))] p-3">
+                <div
+                  key={link.code}
+                  className="rounded border border-[rgb(var(--border))] bg-[rgb(var(--bg-primary))] p-3"
+                >
                   <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <p className="text-xs text-white">{link.name}</p>
-                      <p className="text-[10px] text-gray-500 mt-0.5">{link.code}</p>
+                      <p className="mt-0.5 text-[10px] text-gray-500">{link.code}</p>
                     </div>
                     <button className="btn-outline">Скопировать</button>
                   </div>
@@ -219,7 +268,7 @@ export function AffiliatePage() {
 
         <div className="space-y-4">
           <div className="card p-3">
-            <h2 className="text-xs font-semibold text-white mb-3">Payout Settings</h2>
+            <h2 className="mb-3 text-xs font-semibold text-white">Payout Settings</h2>
             <div className="space-y-2 text-[11px] text-gray-300">
               <div className="flex items-center justify-between border-b border-[rgb(var(--border))] pb-2">
                 <span className="text-gray-500">Метод</span>
@@ -241,13 +290,20 @@ export function AffiliatePage() {
           </div>
 
           <div className="card p-3">
-            <h2 className="text-xs font-semibold text-white mb-3">История выплат</h2>
+            <h2 className="mb-3 text-xs font-semibold text-white">История выплат</h2>
             <div className="space-y-2">
               {payouts.map((payout) => (
-                <div key={payout.id} className="rounded border border-[rgb(var(--border))] bg-[rgb(var(--bg-primary))] p-3">
+                <div
+                  key={payout.id}
+                  className="rounded border border-[rgb(var(--border))] bg-[rgb(var(--bg-primary))] p-3"
+                >
                   <div className="flex items-center justify-between">
                     <p className="text-xs text-white">{payout.amount}</p>
-                    <span className={payout.status === 'paid' ? 'badge badge-green' : 'badge badge-yellow'}>
+                    <span
+                      className={
+                        payout.status === 'paid' ? 'badge badge-green' : 'badge badge-yellow'
+                      }
+                    >
                       {payout.status}
                     </span>
                   </div>
@@ -259,7 +315,7 @@ export function AffiliatePage() {
           </div>
 
           <div className="card p-3">
-            <h2 className="text-xs font-semibold text-white mb-3">Risk Notes</h2>
+            <h2 className="mb-3 text-xs font-semibold text-white">Risk Notes</h2>
             <ul className="space-y-2 text-[11px] text-gray-300">
               <li>Self-referral и duplicate payment instruments блокируют payout.</li>
               <li>Комиссия становится `available` только после hold period.</li>

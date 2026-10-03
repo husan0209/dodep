@@ -74,7 +74,7 @@ pub fn is_valid_odds(odds: &str) -> bool {
     }
 
     if let Ok(odds_value) = odds.parse::<f64>() {
-        return odds_value >= 1.01 && odds_value <= 1000.0;
+        return (1.01..=1000.0).contains(&odds_value);
     }
 
     false
@@ -82,7 +82,7 @@ pub fn is_valid_odds(odds: &str) -> bool {
 
 /// Validate percentage (0-100)
 pub fn is_valid_percentage(value: f64) -> bool {
-    value.is_finite() && value >= 0.0 && value <= 100.0
+    value.is_finite() && (0.0..=100.0).contains(&value)
 }
 
 /// Validate IP address (IPv4 or IPv6)
@@ -134,7 +134,7 @@ pub fn is_valid_date(date: &str) -> bool {
         Err(_) => return false,
     };
 
-    year >= 1900 && year <= 2100 && month >= 1 && month <= 12 && day >= 1 && day <= 31
+    (1900..=2100).contains(&year) && (1..=12).contains(&month) && (1..=31).contains(&day)
 }
 
 /// Validate username

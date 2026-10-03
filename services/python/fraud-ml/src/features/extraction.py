@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 import polars as pl
 import structlog
 
-from .clickhouse import ClickHouseClient
+from ..data.clickhouse import ClickHouseClient
 
 logger = structlog.get_logger()
 

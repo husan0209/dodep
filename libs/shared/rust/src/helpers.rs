@@ -6,7 +6,11 @@ use std::time::Duration;
 use uuid::Uuid;
 
 /// Format money for display
-pub fn format_money(money: &Money, locale: &str) -> String {
+///
+/// `locale` is accepted for call-site compatibility but not yet applied: the
+/// body below selects a symbol by currency only. Prefixed so the unused
+/// parameter does not fail `clippy -D warnings` in every dependent service.
+pub fn format_money(money: &Money, _locale: &str) -> String {
     // Simple formatting - in production, use a proper localization library
     let symbol = match money.currency.as_str() {
         "USD" => "$",
@@ -78,6 +82,11 @@ pub fn now_iso() -> String {
 }
 
 /// Retry a function with exponential backoff
+///
+/// Gated on the optional `tokio` dependency: the body awaits
+/// `tokio::time::sleep`, so without the feature it did not compile at all
+/// (`error[E0433]: failed to resolve: use of unresolved module tokio`).
+#[cfg(feature = "tokio")]
 pub async fn retry<T, F, E>(
     mut operation: F,
     max_retries: u32,

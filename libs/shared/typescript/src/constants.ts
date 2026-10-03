@@ -7,7 +7,7 @@
  */
 export const API_VERSIONS = {
   V1: 'v1',
-} as const;
+} as const
 
 /**
  * Default pagination settings
@@ -16,7 +16,7 @@ export const PAGINATION = {
   DEFAULT_PAGE_SIZE: 20,
   MAX_PAGE_SIZE: 100,
   MIN_PAGE_SIZE: 1,
-} as const;
+} as const
 
 /**
  * Currency constants
@@ -37,7 +37,7 @@ export const CURRENCIES = {
   BTC: 'BTC',
   ETH: 'ETH',
   USDT: 'USDT',
-} as const;
+} as const
 
 /**
  * Country restrictions (gambling restricted jurisdictions)
@@ -57,7 +57,7 @@ export const RESTRICTED_COUNTRIES = [
   'KR', // South Korea
   'CN', // China
   'RU', // Russia (restrictions apply)
-] as const;
+] as const
 
 /**
  * Wallet types
@@ -67,7 +67,7 @@ export const WALLET_TYPES = {
   BONUS: 'bonus',
   FREE_SPINS: 'free_spins',
   CASHBACK: 'cashback',
-} as const;
+} as const
 
 /**
  * Transaction types
@@ -82,7 +82,7 @@ export const TRANSACTION_TYPES = {
   BONUS_DEBIT: 'bonus_debit',
   TRANSFER: 'transfer',
   ADJUSTMENT: 'adjustment',
-} as const;
+} as const
 
 /**
  * Bet types
@@ -93,7 +93,7 @@ export const BET_TYPES = {
   CASINO: 'casino',
   LOTTERY: 'lottery',
   VIRTUAL: 'virtual',
-} as const;
+} as const
 
 /**
  * Bet statuses
@@ -104,7 +104,7 @@ export const BET_STATUSES = {
   SETTLED: 'settled',
   CANCELLED: 'cancelled',
   REJECTED: 'rejected',
-} as const;
+} as const
 
 /**
  * Bonus types
@@ -119,7 +119,7 @@ export const BONUS_TYPES = {
   VIP: 'vip',
   LOYALTY: 'loyalty',
   TOURNAMENT: 'tournament',
-} as const;
+} as const
 
 /**
  * KYC levels
@@ -130,7 +130,7 @@ export const KYC_LEVELS = {
   IDENTITY: 'identity',
   ENHANCED: 'enhanced',
   VIP: 'vip',
-} as const;
+} as const
 
 /**
  * Document types for KYC
@@ -142,7 +142,7 @@ export const DOCUMENT_TYPES = {
   PROOF_OF_ADDRESS: 'proof_of_address',
   BANK_STATEMENT: 'bank_statement',
   SELFIE: 'selfie',
-} as const;
+} as const
 
 /**
  * Notification channels
@@ -154,7 +154,7 @@ export const NOTIFICATION_CHANNELS = {
   IN_APP: 'in_app',
   TELEGRAM: 'telegram',
   WHATSAPP: 'whatsapp',
-} as const;
+} as const
 
 /**
  * Notification types
@@ -173,7 +173,7 @@ export const NOTIFICATION_TYPES = {
   VIP_UPDATE: 'vip_update',
   REALITY_CHECK: 'reality_check',
   SYSTEM: 'system',
-} as const;
+} as const
 
 /**
  * Device types
@@ -184,7 +184,7 @@ export const DEVICE_TYPES = {
   IOS: 'ios',
   ANDROID: 'android',
   DESKTOP: 'desktop',
-} as const;
+} as const
 
 /**
  * Rate limits
@@ -193,24 +193,24 @@ export const RATE_LIMITS = {
   // Authentication
   LOGIN_ATTEMPTS: 5,
   LOGIN_WINDOW_MS: 15 * 60 * 1000, // 15 minutes
-  
+
   // API
   API_REQUESTS_PER_MINUTE: 100,
   API_REQUESTS_PER_HOUR: 1000,
-  
+
   // Betting
   BETS_PER_SECOND: 10,
-  
+
   // Withdrawal
   WITHDRAWAL_REQUESTS_PER_DAY: 5,
-  
+
   // Password reset
   PASSWORD_RESET_PER_HOUR: 3,
-  
+
   // 2FA
   TOTP_WINDOW_SECONDS: 30,
   TOTP_MAX_ATTEMPTS: 5,
-} as const;
+} as const
 
 /**
  * Betting limits
@@ -221,7 +221,7 @@ export const BET_LIMITS = {
   MAX_WIN_MULTIPLIER: 10000, // Max win = stake * multiplier
   MAX_ODDS: '1000.00',
   MIN_ODDS: '1.01',
-} as const;
+} as const
 
 /**
  * Payment limits
@@ -232,7 +232,7 @@ export const PAYMENT_LIMITS = {
   MIN_WITHDRAWAL: '10.00',
   MAX_WITHDRAWAL_DAILY: '50000.00',
   MAX_WITHDRAWAL_MONTHLY: '500000.00',
-} as const;
+} as const
 
 /**
  * Session settings
@@ -242,7 +242,7 @@ export const SESSION = {
   REFRESH_TOKEN_TTL_SECONDS: 604800, // 7 days
   SESSION_TTL_SECONDS: 2592000, // 30 days
   MAX_SESSIONS_PER_USER: 5,
-} as const;
+} as const
 
 /**
  * Responsible gambling limits
@@ -253,7 +253,7 @@ export const RESPONSIBLE_GAMBLING = {
   SELF_EXCLUSION_MIN_DAYS: 6,
   SELF_EXCLUSION_MAX_YEARS: 5,
   COOLDOWN_PERIOD_DAYS: 24, // After limit decrease
-} as const;
+} as const
 
 /**
  * Error codes
@@ -266,21 +266,21 @@ export const ERROR_CODES = {
   AUTH_2FA_REQUIRED: 'AUTH_1006',
   AUTH_2FA_INVALID: 'AUTH_1007',
   AUTH_ACCOUNT_LOCKED: 'AUTH_1008',
-  
+
   // Wallet (5000-5999)
   WALLET_NOT_FOUND: 'WALLET_5001',
   INSUFFICIENT_BALANCE: 'WALLET_5002',
   INSUFFICIENT_AVAILABLE_BALANCE: 'WALLET_5003',
-  
+
   // Bet (7000-7999)
   BET_NOT_FOUND: 'BET_7001',
   BET_INVALID: 'BET_7002',
   BET_ALREADY_SETTLED: 'BET_7003',
   BET_LIMIT_EXCEEDED: 'BET_7005',
   BET_ODDS_CHANGED: 'BET_7007',
-  
+
   // System (11000-11999)
   INTERNAL_ERROR: 'SYS_11001',
   SERVICE_UNAVAILABLE: 'SYS_11002',
   RATE_LIMIT_EXCEEDED: 'SYS_11005',
-} as const;
+} as const

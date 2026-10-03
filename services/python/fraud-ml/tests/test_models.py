@@ -4,6 +4,7 @@ import numpy as np
 import polars as pl
 import pytest
 
+from src.features.transformation import MODEL_FEATURES
 from src.models.fraud_model import FraudModel
 
 
@@ -12,7 +13,7 @@ class TestFraudModel:
 
     @pytest.fixture
     def sample_data(self):
-        """Create sample training data."""
+        """Create sample training data with a learnable fraud signal."""
         np.random.seed(42)
         n_samples = 1000
 
@@ -37,8 +38,18 @@ class TestFraudModel:
             "multi_ip": np.random.randint(0, 2, n_samples),
             "high_roller": np.random.randint(0, 2, n_samples),
             "rapid_bettor": np.random.randint(0, 2, n_samples),
-            "is_fraud": np.random.choice([0, 1], n_samples, p=[0.95, 0.05]),
         }
+
+        # The label must be a function of the features. With a uniformly random
+        # label the rows carry no signal, so any trained model scores AUC ~0.5
+        # and "better than random" is unsatisfiable by construction.
+        # Fraud correlates with multi-device + multi-IP + high-roller behaviour,
+        # which is the pattern the feature set is designed to capture.
+        risk = data["multi_device"] + data["multi_ip"] + data["high_roller"] + data["rapid_bettor"]
+        data["is_fraud"] = (risk >= 3).astype(int)
+        # Keep the positive class in the low single digits of percent.
+        if data["is_fraud"].mean() > 0.10:
+            data["is_fraud"] = (risk >= 4).astype(int)
 
         return pl.DataFrame(data)
 
@@ -50,7 +61,10 @@ class TestFraudModel:
     def test_model_initialization(self, model):
         """Test model initializes correctly."""
         assert model.model is None
-        assert len(model.FEATURE_COLUMNS) == 18
+        # Compare against the source of truth instead of a hardcoded count:
+        # a literal 18 silently rotted when features were added (it is 20 now).
+        assert model.FEATURE_COLUMNS == MODEL_FEATURES
+        assert len(model.FEATURE_COLUMNS) > 0
         assert model.TARGET_COLUMN == "is_fraud"
 
     def test_model_training(self, model, sample_data):

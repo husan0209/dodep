@@ -4,7 +4,7 @@ API Routes for Fraud ML Service
 
 from datetime import datetime
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 from pydantic import BaseModel
 
 router = APIRouter()
@@ -86,7 +86,7 @@ class BatchFraudResponse(BaseModel):
 
 
 @router.post("/detect/bet-anomaly", response_model=FraudPredictionResponse)
-async def detect_bet_anomaly(bets: list[BetData]):
+async def detect_bet_anomaly(bets: list[BetData], request: Request):
     """
     Detect anomalous betting patterns
 
@@ -96,15 +96,12 @@ async def detect_bet_anomaly(bets: list[BetData]):
     - Night betting patterns
     - Abnormal win rates
     """
-    from fastapi import Request
-
-    request: Request = globals().get("request")
 
     if not bets:
         raise HTTPException(status_code=400, detail="No bets provided")
 
     # Get fraud detector from app state
-    fraud_detector = request.app.state.fraud_detector if request else None
+    fraud_detector = getattr(request.app.state, "fraud_detector", None)
     if not fraud_detector:
         raise HTTPException(status_code=503, detail="Fraud detector not available")
 
@@ -130,7 +127,7 @@ async def detect_bet_anomaly(bets: list[BetData]):
 
 
 @router.post("/detect/bonus-abuse", response_model=FraudPredictionResponse)
-async def detect_bonus_abuse(user_data: UserData):
+async def detect_bonus_abuse(user_data: UserData, request: Request):
     """
     Detect bonus abuse patterns
 
@@ -140,10 +137,7 @@ async def detect_bonus_abuse(user_data: UserData):
     - Immediate withdrawal after bonus
     - New account with high bonus activity
     """
-    from fastapi import Request
-
-    request: Request = globals().get("request")
-    fraud_detector = request.app.state.fraud_detector if request else None
+    fraud_detector = getattr(request.app.state, "fraud_detector", None)
     if not fraud_detector:
         raise HTTPException(status_code=503, detail="Fraud detector not available")
 
@@ -161,7 +155,7 @@ async def detect_bonus_abuse(user_data: UserData):
 
 
 @router.post("/detect/payment-fraud", response_model=FraudPredictionResponse)
-async def detect_payment_fraud(transactions: list[TransactionData]):
+async def detect_payment_fraud(transactions: list[TransactionData], request: Request):
     """
     Detect payment fraud patterns
 
@@ -171,10 +165,7 @@ async def detect_payment_fraud(transactions: list[TransactionData]):
     - High failed transaction ratio
     - Unusual transaction amounts
     """
-    from fastapi import Request
-
-    request: Request = globals().get("request")
-    fraud_detector = request.app.state.fraud_detector if request else None
+    fraud_detector = getattr(request.app.state, "fraud_detector", None)
     if not fraud_detector:
         raise HTTPException(status_code=503, detail="Fraud detector not available")
 
@@ -199,7 +190,7 @@ async def detect_payment_fraud(transactions: list[TransactionData]):
 
 
 @router.post("/detect/account-takeover", response_model=FraudPredictionResponse)
-async def detect_account_takeover(login_data: LoginData):
+async def detect_account_takeover(login_data: LoginData, request: Request):
     """
     Detect account takeover attempts
 
@@ -209,10 +200,7 @@ async def detect_account_takeover(login_data: LoginData):
     - Multiple failed attempts
     - Logins from multiple locations
     """
-    from fastapi import Request
-
-    request: Request = globals().get("request")
-    fraud_detector = request.app.state.fraud_detector if request else None
+    fraud_detector = getattr(request.app.state, "fraud_detector", None)
     if not fraud_detector:
         raise HTTPException(status_code=503, detail="Fraud detector not available")
 
@@ -234,9 +222,10 @@ async def detect_account_takeover(login_data: LoginData):
 
 @router.post("/detect/batch", response_model=BatchFraudResponse)
 async def detect_batch(
+    request: Request,
+    background_tasks: BackgroundTasks,
     bets: list[BetData] | None = None,
     transactions: list[TransactionData] | None = None,
-    background_tasks: BackgroundTasks = None,
 ):
     """
     Batch fraud detection for multiple data types
@@ -245,12 +234,9 @@ async def detect_batch(
     """
     import time
 
-    from fastapi import Request
-
-    request: Request = globals().get("request")
     start_time = time.time()
 
-    fraud_detector = request.app.state.fraud_detector if request else None
+    fraud_detector = getattr(request.app.state, "fraud_detector", None)
     if not fraud_detector:
         raise HTTPException(status_code=503, detail="Fraud detector not available")
 
@@ -321,12 +307,9 @@ async def detect_batch(
 
 
 @router.get("/models/status")
-async def get_models_status():
+async def get_models_status(request: Request):
     """Get status of all ML models"""
-    from fastapi import Request
-
-    request: Request = globals().get("request")
-    fraud_detector = request.app.state.fraud_detector if request else None
+    fraud_detector = getattr(request.app.state, "fraud_detector", None)
     if not fraud_detector:
         raise HTTPException(status_code=503, detail="Fraud detector not available")
 
@@ -339,12 +322,9 @@ async def get_models_status():
 
 
 @router.post("/models/reload")
-async def reload_models():
+async def reload_models(request: Request):
     """Reload all ML models from disk"""
-    from fastapi import Request
-
-    request: Request = globals().get("request")
-    fraud_detector = request.app.state.fraud_detector if request else None
+    fraud_detector = getattr(request.app.state, "fraud_detector", None)
     if not fraud_detector:
         raise HTTPException(status_code=503, detail="Fraud detector not available")
 

@@ -150,12 +150,15 @@ class FraudModel:
 
     def export_onnx(self, path: Path) -> Path:
         """Export to ONNX for serving in Rust."""
-        from skl2onnx import convert_sklearn
-        from skl2onnx.common.data_types import FloatTensorType
+        # onnxmltools, not skl2onnx: convert_sklearn has no converter for
+        # XGBClassifier and fails with MissingShapeCalculator. onnxmltools
+        # ships the native XGBoost converter.
+        from onnxmltools import convert_xgboost
+        from onnxmltools.convert.common.data_types import FloatTensorType
 
         initial_type = [("features", FloatTensorType([None, len(self.FEATURE_COLUMNS)]))]
 
-        onnx_model = convert_sklearn(self.model, initial_types=initial_type)
+        onnx_model = convert_xgboost(self.model, initial_types=initial_type)
 
         onnx_path = path / "fraud_model.onnx"
         with open(onnx_path, "wb") as f:

@@ -41,6 +41,10 @@ class TestFeatureExtractor:
                 "settled_7d": [10, 20],
                 "std_bet_30d": [50.0, 100.0],
                 "avg_bet_30d": [100.0, 200.0],
+                "total_deposit_30d": [500.0, 1500.0],
+                "max_bet_30d": [400.0, 900.0],
+                "bets_7d": [20, 45],
+                "bets_24h": [2, 9],
                 "device_count_30d": [5, 2],
                 "ip_count_30d": [15, 5],
             }

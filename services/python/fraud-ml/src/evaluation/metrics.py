@@ -52,12 +52,17 @@ def calculate_metrics(
     # ROC curve points (for plotting)
     fpr, tpr, roc_thresholds = roc_curve(y_true, y_pred_proba)
 
+    # Round before formatting: 0.90 * 100 is 90.00000000000001 in binary float,
+    # which produced the key "precision_at_90.00000000000001_recall" and made
+    # the metric unreadable to every consumer (KeyError in validate_quality_gates).
+    recall_pct = int(round(target_recall * 100))
+
     metrics = {
         # Discrimination
         "auc_roc": float(auc),
         "avg_precision": float(ap),
         # Threshold-based
-        f"precision_at_{target_recall * 100}_recall": float(precision_at_recall),
+        f"precision_at_{recall_pct}_recall": float(precision_at_recall),
         "threshold": float(threshold),
         # Confusion matrix
         "true_positives": int(cm[1, 1]),

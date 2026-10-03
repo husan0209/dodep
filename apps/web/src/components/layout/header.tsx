@@ -40,38 +40,42 @@ export function Header() {
   return (
     <header className="sticky top-0 z-50">
       {/* Glassmorphism top bar */}
-      <div className="bg-bg-primary/80 backdrop-blur-xl backdrop-saturate-150 border-b border-border/60">
+      <div className="border-b border-border/60 bg-bg-primary/80 backdrop-blur-xl backdrop-saturate-150">
         <div className="mx-auto max-w-[1440px] px-4">
           <div className="flex h-14 items-center justify-between gap-4">
             {/* Logo */}
-            <Link href="/" className="flex items-center gap-2 shrink-0 group">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-yellow-400 to-amber-500 flex items-center justify-center shadow-glow-gold-sm group-hover:shadow-glow-gold transition-shadow duration-300">
+            <Link href="/" className="group flex shrink-0 items-center gap-2">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-yellow-400 to-amber-500 shadow-glow-gold-sm transition-shadow duration-300 group-hover:shadow-glow-gold">
                 <CurrencyDollarIcon className="h-5 w-5 text-slate-950" />
               </div>
-              <span className="text-xl font-bold tracking-tight text-gradient-gold hidden sm:block">DOD</span>
+              <span className="text-gradient-gold hidden text-xl font-bold tracking-tight sm:block">
+                DOD
+              </span>
             </Link>
 
             {/* Main nav - pill style */}
-            <nav className="hidden lg:flex items-center gap-1 bg-bg-secondary/60 rounded-2xl p-1 border border-border/40">
+            <nav className="hidden items-center gap-1 rounded-2xl border border-border/40 bg-bg-secondary/60 p-1 lg:flex">
               {mainNav.map((item) => {
-                const isActive = pathname === item.href || (item.href !== '/' && pathname?.startsWith(item.href.split('?')[0]))
+                const isActive =
+                  pathname === item.href ||
+                  (item.href !== '/' && pathname?.startsWith(item.href.split('?')[0]))
                 return (
                   <Link
                     key={item.name}
                     href={item.href}
                     className={cn(
-                      'relative flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-xl transition-all duration-200',
+                      'relative flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-semibold transition-all duration-200',
                       isActive
-                        ? 'text-white bg-bg-tertiary shadow-sm'
-                        : 'text-text-secondary hover:text-text-primary hover:bg-white/5'
+                        ? 'bg-bg-tertiary text-white shadow-sm'
+                        : 'text-text-secondary hover:bg-white/5 hover:text-text-primary',
                     )}
                   >
                     <item.icon className={cn('h-4 w-4', item.badge === 'LIVE' && 'text-red-400')} />
                     {item.name}
                     {item.badge === 'LIVE' && (
-                      <span className="absolute -top-0.5 -right-0.5 flex h-2 w-2">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                      <span className="absolute -right-0.5 -top-0.5 flex h-2 w-2">
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75"></span>
+                        <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500"></span>
                       </span>
                     )}
                   </Link>
@@ -85,7 +89,7 @@ export function Header() {
                 <Link
                   key={item.name}
                   href={item.href}
-                  className="hidden lg:flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-text-secondary hover:text-text-primary hover:bg-white/5 rounded-xl transition-all duration-200"
+                  className="hidden items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-medium text-text-secondary transition-all duration-200 hover:bg-white/5 hover:text-text-primary lg:flex"
                 >
                   <item.icon className="h-4 w-4" />
                   {item.name}
@@ -98,37 +102,51 @@ export function Header() {
                   {/* Balance display */}
                   <Link
                     href="/wallet"
-                    className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-bg-secondary/60 border border-border/40 hover:border-border-light/60 transition-all duration-200"
+                    className="hidden items-center gap-1.5 rounded-xl border border-border/40 bg-bg-secondary/60 px-3 py-1.5 transition-all duration-200 hover:border-border-light/60 md:flex"
                   >
                     <WalletIcon className="h-4 w-4 text-text-muted" />
-                    <span className="text-sm font-bold text-text-primary font-mono tabular-nums">
-                      {'balance' in (user || {}) && (user as unknown as { balance?: number }).balance
-                        ? (user as unknown as { balance: number }).balance.toLocaleString('ru-RU', { minimumFractionDigits: 2 })
+                    <span className="font-mono text-sm font-bold tabular-nums text-text-primary">
+                      {'balance' in (user || {}) &&
+                      (user as unknown as { balance?: number }).balance
+                        ? (user as unknown as { balance: number }).balance.toLocaleString('ru-RU', {
+                            minimumFractionDigits: 2,
+                          })
                         : '0.00'}
                     </span>
                     <span className="text-xs text-text-muted">₽</span>
                   </Link>
 
-                  <Link href="/wallet" className="btn-primary text-xs px-4 py-2 shadow-glow-gold-sm hidden sm:inline-flex">
+                  <Link
+                    href="/wallet"
+                    className="btn-primary hidden px-4 py-2 text-xs shadow-glow-gold-sm sm:inline-flex"
+                  >
                     Депозит
                   </Link>
 
                   <Link
                     href="/profile"
-                    className="flex items-center gap-1.5 px-2.5 py-2 rounded-xl hover:bg-white/5 text-text-secondary hover:text-text-primary transition-all duration-200"
+                    className="flex items-center gap-1.5 rounded-xl px-2.5 py-2 text-text-secondary transition-all duration-200 hover:bg-white/5 hover:text-text-primary"
                   >
-                    <div className="w-7 h-7 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center text-white text-xs font-bold">
+                    <div className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 text-xs font-bold text-white">
                       {user?.username?.charAt(0).toUpperCase() || 'U'}
                     </div>
-                    <span className="hidden lg:inline text-sm font-medium">{user?.username || 'Профиль'}</span>
+                    <span className="hidden text-sm font-medium lg:inline">
+                      {user?.username || 'Профиль'}
+                    </span>
                   </Link>
                 </div>
               ) : (
                 <div className="flex items-center gap-2">
-                  <Link href="/login" className="px-4 py-2 text-sm font-medium text-text-secondary hover:text-text-primary hover:bg-white/5 rounded-xl transition-all duration-200">
+                  <Link
+                    href="/login"
+                    className="rounded-xl px-4 py-2 text-sm font-medium text-text-secondary transition-all duration-200 hover:bg-white/5 hover:text-text-primary"
+                  >
                     Войти
                   </Link>
-                  <Link href="/register" className="btn-primary text-xs px-4 py-2.5 shadow-glow-gold-sm">
+                  <Link
+                    href="/register"
+                    className="btn-primary px-4 py-2.5 text-xs shadow-glow-gold-sm"
+                  >
                     Регистрация
                   </Link>
                 </div>
@@ -137,9 +155,13 @@ export function Header() {
               {/* Mobile menu */}
               <button
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                className="lg:hidden p-2 rounded-xl hover:bg-white/5 text-text-muted hover:text-text-primary transition-all duration-200"
+                className="rounded-xl p-2 text-text-muted transition-all duration-200 hover:bg-white/5 hover:text-text-primary lg:hidden"
               >
-                {mobileMenuOpen ? <XMarkIcon className="h-5 w-5" /> : <Bars3Icon className="h-5 w-5" />}
+                {mobileMenuOpen ? (
+                  <XMarkIcon className="h-5 w-5" />
+                ) : (
+                  <Bars3Icon className="h-5 w-5" />
+                )}
               </button>
             </div>
           </div>
@@ -148,7 +170,7 @@ export function Header() {
 
       {/* Mobile menu - glassmorphism drawer */}
       {mobileMenuOpen && (
-        <div className="lg:hidden bg-bg-secondary/95 backdrop-blur-2xl backdrop-saturate-150 border-b border-border/60 animate-slide-down">
+        <div className="animate-slide-down border-b border-border/60 bg-bg-secondary/95 backdrop-blur-2xl backdrop-saturate-150 lg:hidden">
           <div className="mx-auto max-w-[1440px] px-4 py-3">
             <div className="flex flex-col gap-1">
               {[...mainNav, ...secondaryNav].map((item) => (
@@ -157,34 +179,34 @@ export function Header() {
                   href={item.href}
                   onClick={() => setMobileMenuOpen(false)}
                   className={cn(
-                    'flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-200',
+                    'flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold transition-all duration-200',
                     pathname === item.href
-                      ? 'text-white bg-bg-tertiary shadow-sm'
-                      : 'text-text-secondary hover:text-text-primary hover:bg-white/5'
+                      ? 'bg-bg-tertiary text-white shadow-sm'
+                      : 'text-text-secondary hover:bg-white/5 hover:text-text-primary',
                   )}
                 >
                   <item.icon className={cn('h-5 w-5', item.badge === 'LIVE' && 'text-red-400')} />
                   {item.name}
                   {item.badge && (
-                    <span className="ml-auto badge badge-live animate-pulse-fast text-[9px]">
+                    <span className="badge badge-live ml-auto animate-pulse-fast text-[9px]">
                       {item.badge}
                     </span>
                   )}
                 </Link>
               ))}
               {!isAuthenticated && (
-                <div className="flex gap-2 pt-3 mt-2 border-t border-border/40">
+                <div className="mt-2 flex gap-2 border-t border-border/40 pt-3">
                   <Link
                     href="/login"
                     onClick={() => setMobileMenuOpen(false)}
-                    className="flex-1 text-center py-2.5 text-sm font-semibold border border-border rounded-xl hover:bg-white/5 transition-colors text-text-secondary"
+                    className="flex-1 rounded-xl border border-border py-2.5 text-center text-sm font-semibold text-text-secondary transition-colors hover:bg-white/5"
                   >
                     Войти
                   </Link>
                   <Link
                     href="/register"
                     onClick={() => setMobileMenuOpen(false)}
-                    className="flex-1 text-center btn-primary text-sm py-2.5"
+                    className="btn-primary flex-1 py-2.5 text-center text-sm"
                   >
                     Регистрация
                   </Link>

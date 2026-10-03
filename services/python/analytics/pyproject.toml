@@ -26,12 +26,14 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=7.4.0",
+    "pytest>=8.0.0",
     "pytest-asyncio>=0.23.6",
     "pytest-cov>=4.1.0",
     "ruff>=0.1.0",
     "mypy>=1.8.0",
-    "httpx>=0.26.0",
+    # Pinned, not ranged: starlette's TestClient calls httpx.Client(app=...),
+    # which httpx removed in 0.28. A range here breaks the smoke tests.
+    "httpx==0.26.0",
 ]
 
 [build-system]
@@ -53,6 +55,11 @@ python_version = "3.11"
 warn_return_any = true
 warn_unused_configs = true
 ignore_missing_imports = true
+# The package is importable both as `analytics.*` (installed by hatchling) and
+# as `src.analytics.*` (how the tests import it). Without explicit bases mypy
+# reports "Source file found twice under different module names" and stops.
+explicit_package_bases = true
+mypy_path = "."
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

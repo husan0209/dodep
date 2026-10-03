@@ -41,12 +41,19 @@ class ClickHouseClient:
     def query_to_polars(self, query: str, params: dict | None = None) -> pl.DataFrame:
         """Execute query and return Polars DataFrame."""
         try:
-            result = self.client.query(query, parameters=params)
-            df = pl.from_arrow(result.to_arrow())
+            # query_arrow returns a pyarrow Table directly. QueryResult (what
+            # client.query returns) has no to_arrow() in clickhouse-connect
+            # 0.7.x, so the previous result.to_arrow() raised AttributeError.
+            table = self.client.query_arrow(query, parameters=params)
+            # pl.from_arrow is typed as returning DataFrame | Series because the
+            # output depends on the Arrow schema. A ClickHouse SELECT always
+            # yields columns, so narrow the union explicitly.
+            frame = pl.from_arrow(table)
+            df = frame.to_frame() if isinstance(frame, pl.Series) else frame
             logger.debug(
                 "clickhouse.query_executed",
-                rows=len(df) if df is not None else 0,
-                columns=len(df.columns) if df is not None else 0,
+                rows=len(df),
+                columns=len(df.columns),
             )
             return df
         except Exception as e:

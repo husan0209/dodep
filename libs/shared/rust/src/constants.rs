@@ -1,7 +1,8 @@
 //! Constants for Opus Casino platform
 
-use once_cell::sync::Lazy;
-use rust_decimal::Decimal;
+// `Lazy` and `Decimal` are imported inside the modules that use them
+// (bet_limits, money_limits). The crate-level imports were unused and failed
+// `clippy -D warnings` for every dependent service.
 
 /// Default pagination settings
 pub mod pagination {

@@ -1,0 +1,16 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Generated protobuf clients
+src/proto/
+
+# Caches
+coverage/
+*.tsbuildinfo
+.eslintcache
+
+# Lockfiles
+package-lock.json

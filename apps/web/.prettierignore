@@ -1,0 +1,38 @@
+# Build output
+.next/
+out/
+dist/
+build/
+
+# Dependencies
+node_modules/
+
+# Test + coverage output
+coverage/
+playwright-report/
+test-results/
+blob-report/
+.playwright/
+
+# Lockfiles and caches
+package-lock.json
+*.tsbuildinfo
+.eslintcache
+.prettiercache
+
+# Local env
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Generated API clients
+src/generated/
+
+# e2e artefacts
+e2e/screenshots/

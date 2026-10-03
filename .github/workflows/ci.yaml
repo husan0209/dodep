@@ -120,6 +120,7 @@ jobs:
       with:
         file: ./coverage.out
         flags: ${{ matrix.service }}
+        fail_ci_if_error: false
 
   # Python services build and test
   python-build:

@@ -71,8 +71,16 @@ class TestOnnxExport:
         input_name = session.get_inputs()[0].name
 
         # Test inference
-        test_input = np.random.randn(5, 18).astype(np.float32)
-        output = session.run(None, {input_name: test_input})
+        test_input = np.random.randn(5, len(trained_model.FEATURE_COLUMNS)).astype(np.float32)
+        outputs = session.run(None, {input_name: test_input})
 
-        assert len(output) == 1
-        assert output[0].shape == (5, 2)  # 5 samples, 2 classes
+        # A binary classifier exported without a ZipMap emits two tensors: the
+        # predicted label (int64, [N]) and the class probabilities
+        # (float32, [N, 2]). Pick the probability tensor by shape rather than
+        # assuming a fixed output count.
+        probabilities = next(o for o in outputs if o.ndim == 2 and o.shape[1] == 2)
+        assert probabilities.shape == (5, 2)  # 5 samples, 2 classes
+
+        # Column 1 is P(fraud) and must be a probability.
+        assert np.all((probabilities[:, 1] >= 0) & (probabilities[:, 1] <= 1))
+        assert np.allclose(probabilities.sum(axis=1), 1.0, atol=1e-5)

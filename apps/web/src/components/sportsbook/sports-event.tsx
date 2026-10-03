@@ -31,7 +31,9 @@ export function SportsEvent({ event }: SportsEventProps) {
   }
 
   const handleAddBet = (selection: 'home' | 'draw' | 'away', odds: number, marketId: number) => {
-    const outcomeId = Number(`${event.id}${marketId}${selection === 'home' ? 1 : selection === 'draw' ? 2 : 3}`)
+    const outcomeId = Number(
+      `${event.id}${marketId}${selection === 'home' ? 1 : selection === 'draw' ? 2 : 3}`,
+    )
     if (isSelected(outcomeId)) {
       removeSelection(outcomeId)
       return
@@ -49,7 +51,8 @@ export function SportsEvent({ event }: SportsEventProps) {
       eventId: Number(event.id),
       marketId,
       outcomeId,
-      outcomeName: selection === 'home' ? event.homeTeam : selection === 'draw' ? 'Ничья' : event.awayTeam,
+      outcomeName:
+        selection === 'home' ? event.homeTeam : selection === 'draw' ? 'Ничья' : event.awayTeam,
       odds,
       eventName: `${event.homeTeam} vs ${event.awayTeam}`,
       marketName: selection === 'home' ? 'П1' : selection === 'draw' ? 'X' : 'П2',
@@ -65,43 +68,50 @@ export function SportsEvent({ event }: SportsEventProps) {
   return (
     <div className="fade-in">
       {/* Event row - 1xbet style compact layout */}
-      <div className="bg-[rgb(var(--bg-secondary))] border border-[rgb(var(--border))] hover:border-[rgb(var(--border-light))] transition-colors">
+      <div className="border border-[rgb(var(--border))] bg-[rgb(var(--bg-secondary))] transition-colors hover:border-[rgb(var(--border-light))]">
         {/* Info row */}
-        <div className="flex items-center justify-between px-3 py-1.5 border-b border-[rgb(var(--border))] bg-[rgb(var(--bg-tertiary))]">
-          <div className="flex items-center gap-2 min-w-0">
+        <div className="flex items-center justify-between border-b border-[rgb(var(--border))] bg-[rgb(var(--bg-tertiary))] px-3 py-1.5">
+          <div className="flex min-w-0 items-center gap-2">
             {event.isLive && (
               <span className="badge badge-live shrink-0">
-                <span className="w-1.5 h-1.5 rounded-full bg-red-500 live-pulse mr-1" />
+                <span className="live-pulse mr-1 h-1.5 w-1.5 rounded-full bg-red-500" />
                 {event.liveMinute || 'LIVE'}
               </span>
             )}
-            <span className="text-[10px] text-gray-500 truncate">{event.league}</span>
+            <span className="truncate text-[10px] text-gray-500">{event.league}</span>
           </div>
-          <span className="text-[10px] text-gray-500 shrink-0 ml-2">
-            {new Date(event.startTime).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
+          <span className="ml-2 shrink-0 text-[10px] text-gray-500">
+            {new Date(event.startTime).toLocaleTimeString('ru-RU', {
+              hour: '2-digit',
+              minute: '2-digit',
+            })}
           </span>
         </div>
 
         {/* Teams + Odds row */}
-        <div className="flex items-center px-3 py-2 gap-3">
+        <div className="flex items-center gap-3 px-3 py-2">
           {/* Teams */}
-          <div className="flex-1 min-w-0">
+          <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               {event.isLive && event.homeScore !== undefined && (
-                <span className="text-xs font-bold text-yellow-400 shrink-0 w-6 text-right">{event.homeScore}</span>
+                <span className="w-6 shrink-0 text-right text-xs font-bold text-yellow-400">
+                  {event.homeScore}
+                </span>
               )}
-              <p className="text-xs font-medium text-gray-200 truncate">{event.homeTeam}</p>
+              <p className="truncate text-xs font-medium text-gray-200">{event.homeTeam}</p>
             </div>
-            <div className="flex items-center gap-2 mt-1">
+            <div className="mt-1 flex items-center gap-2">
               {event.isLive && event.awayScore !== undefined && (
-                <span className="text-xs font-bold text-yellow-400 shrink-0 w-6 text-right">{event.awayScore}</span>
+                <span className="w-6 shrink-0 text-right text-xs font-bold text-yellow-400">
+                  {event.awayScore}
+                </span>
               )}
-              <p className="text-xs font-medium text-gray-200 truncate">{event.awayTeam}</p>
+              <p className="truncate text-xs font-medium text-gray-200">{event.awayTeam}</p>
             </div>
           </div>
 
           {/* Odds */}
-          <div className={`grid gap-1 shrink-0 ${event.odds.draw ? 'grid-cols-3' : 'grid-cols-2'}`}>
+          <div className={`grid shrink-0 gap-1 ${event.odds.draw ? 'grid-cols-3' : 'grid-cols-2'}`}>
             <button
               onClick={() => handleAddBet('home', event.odds.home, 1)}
               className={`odds-btn ${isSelected(outcomeIds.home) ? 'odds-btn-selected' : ''}`}

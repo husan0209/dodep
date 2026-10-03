@@ -111,11 +111,12 @@ jobs:
           REDPANDA_BROKERS: localhost:9092
 
       - name: Upload coverage
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
         with:
           files: services/python/fraud-ml/coverage.xml
           flags: fraud-ml
           name: fraud-ml-coverage
+          fail_ci_if_error: false
 
   build:
     name: Build and Push Docker Image

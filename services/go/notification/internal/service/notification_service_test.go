@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"testing"
 
 	"go.uber.org/zap"
@@ -65,11 +67,46 @@ func TestProcessEvent_SupportedEventAliases(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// The repository is built without a pgx pool, so a routed event
+			// surfaces the repository's sentinel error instead of succeeding.
+			// Reaching that error is the assertion: it proves the alias was
+			// recognised and dispatched to a processor, rather than falling
+			// through to the default branch, which returns nil.
 			err := svc.ProcessEvent(context.Background(), tc.eventType, tc.data)
-			if err != nil {
-				t.Fatalf("expected no error, got: %v", err)
+			if err == nil {
+				t.Fatalf("event %q: expected dispatch to reach the repository, got nil", tc.eventType)
+			}
+			if !errors.Is(err, repository.ErrDatabaseUnavailable) {
+				t.Fatalf("event %q: expected ErrDatabaseUnavailable, got: %v", tc.eventType, err)
 			}
 		})
+	}
+}
+
+func TestProcessEvent_UnknownTypeIsIgnored(t *testing.T) {
+	svc := NewNotificationService(repository.NewNotificationRepository(nil, nil), zap.NewNop())
+
+	err := svc.ProcessEvent(context.Background(), "payments.something_unknown", map[string]string{
+		"user_id": "42",
+	})
+	if err != nil {
+		t.Fatalf("unknown event type must be ignored, got: %v", err)
+	}
+}
+
+func TestProcessEvent_MissingUserIDIsRejected(t *testing.T) {
+	svc := NewNotificationService(repository.NewNotificationRepository(nil, nil), zap.NewNop())
+
+	// user_id missing => the processor rejects the payload before any I/O,
+	// so this case does not depend on the repository being wired up.
+	err := svc.ProcessEvent(context.Background(), "bets.settled", map[string]string{
+		"bet_id": "bet-1",
+	})
+	if err == nil {
+		t.Fatal("expected an error when user_id is absent")
+	}
+	if !strings.Contains(err.Error(), "user_id") {
+		t.Fatalf("expected a user_id validation error, got: %v", err)
 	}
 }
 

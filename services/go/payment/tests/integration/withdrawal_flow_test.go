@@ -58,6 +58,7 @@ func TestWithdrawalFlow_Complete(t *testing.T) {
 		userClient,
 		nil, // producer
 		nil, // tracer
+		"",  // ipnCallbackURL
 	)
 	_ = withdrawalService
 

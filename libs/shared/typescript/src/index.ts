@@ -13,13 +13,13 @@
 // export * from './proto/betting/v1/betting';
 
 // Export utility types
-export * from './types';
+export * from './types'
 
 // Export validators
-export * from './validators';
+export * from './validators'
 
 // Export constants
-export * from './constants';
+export * from './constants'
 
 // Export helpers
-export * from './helpers';
+export * from './helpers'

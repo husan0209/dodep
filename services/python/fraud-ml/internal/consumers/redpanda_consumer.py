@@ -4,6 +4,7 @@ Consumes events from Redpanda and runs fraud detection in real-time
 """
 
 import asyncio
+import concurrent.futures
 import json
 import logging
 from datetime import datetime
@@ -46,6 +47,10 @@ class RedpandaConsumer:
 
         self.consumer: Consumer | None = None
         self.running = False
+        # Event loop that owns the async handlers. _consume_loop runs in a
+        # worker thread (librdkafka's poll() is blocking), so it cannot await
+        # directly; it hands work back to this loop instead.
+        self._loop: asyncio.AbstractEventLoop | None = None
 
         # Event handlers
         self.event_handlers = {
@@ -68,6 +73,7 @@ class RedpandaConsumer:
     async def start(self):
         """Start consuming events"""
         loop = asyncio.get_event_loop()
+        self._loop = loop
 
         # Run consumer in background thread
         self.running = True
@@ -110,7 +116,7 @@ class RedpandaConsumer:
 
                 try:
                     event = json.loads(value.decode("utf-8"))
-                    await self._process_event(topic, event)
+                    self._dispatch(topic, event)
                 except json.JSONDecodeError as e:
                     logger.error(f"Failed to decode message: {e}")
                     self.stats["errors"] += 1
@@ -118,6 +124,32 @@ class RedpandaConsumer:
             except Exception as e:
                 logger.error(f"Consumer error: {e}")
                 self.stats["errors"] += 1
+
+    def _dispatch(self, topic: str, event: dict[str, Any]) -> None:
+        """Hand an event to the async handlers from the consumer thread.
+
+        _consume_loop is a plain sync function executed in an executor, so
+        awaiting here raised RuntimeError('await outside async function'), which
+        the surrounding except swallowed into stats['errors'] - every consumed
+        message was dropped. Marshalling the coroutine onto the owning loop
+        keeps the handlers reachable.
+        """
+        loop = self._loop
+        if loop is None or loop.is_closed():
+            self.stats["errors"] += 1
+            logger.error(f"No running event loop; dropping message on {topic}")
+            return
+
+        future = asyncio.run_coroutine_threadsafe(self._process_event(topic, event), loop)
+        future.add_done_callback(self._on_dispatch_done)
+
+    def _on_dispatch_done(self, future: "concurrent.futures.Future[None]") -> None:
+        """Surface handler failures instead of losing them to the future."""
+        try:
+            future.result()
+        except Exception as e:
+            self.stats["errors"] += 1
+            logger.error(f"Dispatch failed: {e}")
 
     async def _process_event(self, topic: str, event: dict[str, Any]):
         """Process a single event"""

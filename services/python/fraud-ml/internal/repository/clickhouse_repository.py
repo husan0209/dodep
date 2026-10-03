@@ -6,8 +6,8 @@ Provides data access for ML models
 import logging
 from typing import Any
 
-import clickhouse_connect
 import pandas as pd
+from clickhouse_connect.driver.client import Client
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +17,7 @@ class ClickHouseRepository:
     Repository for accessing fraud detection data from ClickHouse
     """
 
-    def __init__(self, client: clickhouse_connect.Client):
+    def __init__(self, client: Client):
         self.client = client
 
     def get_user_bets(self, user_id: int, hours: int = 24, limit: int = 1000) -> pd.DataFrame:
