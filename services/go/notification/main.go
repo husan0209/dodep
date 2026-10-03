@@ -31,7 +31,10 @@ func main() {
 
 	// Initialize logger
 	zapLogger, _ := zap.NewProduction()
-	defer zapLogger.Sync()
+	// Sync flushes buffered entries. It fails on stdout/stderr on some
+	// platforms ("sync /dev/stdout: invalid argument"), which is not a
+	// failure worth failing the process over.
+	defer func() { _ = zapLogger.Sync() }()
 
 	// Initialize database connection
 	dbPool, err := pgxpool.New(context.Background(), cfg.DatabaseURL)
@@ -56,7 +59,7 @@ func main() {
 
 	// Initialize gRPC server
 	grpcServer := grpc.NewServer()
-	pb.RegisterNotificationServiceServer(grpcServer, handlers.NewNotificationGRPCHandler(notificationService))
+	pb.RegisterNotificationServiceServer(grpcServer, handlers.NewNotificationGRPCHandler(notificationService, zapLogger))
 	reflection.Register(grpcServer)
 
 	// Start gRPC server

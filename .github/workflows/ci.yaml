@@ -8,14 +8,19 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  # 1.85 is the floor imposed by the committed lockfile:
+  # 1.88 is the floor imposed by the committed lockfile:
   #   1.75 -> lock file version `4` was found, but this version of Cargo does
   #           not understand this lock file   (lockfile v4 needs >= 1.78)
   #   1.78 -> feature `edition2024` is required, pulled in by cpufeatures
   #           0.3.0 via aes 0.9.0   (edition 2024 needs >= 1.85)
-  #   1.85 -> resolves the whole workspace
+  #   1.85 -> the workspace resolves, but two entries in the lockfile carry a
+  #           higher MSRV than that: icu_* 2.2.0 needs 1.86, and home 0.5.12
+  #           needs 1.88
+  #   1.88 -> resolves the workspace, and is also the floor for the Security
+  #           Scan jobs, where `cargo install cargo-audit` resolves to
+  #           cargo-audit 0.22.2 and that requires rustc >= 1.88
   # Do not lower this without re-checking services/rust/Cargo.lock.
-  RUST_VERSION: "1.85"
+  RUST_VERSION: "1.88"
   GO_VERSION: "1.21"
   PYTHON_VERSION: "3.11"
   NODE_VERSION: "20"
