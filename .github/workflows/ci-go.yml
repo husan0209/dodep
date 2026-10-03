@@ -86,6 +86,8 @@ jobs:
     timeout-minutes: 15
     needs: protos
     strategy:
+      # One broken service must not hide the verdict of the others.
+      fail-fast: false
       matrix:
         service: [auth, user, payment, bonus, casino, notification, kyc]
     
@@ -135,6 +137,8 @@ jobs:
     timeout-minutes: 30
     needs: protos
     strategy:
+      # One broken service must not hide the verdict of the others.
+      fail-fast: false
       matrix:
         service: [auth, user, payment, bonus, casino, notification, kyc]
     
@@ -213,6 +217,8 @@ jobs:
     timeout-minutes: 15
     needs: protos
     strategy:
+      # One broken service must not hide the verdict of the others.
+      fail-fast: false
       matrix:
         service: [auth, user, payment, bonus, casino, notification, kyc]
     

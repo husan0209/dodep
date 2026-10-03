@@ -35,7 +35,7 @@ func (h *NotificationGRPCHandler) SendNotification(ctx context.Context, req *pb.
 	}
 
 	serviceReq := &service.SendNotificationRequest{
-		UserID:      func() uint64 { var v uint64; fmt.Sscanf(req.UserId.Value, "%d", &v); return v }(),
+		UserID:      func() uint64 { var v uint64; _, _ = fmt.Sscanf(req.UserId.Value, "%d", &v); return v }(),
 		Channel:     req.Channel.String(),
 		Type:        req.Type.String(),
 		Subject:     req.Subject,
@@ -78,7 +78,7 @@ func (h *NotificationGRPCHandler) SendNotification(ctx context.Context, req *pb.
 func (h *NotificationGRPCHandler) SendBulkNotification(ctx context.Context, req *pb.SendBulkNotificationRequest) (*pb.SendBulkNotificationResponse, error) {
 	userIDs := make([]uint64, len(req.UserIds))
 	for i, id := range req.UserIds {
-		userIDs[i] = func() uint64 { var v uint64; fmt.Sscanf(id.Value, "%d", &v); return v }()
+		userIDs[i] = func() uint64 { var v uint64; _, _ = fmt.Sscanf(id.Value, "%d", &v); return v }()
 	}
 
 	var userSegment *string
@@ -135,7 +135,7 @@ func (h *NotificationGRPCHandler) GetUserNotifications(ctx context.Context, req 
 		pageSize = req.Pagination.PageSize
 	}
 	serviceReq := &service.GetUserNotificationsRequest{
-		UserID: func() uint64 { var v uint64; fmt.Sscanf(req.UserId.Value, "%d", &v); return v }(),
+		UserID: func() uint64 { var v uint64; _, _ = fmt.Sscanf(req.UserId.Value, "%d", &v); return v }(),
 		Limit:  pageSize,
 		Offset: 0,
 	}
@@ -183,7 +183,7 @@ func (h *NotificationGRPCHandler) MarkAsRead(ctx context.Context, req *pb.MarkAs
 		}, nil
 	}
 
-	err := h.service.MarkAsRead(ctx, req.NotificationId, func() uint64 { var v uint64; fmt.Sscanf(req.UserId.Value, "%d", &v); return v }())
+	err := h.service.MarkAsRead(ctx, req.NotificationId, func() uint64 { var v uint64; _, _ = fmt.Sscanf(req.UserId.Value, "%d", &v); return v }())
 	if err != nil {
 		h.log.Error("MarkAsRead failed", zap.Error(err))
 		return &pb.MarkAsReadResponse{
@@ -213,7 +213,7 @@ func (h *NotificationGRPCHandler) MarkAllAsRead(ctx context.Context, req *pb.Mar
 		typeFilter = &typeStr
 	}
 
-	count, err := h.service.MarkAllAsRead(ctx, func() uint64 { var v uint64; fmt.Sscanf(req.UserId.Value, "%d", &v); return v }(), typeFilter)
+	count, err := h.service.MarkAllAsRead(ctx, func() uint64 { var v uint64; _, _ = fmt.Sscanf(req.UserId.Value, "%d", &v); return v }(), typeFilter)
 	if err != nil {
 		h.log.Error("MarkAllAsRead failed", zap.Error(err))
 		return &pb.MarkAllAsReadResponse{
@@ -237,7 +237,7 @@ func (h *NotificationGRPCHandler) DeleteNotification(ctx context.Context, req *p
 		}, nil
 	}
 
-	err := h.service.DeleteNotification(ctx, req.NotificationId, func() uint64 { var v uint64; fmt.Sscanf(req.UserId.Value, "%d", &v); return v }())
+	err := h.service.DeleteNotification(ctx, req.NotificationId, func() uint64 { var v uint64; _, _ = fmt.Sscanf(req.UserId.Value, "%d", &v); return v }())
 	if err != nil {
 		h.log.Error("DeleteNotification failed", zap.Error(err))
 		return &pb.DeleteNotificationResponse{
@@ -259,7 +259,7 @@ func (h *NotificationGRPCHandler) GetNotificationSettings(ctx context.Context, r
 		return nil, status.Error(codes.InvalidArgument, "user_id is required")
 	}
 
-	settings, err := h.service.GetNotificationSettings(ctx, func() uint64 { var v uint64; fmt.Sscanf(req.UserId.Value, "%d", &v); return v }())
+	settings, err := h.service.GetNotificationSettings(ctx, func() uint64 { var v uint64; _, _ = fmt.Sscanf(req.UserId.Value, "%d", &v); return v }())
 	if err != nil {
 		h.log.Error("GetNotificationSettings failed", zap.Error(err))
 		return nil, status.Error(codes.Internal, "failed to get notification settings")
@@ -277,7 +277,7 @@ func (h *NotificationGRPCHandler) UpdateNotificationSettings(ctx context.Context
 	}
 
 	serviceReq := &service.UpdateNotificationSettingsRequest{
-		UserID:       func() uint64 { var v uint64; fmt.Sscanf(req.UserId.Value, "%d", &v); return v }(),
+		UserID:       func() uint64 { var v uint64; _, _ = fmt.Sscanf(req.UserId.Value, "%d", &v); return v }(),
 		EmailEnabled: req.EmailEnabled,
 		SMSEnabled:   req.SmsEnabled,
 		PushEnabled:  req.PushEnabled,

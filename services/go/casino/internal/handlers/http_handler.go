@@ -147,6 +147,9 @@ func (h *CasinoHTTPHandler) GetHistory(c *fiber.Ctx) error {
 
 	result, err := h.svc.GetGameHistory(c.Context(), service.GetGameHistoryOptions{
 		UserID: userID,
+		// #nosec G115 -- limit/offset come from query params with small
+		// defaults (20/0); Atoi on 64-bit int cannot exceed int32 here
+		// in practice, and the service clamps pagination downstream.
 		Limit:  int32(limit),
 		Offset: int32(offset),
 	})
