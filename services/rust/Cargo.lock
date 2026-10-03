@@ -387,6 +387,7 @@ dependencies = [
  "jwt-simple",
  "metrics",
  "prost 0.12.6",
+ "prost-types",
  "protoc-bin-vendored",
  "rand 0.8.6",
  "rdkafka",

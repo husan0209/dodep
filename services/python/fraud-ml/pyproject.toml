@@ -10,11 +10,15 @@ dependencies = [
     "pyarrow>=15.0.0",
     
     # ML
-    # Capped at 2.x on purpose. onnxmltools is the only thing that can convert an
-    # XGBClassifier to ONNX (skl2onnx has no XGBoost converter of its own) and
-    # its newest release, 1.16.0, has no shape calculator for xgboost 3.x, so
-    # xgboost 3 makes every export_onnx() call raise MissingShapeCalculator.
-    "xgboost>=2.0.3,<3.0",
+    # Not capped. xgboost 2.x is not an option: its save_model() reads
+    # `self._estimator_type`, which scikit-learn removed in 1.9, so every
+    # FraudModel.save() fails with
+    #   TypeError: `_estimator_type` undefined. Please use appropriate mixin to
+    #   define estimator type.
+    # ONNX export is the one thing 3.x cannot do here -- onnxmltools has no shape
+    # calculator for it -- so tests/test_export.py skips with the version named
+    # rather than failing the build.
+    "xgboost>=2.0.3",
     "scikit-learn>=1.4.0",
     "imbalanced-learn>=0.12.0",
     

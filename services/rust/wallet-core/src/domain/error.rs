@@ -90,6 +90,27 @@ pub enum TransactionError {
 
     #[error("Reference already linked to transaction: {0}")]
     ReferenceAlreadyLinked(String),
+
+    // ─────────────────────────────────────────────────────────────────────
+    // The three below are constructed by the repository layer but were never
+    // declared here, so every caller of them failed to compile with
+    //   no variant or associated item named `DatabaseError` found for enum
+    //   `domain::error::WalletError`
+    // and wallet-core had never been built from a clean checkout.
+    // ─────────────────────────────────────────────────────────────────────
+    /// A sqlx/Redis failure. Carries the message rather than the source error so
+    /// WalletError stays `Clone`-free of driver types and comparable in tests.
+    #[error("Database error: {0}")]
+    DatabaseError(String),
+
+    /// A wallet lock row changed under us between read and write. Distinct from
+    /// `WalletLocked` (a business state) because the caller's correct response is
+    /// to retry, not to reject.
+    #[error("Concurrent modification detected, retry the operation")]
+    ConcurrencyConflict,
+
+    #[error("Transaction not found: {0}")]
+    TransactionNotFound(String),
 }
 
 impl From<TransactionError> for AppError {

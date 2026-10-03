@@ -45,18 +45,22 @@ jobs:
           cache-dependency-path: services/go/affiliate/go.sum
 
       - name: Install golangci-lint
-        uses: golangci/golangci-lint-action@v4
-        with:
-          # Pinned rather than `latest`. `latest` silently follows the newest
-          # release, so a lint break would arrive with no commit that touched
-          # this service. v1.64.8 is the version `latest` resolved to when this
-          # workflow was first run, so pinning it changes nothing today and only
-          # removes the surprise.
-          version: v1.64.8
-          working-directory: services/go/affiliate
-          # The action runs `golangci-lint run` itself. The default 1m budget is
-          # not enough for a cold module cache on this dependency set.
-          args: run --timeout=10m ./...
+        run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0
+
+      # Pinned, and v2 specifically. The v1 line is built with go1.24 and refuses
+      # to analyse a module whose go directive is newer:
+      #   the Go language version (go1.24) used to build golangci-lint is lower
+      #   than the targeted Go version (1.26.8)
+      # so with GO_VERSION at 1.26.8 only a v2 build can lint this service.
+      #
+      # Installed with `go install` rather than golangci-lint-action so the
+      # version under test is the one named here and nothing else: the action
+      # re-resolves `version` and silently switches behaviour between majors.
+      - name: Lint Affiliate Service
+        working-directory: services/go/affiliate
+        # The 1m default is not enough for a cold module cache on this
+        # dependency set.
+        run: golangci-lint run --timeout=10m ./...
 
       - name: Check gofmt
         run: |

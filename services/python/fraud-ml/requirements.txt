@@ -4,8 +4,11 @@ pydantic==2.5.3
 pydantic-settings==2.1.0
 
 # ML Libraries
-scikit-learn==1.4.0
-xgboost==2.0.3
+scikit-learn==1.9.1
+# Not pinned to 2.x. xgboost 2.x calls self._get_type() from save_model(), which
+# reads `_estimator_type` -- removed in scikit-learn 1.9 -- so model saving
+# raises TypeError against this scikit-learn.
+xgboost>=3.0,<4.0
 lightgbm==4.3.0
 catboost==1.2.3
 imbalanced-learn==0.12.0
@@ -34,8 +37,12 @@ structlog==24.1.0
 python-json-logger==2.0.7
 
 # Testing
-pytest==8.0.0
-pytest-asyncio==0.23.4
+# pytest 8.3.x with pytest-asyncio 0.24.x. The previous pair, pytest==8.0.0 with
+# pytest-asyncio==0.23.4, cannot be resolved at all:
+#   pytest-asyncio 0.23.4 depends on pytest<8 and >=7.0.0
+# so `pip install -r requirements.txt` failed with ResolutionImpossible.
+pytest==8.3.4
+pytest-asyncio==0.24.0
 pytest-cov==4.1.0
 httpx==0.26.0
 
