@@ -45,7 +45,12 @@ WORKDIR /src
 
 # Resolve dependencies before the source is copied, so a source-only change
 # keeps the module cache layer warm.
-COPY ${SERVICE_PATH}/go.mod ${SERVICE_PATH}/go.sum ./
+#
+# The glob is deliberate: a module with no dependencies has no go.sum at all
+# (kyc is one), and naming the file explicitly aborts the build with
+#   failed to calculate checksum ... "/services/go/kyc/go.sum": not found
+# go.mod always matches, so the COPY still succeeds without it.
+COPY ${SERVICE_PATH}/go.* ./
 COPY libs/proto/go.mod libs/proto/go.sum libs/proto/
 
 # libs/proto/gen is gitignored, so a fresh checkout has no Go stubs and no
@@ -73,6 +78,7 @@ COPY ${SERVICE_PATH}/ ${SERVICE_PATH}/
 # the module root.
 RUN cd ${SERVICE_PATH} \
     && MAIN_PKG="${CMD_PATH}" \
+    && go mod download \
     && if [ -z "${MAIN_PKG}" ]; then \
            MAIN_PKG="$(go list -f '{{if eq .Name "main"}}{{.Dir}}{{end}}' ./... \
                | grep . \
