@@ -15,26 +15,31 @@ managed:
 
 plugins:
   # Go - protocol buffers
+  #
+  # out is relative to this file, i.e. libs/proto/gen/go. That is the exact
+  # path the Go services resolve through
+  # `replace github.com/opus-casino/proto => ../../../libs/proto`; writing to
+  # ../../gen/go produced a tree no service could import.
   - remote: buf.build/protocolbuffers/go
-    out: ../../gen/go
+    out: gen/go
     opt:
       - paths=source_relative
 
   # Go - gRPC
   - remote: buf.build/grpc/go
-    out: ../../gen/go
+    out: gen/go
     opt:
       - paths=source_relative
   
   # Rust - prost (requires: cargo install protoc-gen-prost protoc-gen-tonic)
   # Uncomment after installing the plugins:
   # - local: protoc-gen-prost
-  #   out: ../../gen/rust
+  #   out: gen/rust
   #   opt:
   #     - extern_path=.google.protobuf::prost_wkt_types
   #   strategy: all
   # - local: protoc-gen-tonic
-  #   out: ../../gen/rust
+  #   out: gen/rust
   #   opt:
   #     - no_client
   #   strategy: all

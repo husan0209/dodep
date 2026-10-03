@@ -5,12 +5,10 @@ import (
 	"testing"
 
 	"go.uber.org/zap"
-
-	"github.com/opus-casino/notification/internal/repository"
 )
 
 func TestProcessEvent_SupportedEventAliases(t *testing.T) {
-	repo := repository.NewNotificationRepository(nil, nil)
+	repo := &stubRepository{}
 	svc := NewNotificationService(repo, zap.NewNop())
 
 	testCases := []struct {
