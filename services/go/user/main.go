@@ -27,7 +27,7 @@ import (
 func main() {
 	cfg := config.Load()
 	log, _ := zap.NewProduction()
-	defer log.Sync()
+	defer func() { _ = log.Sync() }()
 
 	dbPool, err := pgxpool.New(context.Background(), cfg.DatabaseURL)
 	if err != nil {
@@ -38,7 +38,7 @@ func main() {
 	rdb := redis.NewClient(&redis.Options{
 		Addr: cfg.RedisAddr, Password: cfg.RedisPassword, DB: cfg.RedisDB,
 	})
-	defer rdb.Close()
+	defer func() { _ = rdb.Close() }()
 
 	userRepo := repository.NewUserRepository(dbPool)
 	userService := service.NewUserService(userRepo, log)
@@ -77,6 +77,6 @@ func main() {
 	<-quit
 	log.Info("Shutting down User Service...")
 	grpcServer.GracefulStop()
-	app.Shutdown()
+	_ = app.Shutdown()
 	log.Info("User Service stopped")
 }
