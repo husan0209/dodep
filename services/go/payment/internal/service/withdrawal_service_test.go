@@ -9,6 +9,7 @@ import (
 	"github.com/opus-casino/payment/internal/client"
 	"github.com/opus-casino/payment/internal/domain"
 	"github.com/opus-casino/payment/internal/repository"
+	"go.opentelemetry.io/otel/trace/noop"
 	"github.com/shopspring/decimal"
 )
 
@@ -96,7 +97,10 @@ func newTestWithdrawalService(
 		nil, // wallet
 		nil, // user
 		nil, // producer
-		nil, // tracer
+		// A no-op tracer rather than nil: the parameter is a trace.Tracer and
+		// every span call in these tests would be a nil dereference.
+		noop.NewTracerProvider().Tracer("payment-withdrawal-test"),
+		"", // ipnCallbackURL: unused by the unit tests
 	)
 }
 

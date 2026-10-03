@@ -8,6 +8,7 @@ import (
 	"github.com/opus-casino/payment/internal/domain"
 	"github.com/opus-casino/payment/internal/repository"
 	"github.com/opus-casino/payment/internal/service"
+	"go.opentelemetry.io/otel/trace/noop"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -57,7 +58,8 @@ func TestWithdrawalFlow_Complete(t *testing.T) {
 		walletClient,
 		userClient,
 		nil, // producer
-		nil, // tracer
+		noop.NewTracerProvider().Tracer("payment-integration-test"),
+		"", // ipnCallbackURL
 	)
 	_ = withdrawalService
 
