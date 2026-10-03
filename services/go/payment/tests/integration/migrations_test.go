@@ -60,8 +60,11 @@ func TestMigrations_UpAndDown(t *testing.T) {
 	defer sqlDB.Close()
 
 	t.Run("run all up migrations", func(t *testing.T) {
-		// Phase 0.9: centralized migrations in libs/migrations/postgresql
-		migrationUp, err := os.ReadFile("../../../libs/migrations/postgresql/014_payments_core.sql")
+		// Phase 0.9: centralized migrations in libs/migrations/postgresql.
+		// `go test` runs with the working directory set to the package
+		// directory (services/go/payment/tests/integration), which is five
+		// levels below the repository root.
+		migrationUp, err := os.ReadFile("../../../../../libs/migrations/postgresql/014_payments_core.sql")
 		require.NoError(t, err, "Failed to read centralized migration up")
 
 		err = db.Exec(string(migrationUp)).Error
@@ -290,7 +293,7 @@ func TestMigrations_UpAndDown(t *testing.T) {
 
 	t.Run("run all down migrations (rollback)", func(t *testing.T) {
 		// Phase 0.9: single centralized down migration
-		migrationDown, err := os.ReadFile("../../../libs/migrations/postgresql/014_payments_core.down.sql")
+		migrationDown, err := os.ReadFile("../../../../../libs/migrations/postgresql/014_payments_core.down.sql")
 		require.NoError(t, err, "Failed to read centralized migration down")
 
 		err = db.Exec(string(migrationDown)).Error
@@ -399,11 +402,11 @@ func TestMigrations_IdempotentDown(t *testing.T) {
 	defer sqlDB.Close()
 
 	// Phase 0.9: centralized migration
-	migrationUp, err := os.ReadFile("../../../libs/migrations/postgresql/014_payments_core.sql")
+	migrationUp, err := os.ReadFile("../../../../../libs/migrations/postgresql/014_payments_core.sql")
 	require.NoError(t, err)
 	require.NoError(t, db.Exec(string(migrationUp)).Error)
 
-	migrationDown, err := os.ReadFile("../../../libs/migrations/postgresql/014_payments_core.down.sql")
+	migrationDown, err := os.ReadFile("../../../../../libs/migrations/postgresql/014_payments_core.down.sql")
 	require.NoError(t, err)
 
 	err = db.Exec(string(migrationDown)).Error
@@ -452,11 +455,11 @@ func TestMigrations_CanReApply(t *testing.T) {
 	defer sqlDB.Close()
 
 	// Phase 0.9: centralized single-file migration cycle
-	migrationUp, err := os.ReadFile("../../../libs/migrations/postgresql/014_payments_core.sql")
+	migrationUp, err := os.ReadFile("../../../../../libs/migrations/postgresql/014_payments_core.sql")
 	require.NoError(t, err)
 	require.NoError(t, db.Exec(string(migrationUp)).Error, "First up migration should succeed")
 
-	migrationDown, err := os.ReadFile("../../../libs/migrations/postgresql/014_payments_core.down.sql")
+	migrationDown, err := os.ReadFile("../../../../../libs/migrations/postgresql/014_payments_core.down.sql")
 	require.NoError(t, err)
 	require.NoError(t, db.Exec(string(migrationDown)).Error, "First down migration should succeed")
 
