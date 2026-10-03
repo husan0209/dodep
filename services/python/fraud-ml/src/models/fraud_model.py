@@ -123,7 +123,8 @@ class FraudModel:
         """Predict fraud probability."""
         if self.model is None:
             raise ValueError("Model not trained")
-        return self.model.predict_proba(X)[:, 1]
+        probabilities = np.asarray(self.model.predict_proba(X))
+        return probabilities[:, 1]
 
     def predict_with_threshold(
         self,
@@ -151,12 +152,6 @@ class FraudModel:
 
     def export_onnx(self, path: Path) -> Path:
         """Export to ONNX for serving in Rust."""
-        from skl2onnx.common.data_types import FloatTensorType
-
-        initial_type = [
-            ("features", FloatTensorType([None, len(self.FEATURE_COLUMNS)]))
-        ]
-
         # XGBClassifier has no converter in skl2onnx's generic sklearn registry,
         # so convert_sklearn() raises MissingShapeCalculator for it. The XGBoost
         # converter now lives in the separate onnxmltools package (the old
@@ -164,12 +159,22 @@ class FraudModel:
         # converter and shape calculator. Fall back to the sklearn path for any
         # other estimator type.
         if isinstance(self.model, xgb.XGBClassifier):
+            # The tensor types must come from onnxmltools, not skl2onnx: the
+            # registered shape calculator rejects foreign types outright.
             from onnxmltools.convert import convert_xgboost
+            from onnxmltools.convert.common.data_types import FloatTensorType
 
+            initial_type = [
+                ("features", FloatTensorType([None, len(self.FEATURE_COLUMNS)]))
+            ]
             onnx_model = convert_xgboost(self.model, initial_types=initial_type)
         else:
             from skl2onnx import convert_sklearn
+            from skl2onnx.common.data_types import FloatTensorType
 
+            initial_type = [
+                ("features", FloatTensorType([None, len(self.FEATURE_COLUMNS)]))
+            ]
             onnx_model = convert_sklearn(self.model, initial_types=initial_type)
 
         onnx_path = path / "fraud_model.onnx"

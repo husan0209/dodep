@@ -6,6 +6,8 @@ ClickHouse data access with Polars integration.
 # legitimately exceed the 100-character limit ruff enforces for Python source.
 # ruff: noqa: E501
 
+from typing import cast
+
 import clickhouse_connect
 import polars as pl
 import structlog
@@ -45,14 +47,19 @@ class ClickHouseClient:
     def query_to_polars(self, query: str, params: dict | None = None) -> pl.DataFrame:
         """Execute query and return Polars DataFrame."""
         try:
-            result = self.client.query(query, parameters=params)
-            df = pl.from_arrow(result.to_arrow())
+            # query_arrow returns an Arrow table directly (query() returns a
+            # QueryResult that only exposes .to_arrow() at runtime, which
+            # mypy cannot see). pl.from_arrow is typed as DataFrame | Series,
+            # so narrow it here once instead of at every use site.
+            frame = cast(pl.DataFrame, pl.from_arrow(
+                self.client.query_arrow(query, parameters=params)
+            ))
             logger.debug(
                 "clickhouse.query_executed",
-                rows=len(df) if df is not None else 0,
-                columns=len(df.columns) if df is not None else 0,
+                rows=len(frame),
+                columns=len(frame.columns),
             )
-            return df
+            return frame
         except Exception as e:
             logger.error("clickhouse.query_failed", error=str(e), query=query)
             raise

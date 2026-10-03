@@ -20,7 +20,10 @@ type NotificationRepository struct {
 }
 
 var errRedisUnavailable = errors.New("redis client is not initialized")
-var errDatabaseUnavailable = errors.New("database client is not initialized")
+// ErrDatabaseUnavailable is returned by every repository method when the pool
+// or client is not configured. Exported so callers (and tests) can detect the
+// condition with errors.Is instead of matching on the message.
+var ErrDatabaseUnavailable = errors.New("database client is not initialized")
 
 // NewNotificationRepository creates a new notification repository
 func NewNotificationRepository(db *pgxpool.Pool, rdb *redis.Client) *NotificationRepository {
@@ -72,7 +75,7 @@ type ChannelPreferences struct {
 // CreateNotification creates a new notification
 func (r *NotificationRepository) CreateNotification(ctx context.Context, notif *Notification) error {
 	if r.db == nil {
-		return errDatabaseUnavailable
+		return ErrDatabaseUnavailable
 	}
 	return nil
 }
@@ -80,7 +83,7 @@ func (r *NotificationRepository) CreateNotification(ctx context.Context, notif *
 // GetNotification returns a notification by ID
 func (r *NotificationRepository) GetNotification(ctx context.Context, id string) (*Notification, error) {
 	if r.db == nil {
-		return nil, errDatabaseUnavailable
+		return nil, ErrDatabaseUnavailable
 	}
 	return nil, nil
 }
@@ -88,7 +91,7 @@ func (r *NotificationRepository) GetNotification(ctx context.Context, id string)
 // GetUserNotifications returns user's notifications with pagination
 func (r *NotificationRepository) GetUserNotifications(ctx context.Context, userID uint64, typeFilter *string, isRead *bool, dateFrom, dateTo *time.Time, limit, offset int32) ([]Notification, int64, error) {
 	if r.db == nil {
-		return nil, 0, errDatabaseUnavailable
+		return nil, 0, ErrDatabaseUnavailable
 	}
 	return []Notification{}, 0, nil
 }
@@ -96,7 +99,7 @@ func (r *NotificationRepository) GetUserNotifications(ctx context.Context, userI
 // GetUnreadCount returns count of unread notifications for a user
 func (r *NotificationRepository) GetUnreadCount(ctx context.Context, userID uint64) (int32, error) {
 	if r.db == nil {
-		return 0, errDatabaseUnavailable
+		return 0, ErrDatabaseUnavailable
 	}
 	return 0, nil
 }
@@ -104,7 +107,7 @@ func (r *NotificationRepository) GetUnreadCount(ctx context.Context, userID uint
 // MarkAsRead marks a notification as read
 func (r *NotificationRepository) MarkAsRead(ctx context.Context, id string, userID uint64) error {
 	if r.db == nil {
-		return errDatabaseUnavailable
+		return ErrDatabaseUnavailable
 	}
 	return nil
 }
@@ -112,7 +115,7 @@ func (r *NotificationRepository) MarkAsRead(ctx context.Context, id string, user
 // MarkAllAsRead marks all user notifications as read
 func (r *NotificationRepository) MarkAllAsRead(ctx context.Context, userID uint64, typeFilter *string) (int32, error) {
 	if r.db == nil {
-		return 0, errDatabaseUnavailable
+		return 0, ErrDatabaseUnavailable
 	}
 	return 0, nil
 }
@@ -120,7 +123,7 @@ func (r *NotificationRepository) MarkAllAsRead(ctx context.Context, userID uint6
 // DeleteNotification deletes a notification
 func (r *NotificationRepository) DeleteNotification(ctx context.Context, id string, userID uint64) error {
 	if r.db == nil {
-		return errDatabaseUnavailable
+		return ErrDatabaseUnavailable
 	}
 	return nil
 }
@@ -128,7 +131,7 @@ func (r *NotificationRepository) DeleteNotification(ctx context.Context, id stri
 // UpdateNotificationStatus updates notification status
 func (r *NotificationRepository) UpdateNotificationStatus(ctx context.Context, id string, status string, errorMessage string) error {
 	if r.db == nil {
-		return errDatabaseUnavailable
+		return ErrDatabaseUnavailable
 	}
 	return nil
 }
@@ -150,7 +153,7 @@ func (r *NotificationRepository) GetNotificationSettings(ctx context.Context, us
 // UpdateNotificationSettings updates user's notification settings
 func (r *NotificationRepository) UpdateNotificationSettings(ctx context.Context, settings *NotificationSettings) error {
 	if r.db == nil {
-		return errDatabaseUnavailable
+		return ErrDatabaseUnavailable
 	}
 	return nil
 }
@@ -158,7 +161,7 @@ func (r *NotificationRepository) UpdateNotificationSettings(ctx context.Context,
 // GetPendingNotifications returns pending notifications to be sent
 func (r *NotificationRepository) GetPendingNotifications(ctx context.Context, limit int32) ([]Notification, error) {
 	if r.db == nil {
-		return nil, errDatabaseUnavailable
+		return nil, ErrDatabaseUnavailable
 	}
 	return []Notification{}, nil
 }

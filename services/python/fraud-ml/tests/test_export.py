@@ -74,5 +74,8 @@ class TestOnnxExport:
         test_input = np.random.randn(5, 20).astype(np.float32)
         output = session.run(None, {input_name: test_input})
 
-        assert len(output) == 1
-        assert output[0].shape == (5, 2)  # 5 samples, 2 classes
+        # A classifier graph exposes two outputs: the predicted label and the
+        # per-class probabilities.
+        assert len(output) == 2
+        assert output[0].shape == (5,)  # predicted labels
+        assert output[1].shape == (5, 2)  # 5 samples, 2 classes

@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"go.uber.org/zap"
@@ -63,13 +64,32 @@ func TestProcessEvent_SupportedEventAliases(t *testing.T) {
 		},
 	}
 
+	// The repository is built with a nil DB pool, so a correctly routed event
+	// surfaces repository.ErrDatabaseUnavailable. What this test actually
+	// verifies is the routing table: a recognised alias must reach its handler
+	// (and therefore try to use the DB), while an unknown type returns nil
+	// without touching it.
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			err := svc.ProcessEvent(context.Background(), tc.eventType, tc.data)
-			if err != nil {
-				t.Fatalf("expected no error, got: %v", err)
+			if !errors.Is(err, repository.ErrDatabaseUnavailable) {
+				t.Fatalf(
+					"event %q was not routed to a handler: got %v, want %v",
+					tc.eventType, err, repository.ErrDatabaseUnavailable,
+				)
 			}
 		})
+	}
+}
+
+func TestProcessEvent_UnknownTypeIsIgnored(t *testing.T) {
+	repo := repository.NewNotificationRepository(nil, nil)
+	svc := NewNotificationService(repo, zap.NewNop())
+
+	// An unrecognised event type is logged and dropped, so it must not reach a
+	// handler (and therefore must not report a DB error).
+	if err := svc.ProcessEvent(context.Background(), "totally.unknown", map[string]string{}); err != nil {
+		t.Fatalf("expected unknown event type to be ignored, got: %v", err)
 	}
 }
 
