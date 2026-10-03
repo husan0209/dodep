@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"go.uber.org/zap"
@@ -65,11 +66,43 @@ func TestProcessEvent_SupportedEventAliases(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// This test covers event-alias routing, not persistence.
+			//
+			// The repository is built with a nil pool, so once an alias is
+			// correctly dispatched the handler reaches
+			// NotificationRepository.CreateNotification, which returns
+			// errDatabaseUnavailable. That error is the proof of correct
+			// routing: ProcessEvent's default branch (unknown event type)
+			// returns nil *without* touching the repository.
+			//
+			// Asserting "no error" here — as this test used to — could never
+			// hold without a live database, so it failed on every run.
 			err := svc.ProcessEvent(context.Background(), tc.eventType, tc.data)
-			if err != nil {
-				t.Fatalf("expected no error, got: %v", err)
+
+			if err == nil {
+				t.Fatalf("alias %q was not routed: ProcessEvent returned nil, "+
+					"which is what the unknown-event default branch does", tc.eventType)
+			}
+			if !strings.Contains(err.Error(), "database client is not initialized") {
+				t.Fatalf("alias %q: expected the repository to be reached "+
+					"(database client is not initialized), got: %v", tc.eventType, err)
 			}
 		})
+	}
+}
+
+// TestProcessEvent_UnknownEventTypeIsIgnored pins the other half of the routing
+// contract: an event type the service does not know must be ignored silently,
+// and in particular must not reach the repository.
+func TestProcessEvent_UnknownEventTypeIsIgnored(t *testing.T) {
+	repo := repository.NewNotificationRepository(nil, nil)
+	svc := NewNotificationService(repo, zap.NewNop())
+
+	err := svc.ProcessEvent(context.Background(), "something.unmapped", map[string]string{
+		"user_id": "42",
+	})
+	if err != nil {
+		t.Fatalf("expected unknown event type to be ignored, got: %v", err)
 	}
 }
 

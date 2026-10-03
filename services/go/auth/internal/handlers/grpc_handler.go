@@ -286,11 +286,17 @@ func (h *AuthGRPCHandler) ChangePassword(ctx context.Context, req *pb.ChangePass
 	return &pb.ChangePasswordResponse{Success: true}, nil
 }
 
-// RequestPasswordReset initiates password reset flow
-func (h *AuthGRPCHandler) RequestPasswordReset(ctx context.Context, req *pb.RequestPasswordResetRequest) (*pb.RequestPasswordResetResponse, error) {
+// InitiatePasswordReset starts the password reset flow.
+//
+// The proto contract (libs/proto/auth/v1/auth.proto) names this RPC and its
+// messages InitiatePasswordResetRequest/InitiatePasswordResetResponse — there
+// is no RequestPasswordReset* anywhere in the schema, so this handler referenced
+// types that no generated stub can provide and `go build ./...` failed with
+// "undefined: pb.RequestPasswordResetRequest".
+func (h *AuthGRPCHandler) InitiatePasswordReset(ctx context.Context, req *pb.InitiatePasswordResetRequest) (*pb.InitiatePasswordResetResponse, error) {
 	h.service.ResetPasswordRequest(ctx, req.Email, req.IpAddress)
 	// Always return success to prevent email enumeration
-	return &pb.RequestPasswordResetResponse{Success: true}, nil
+	return &pb.InitiatePasswordResetResponse{Success: true}, nil
 }
 
 // ResetPassword completes password reset
