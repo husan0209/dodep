@@ -80,27 +80,6 @@ func (m *MockWithdrawalRepository) CountByUserIDStatus(ctx context.Context, user
 	return 0, nil
 }
 
-// Helper function to create a test withdrawal service
-func newTestWithdrawalService(
-	withdrawalRepo repository.WithdrawalRepository,
-	idempotencyRepo repository.IdempotencyRepository,
-	exchangeRateRepo repository.ExchangeRateRepository,
-	dailyLimitsRepo repository.DailyLimitsRepository,
-) *WithdrawalService {
-	return NewWithdrawalService(
-		withdrawalRepo,
-		idempotencyRepo,
-		exchangeRateRepo,
-		dailyLimitsRepo,
-		nil, // nowpayments
-		nil, // wallet
-		nil, // user
-		nil, // producer
-		nil, // tracer
-		"",  // ipnCallbackURL
-	)
-}
-
 func TestWithdrawalService_InitiateWithdrawal_Success(t *testing.T) {
 	ctx := context.Background()
 	

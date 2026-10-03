@@ -28,14 +28,33 @@ func NewNotificationGRPCHandler(service *service.NotificationService) *Notificat
 	}
 }
 
+// parseUserID converts the string-carried user id used by the gRPC messages
+// into its numeric form.
+//
+// It used to be an inline `func() uint64 { var v uint64; fmt.Sscanf(...); return v }()`
+// that discarded the parse error, so any malformed id silently became user 0
+// and the notification was addressed to the wrong account.
+func parseUserID(raw string) (uint64, error) {
+	var id uint64
+	if _, err := fmt.Sscanf(raw, "%d", &id); err != nil {
+		return 0, status.Errorf(codes.InvalidArgument, "invalid user_id %q", raw)
+	}
+	return id, nil
+}
+
 // SendNotification sends a notification to user
 func (h *NotificationGRPCHandler) SendNotification(ctx context.Context, req *pb.SendNotificationRequest) (*pb.SendNotificationResponse, error) {
 	if req.UserId == nil || req.UserId.Value == "" {
 		return nil, status.Error(codes.InvalidArgument, "user_id is required")
 	}
 
+	userID, err := parseUserID(req.UserId.Value)
+	if err != nil {
+		return nil, err
+	}
+
 	serviceReq := &service.SendNotificationRequest{
-		UserID:      func() uint64 { var v uint64; fmt.Sscanf(req.UserId.Value, "%d", &v); return v }(),
+		UserID:      userID,
 		Channel:     req.Channel.String(),
 		Type:        req.Type.String(),
 		Subject:     req.Subject,
@@ -78,7 +97,11 @@ func (h *NotificationGRPCHandler) SendNotification(ctx context.Context, req *pb.
 func (h *NotificationGRPCHandler) SendBulkNotification(ctx context.Context, req *pb.SendBulkNotificationRequest) (*pb.SendBulkNotificationResponse, error) {
 	userIDs := make([]uint64, len(req.UserIds))
 	for i, id := range req.UserIds {
-		userIDs[i] = func() uint64 { var v uint64; fmt.Sscanf(id.Value, "%d", &v); return v }()
+		parsed, err := parseUserID(id.Value)
+		if err != nil {
+			return nil, err
+		}
+		userIDs[i] = parsed
 	}
 
 	var userSegment *string
@@ -134,8 +157,12 @@ func (h *NotificationGRPCHandler) GetUserNotifications(ctx context.Context, req 
 	if req.Pagination != nil && req.Pagination.PageSize > 0 {
 		pageSize = req.Pagination.PageSize
 	}
+	userID, err := parseUserID(req.UserId.Value)
+	if err != nil {
+		return nil, err
+	}
 	serviceReq := &service.GetUserNotificationsRequest{
-		UserID: func() uint64 { var v uint64; fmt.Sscanf(req.UserId.Value, "%d", &v); return v }(),
+		UserID: userID,
 		Limit:  pageSize,
 		Offset: 0,
 	}
@@ -183,7 +210,12 @@ func (h *NotificationGRPCHandler) MarkAsRead(ctx context.Context, req *pb.MarkAs
 		}, nil
 	}
 
-	err := h.service.MarkAsRead(ctx, req.NotificationId, func() uint64 { var v uint64; fmt.Sscanf(req.UserId.Value, "%d", &v); return v }())
+	userID, err := parseUserID(req.UserId.Value)
+	if err != nil {
+		return nil, err
+	}
+
+	err = h.service.MarkAsRead(ctx, req.NotificationId, userID)
 	if err != nil {
 		h.log.Error("MarkAsRead failed", zap.Error(err))
 		return &pb.MarkAsReadResponse{
@@ -213,7 +245,12 @@ func (h *NotificationGRPCHandler) MarkAllAsRead(ctx context.Context, req *pb.Mar
 		typeFilter = &typeStr
 	}
 
-	count, err := h.service.MarkAllAsRead(ctx, func() uint64 { var v uint64; fmt.Sscanf(req.UserId.Value, "%d", &v); return v }(), typeFilter)
+	userID, err := parseUserID(req.UserId.Value)
+	if err != nil {
+		return nil, err
+	}
+
+	count, err := h.service.MarkAllAsRead(ctx, userID, typeFilter)
 	if err != nil {
 		h.log.Error("MarkAllAsRead failed", zap.Error(err))
 		return &pb.MarkAllAsReadResponse{
@@ -237,7 +274,12 @@ func (h *NotificationGRPCHandler) DeleteNotification(ctx context.Context, req *p
 		}, nil
 	}
 
-	err := h.service.DeleteNotification(ctx, req.NotificationId, func() uint64 { var v uint64; fmt.Sscanf(req.UserId.Value, "%d", &v); return v }())
+	userID, err := parseUserID(req.UserId.Value)
+	if err != nil {
+		return nil, err
+	}
+
+	err = h.service.DeleteNotification(ctx, req.NotificationId, userID)
 	if err != nil {
 		h.log.Error("DeleteNotification failed", zap.Error(err))
 		return &pb.DeleteNotificationResponse{
@@ -259,7 +301,12 @@ func (h *NotificationGRPCHandler) GetNotificationSettings(ctx context.Context, r
 		return nil, status.Error(codes.InvalidArgument, "user_id is required")
 	}
 
-	settings, err := h.service.GetNotificationSettings(ctx, func() uint64 { var v uint64; fmt.Sscanf(req.UserId.Value, "%d", &v); return v }())
+	userID, err := parseUserID(req.UserId.Value)
+	if err != nil {
+		return nil, err
+	}
+
+	settings, err := h.service.GetNotificationSettings(ctx, userID)
 	if err != nil {
 		h.log.Error("GetNotificationSettings failed", zap.Error(err))
 		return nil, status.Error(codes.Internal, "failed to get notification settings")
@@ -276,8 +323,13 @@ func (h *NotificationGRPCHandler) UpdateNotificationSettings(ctx context.Context
 		return nil, status.Error(codes.InvalidArgument, "user_id is required")
 	}
 
+	userID, err := parseUserID(req.UserId.Value)
+	if err != nil {
+		return nil, err
+	}
+
 	serviceReq := &service.UpdateNotificationSettingsRequest{
-		UserID:       func() uint64 { var v uint64; fmt.Sscanf(req.UserId.Value, "%d", &v); return v }(),
+		UserID:       userID,
 		EmailEnabled: req.EmailEnabled,
 		SMSEnabled:   req.SmsEnabled,
 		PushEnabled:  req.PushEnabled,

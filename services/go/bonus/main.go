@@ -34,7 +34,7 @@ func main() {
 	} else {
 		log, _ = zap.NewProduction()
 	}
-	defer log.Sync()
+	defer func() { _ = log.Sync() }()
 
 	// ── Database ──────────────────────────────────────────────────────────
 	db, err := gorm.Open(postgres.Open(getEnv("DATABASE_URL",
@@ -120,7 +120,9 @@ func main() {
 			return c.Status(401).JSON(fiber.Map{"error": "unauthorized"})
 		}
 		var userID int64
-		fmt.Sscanf(userIDStr, "%d", &userID)
+		if _, err := fmt.Sscanf(userIDStr, "%d", &userID); err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": "invalid user id"})
+		}
 
 		limit, _ := strconv.Atoi(c.Query("limit", "20"))
 		offset, _ := strconv.Atoi(c.Query("offset", "0"))
@@ -137,7 +139,9 @@ func main() {
 			return c.Status(401).JSON(fiber.Map{"error": "unauthorized"})
 		}
 		var userID int64
-		fmt.Sscanf(userIDStr, "%d", &userID)
+		if _, err := fmt.Sscanf(userIDStr, "%d", &userID); err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": "invalid user id"})
+		}
 
 		bonus, err := bonusSvc.GetActiveBonus(c.Context(), userID)
 		if err != nil {

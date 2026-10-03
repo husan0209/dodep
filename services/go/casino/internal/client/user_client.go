@@ -36,7 +36,10 @@ type userGRPCClient struct {
 
 // NewUserClient creates a gRPC user client.
 func NewUserClient(cfg UserClientConfig, log *zap.Logger) (UserServiceClient, error) {
-	conn, err := grpc.Dial(
+	// grpc.NewClient replaces the deprecated grpc.Dial: it does not block on
+	// connect, so the first RPC (which carries its own timeout) reports an
+	// unreachable service instead of the constructor hanging.
+	conn, err := grpc.NewClient(
 		cfg.Address,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithKeepaliveParams(keepalive.ClientParameters{
@@ -45,7 +48,7 @@ func NewUserClient(cfg UserClientConfig, log *zap.Logger) (UserServiceClient, er
 		}),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("casino: dial user service at %s: %w", cfg.Address, err)
+		return nil, fmt.Errorf("casino: create user service client at %s: %w", cfg.Address, err)
 	}
 
 	log.Info("Casino: user service client created", zap.String("addr", cfg.Address))
