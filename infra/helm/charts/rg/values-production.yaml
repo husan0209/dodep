@@ -6,174 +6,178 @@
 #   spikes must never cascade into player-facing failures.
 # - PDB minAvailable 2 with anti-affinity: never drop below quorum.
 # - /admin/rg/* stays off the public ingress (see ingress paths below).
+#
+# Nested under `service-chart:` for the same reason as values.yaml: the
+# templates live in the dependency, so only these keys reach them.
+service-chart:
+  replicaCount: 4
 
-replicaCount: 4
+  image:
+    tag: "v1.0.0"
+    pullPolicy: Always
 
-image:
-  tag: "v1.0.0"
-  pullPolicy: Always
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: "arn:aws:iam::ACCOUNT_ID:role/opus-casino-production-rg-role"
 
-serviceAccount:
-  create: true
-  annotations:
-    eks.amazonaws.com/role-arn: "arn:aws:iam::ACCOUNT_ID:role/opus-casino-production-rg-role"
+  resources:
+    limits:
+      cpu: 2000m
+      memory: 2Gi
+    requests:
+      cpu: 500m
+      memory: 512Mi
 
-resources:
-  limits:
-    cpu: 2000m
-    memory: 2Gi
-  requests:
-    cpu: 500m
-    memory: 512Mi
+  autoscaling:
+    enabled: true
+    minReplicas: 4
+    maxReplicas: 20
+    targetCPUUtilizationPercentage: 50
+    targetMemoryUtilizationPercentage: 60
 
-autoscaling:
-  enabled: true
-  minReplicas: 4
-  maxReplicas: 20
-  targetCPUUtilizationPercentage: 50
-  targetMemoryUtilizationPercentage: 60
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 2
 
-podDisruptionBudget:
-  enabled: true
-  minAvailable: 2
+  networkPolicy:
+    enabled: true
+    ingress:
+      - from:
+          - namespaceSelector:
+              matchLabels:
+                name: istio-system
+          - namespaceSelector:
+              matchLabels:
+                name: monitoring
+          - namespaceSelector:
+              matchLabels:
+                name: production
+        ports:
+          - protocol: TCP
+            port: 8091
+          - protocol: TCP
+            port: 50062
+    egress:
+      - to:
+          - namespaceSelector:
+              matchLabels:
+                name: data
+        ports:
+          - protocol: TCP
+            port: 5432
+          - protocol: TCP
+            port: 6379
+      - to: []
+        ports:
+          - protocol: TCP
+            port: 443
+      - to:
+          - namespaceSelector:
+              matchLabels:
+                name: monitoring
+        ports:
+          - protocol: TCP
+            port: 4317
 
-networkPolicy:
-  enabled: true
+  serviceMonitor:
+    # Disabled: no /metrics endpoint yet. Enable with instrumentation.
+    enabled: false
+    interval: 15s
+    scrapeTimeout: 10s
+    path: /metrics
+    port: http
+
   ingress:
-    - from:
-        - namespaceSelector:
-            matchLabels:
-              name: istio-system
-        - namespaceSelector:
-            matchLabels:
-              name: monitoring
-        - namespaceSelector:
-            matchLabels:
-              name: production
-      ports:
-        - protocol: TCP
-          port: 8091
-        - protocol: TCP
-          port: 50062
-  egress:
-    - to:
-        - namespaceSelector:
-            matchLabels:
-              name: data
-      ports:
-        - protocol: TCP
-          port: 5432
-        - protocol: TCP
-          port: 6379
-    - to: []
-      ports:
-        - protocol: TCP
-          port: 443
-    - to:
-        - namespaceSelector:
-            matchLabels:
-              name: monitoring
-      ports:
-        - protocol: TCP
-          port: 4317
+    # Player RG cabinet only. /admin/rg/* is deliberately NOT routed here.
+    enabled: true
+    className: "alb"
+    annotations:
+      alb.ingress.kubernetes.io/scheme: internet-facing
+      alb.ingress.kubernetes.io/target-type: ip
+      alb.ingress.kubernetes.io/healthcheck-path: /health
+      alb.ingress.kubernetes.io/ssl-redirect: "443"
+      alb.ingress.kubernetes.io/protocol: HTTPS
+      alb.ingress.kubernetes.io/certificate-arn: "arn:aws:acm:us-east-1:ACCOUNT_ID:certificate/CERT_ID"
+    hosts:
+      - host: api.opus.casino
+        paths:
+          - path: /api/v1/rg
+            pathType: Prefix
+    tls:
+      - secretName: opus-casino-production-tls
+        hosts:
+          - api.opus.casino
 
-serviceMonitor:
-  # Disabled: no /metrics endpoint yet. Enable with instrumentation.
-  enabled: false
-  interval: 15s
-  scrapeTimeout: 10s
-  path: /metrics
-  port: http
-
-ingress:
-  # Player RG cabinet only. /admin/rg/* is deliberately NOT routed here.
-  enabled: true
-  className: "alb"
-  annotations:
-    alb.ingress.kubernetes.io/scheme: internet-facing
-    alb.ingress.kubernetes.io/target-type: ip
-    alb.ingress.kubernetes.io/healthcheck-path: /health
-    alb.ingress.kubernetes.io/ssl-redirect: "443"
-    alb.ingress.kubernetes.io/protocol: HTTPS
-    alb.ingress.kubernetes.io/certificate-arn: "arn:aws:acm:us-east-1:ACCOUNT_ID:certificate/CERT_ID"
-  hosts:
-    - host: api.opus.casino
-      paths:
-        - path: /api/v1/rg
-          pathType: Prefix
-  tls:
-    - secretName: opus-casino-production-tls
-      hosts:
-        - api.opus.casino
-
-affinity:
-  nodeAffinity:
-    requiredDuringSchedulingIgnoredDuringExecution:
-      nodeSelectorTerms:
-        - matchExpressions:
-            - key: node-type
-              operator: In
-              values:
-                - application
-  podAntiAffinity:
-    preferredDuringSchedulingIgnoredDuringExecution:
-      - weight: 100
-        podAffinityTerm:
-          labelSelector:
-            matchExpressions:
-              - key: app.kubernetes.io/name
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: node-type
                 operator: In
                 values:
-                  - rg
-          topologyKey: kubernetes.io/hostname
+                  - application
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app.kubernetes.io/name
+                  operator: In
+                  values:
+                    - rg
+            topologyKey: kubernetes.io/hostname
 
-tolerations:
-  - key: "application"
-    operator: "Equal"
-    value: "true"
-    effect: "NoSchedule"
+  tolerations:
+    - key: "application"
+      operator: "Equal"
+      value: "true"
+      effect: "NoSchedule"
 
-env:
-  - name: APP_ENV
-    value: "production"
-  - name: PORT
-    value: "8091"
-  - name: GRPC_PORT
-    value: "50062"
-  - name: DATABASE_URL
-    valueFrom:
-      secretKeyRef:
-        name: rg-secrets-production
-        key: database-url
-  - name: JWT_SECRET_KEY
-    valueFrom:
-      secretKeyRef:
-        name: rg-secrets-production
-        key: jwt-secret-key
-  - name: CORS_ORIGINS
-    value: "https://www.opus.casino,https://opus.casino"
-  - name: OTEL_EXPORTER_OTLP_ENDPOINT
-    value: "http://otel-collector.monitoring.svc.cluster.local:4317"
-  - name: OTEL_SERVICE_NAME
-    value: "rg-production"
+  env:
+    - name: APP_ENV
+      value: "production"
+    - name: PORT
+      value: "8091"
+    - name: GRPC_PORT
+      value: "50062"
+    - name: DATABASE_URL
+      valueFrom:
+        secretKeyRef:
+          name: rg-secrets-production
+          key: database-url
+    - name: JWT_SECRET_KEY
+      valueFrom:
+        secretKeyRef:
+          name: rg-secrets-production
+          key: jwt-secret-key
+    - name: CORS_ORIGINS
+      value: "https://www.opus.casino,https://opus.casino"
+    - name: OTEL_EXPORTER_OTLP_ENDPOINT
+      value: "http://otel-collector.monitoring.svc.cluster.local:4317"
+    - name: OTEL_SERVICE_NAME
+      value: "rg-production"
 
-rg:
-  limits:
-    increase_cooldown_hours: 24
-    apply_due_interval: "*/15 * * * *"
-  exclusion:
-    default_period: 6m
-    allowed_periods:
-      - 24h
-      - 7d
-      - 30d
-      - 6m
-      - 1y
-      - permanent
-  enforcement:
-    gated_channels:
-      - bet
-      - game_launch
-      - deposit
-    always_allowed_channels:
-      - withdrawal
+  # Documentation only - behaviour lives in the service.
+  rg:
+    limits:
+      increase_cooldown_hours: 24
+      apply_due_interval: "*/15 * * * *"
+    exclusion:
+      default_period: 6m
+      allowed_periods:
+        - 24h
+        - 7d
+        - 30d
+        - 6m
+        - 1y
+        - permanent
+    enforcement:
+      gated_channels:
+        - bet
+        - game_launch
+        - deposit
+      always_allowed_channels:
+        - withdrawal

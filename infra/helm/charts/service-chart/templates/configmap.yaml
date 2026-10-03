@@ -5,7 +5,24 @@ metadata:
   labels:
     {{- include "service-chart.labels" . | nindent 4 }}
 data:
-  app-env: {{ .Values.env | dig "APP_ENV" "production" | quote }}
-  {{- range $key, $value := .Values.configMap }}
+  {{- /*
+    app-env is derived from the env list. This used to be
+    `dig "APP_ENV" "production" .Values.env`, but `env` is a list of
+    {name, value} objects, not a map: `dig` aborted with
+    "interface conversion: interface {} is []interface {}, not map[string]interface {}"
+    and failed `helm lint` for every chart depending on service-chart.
+  */}}
+  {{- $appEnv := "production" }}
+  {{- range .Values.env }}
+    {{- if and .name .value }}
+      {{- if eq .name "APP_ENV" }}
+        {{- $appEnv = .value }}
+      {{- end }}
+    {{- end }}
+  {{- end }}
+  app-env: {{ $appEnv | quote }}
+  {{- with .Values.configMap }}
+  {{- range $key, $value := . }}
   {{ $key }}: {{ $value | quote }}
+  {{- end }}
   {{- end }}

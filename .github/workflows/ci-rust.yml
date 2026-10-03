@@ -20,7 +20,9 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  RUST_VERSION: '1.75'
+  # The workspace depends on crates that need a modern rustc (sqlx 0.7,
+  # rust_decimal 1.36, tonic 0.11 ...). 1.75 could not resolve the lockfile.
+  RUST_VERSION: 'stable'
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 

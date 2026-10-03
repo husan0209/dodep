@@ -240,19 +240,30 @@ jobs:
         with:
           version: v3.13.0
 
+      - name: Resolve chart dependencies
+        # Must run before `helm lint`: the chart declares a file:// dependency
+        # on service-chart and lint fails with
+        # "found in Chart.yaml, but missing in charts/ directory" until it is
+        # resolved into charts/.
+        run: helm dependency update infra/helm/charts/rg
+
       - name: Lint RG chart
         run: helm lint infra/helm/charts/rg
 
       - name: Render and assert key values
         run: |
-          helm dependency update infra/helm/charts/rg >/dev/null
+          # image.tag lives under the service-chart dependency, so the override
+          # path is service-chart.image.tag.
           helm template rg infra/helm/charts/rg \
             --namespace platform \
-            --set image.tag=test > /tmp/rg-rendered.yaml
+            --set service-chart.image.tag=test > /tmp/rg-rendered.yaml
           grep -q "containerPort: 8091" /tmp/rg-rendered.yaml
           grep -q "containerPort: 50062" /tmp/rg-rendered.yaml
           grep -q "name: grpc" /tmp/rg-rendered.yaml
           grep -q "JWT_SECRET_KEY" /tmp/rg-rendered.yaml
+          grep -q "ghcr.io/opus-casino/rg:test" /tmp/rg-rendered.yaml
+          # Objects must be named `rg` (deploy job waits on deployment/rg).
+          grep -q "name: rg$" /tmp/rg-rendered.yaml
           # Production overlay must keep the public ingress limited to the
           # player cabinet: /admin/rg must never be exposed publicly.
           helm template rg infra/helm/charts/rg \
@@ -301,7 +312,7 @@ jobs:
           helm dependency update infra/helm/charts/rg >/dev/null
           helm upgrade --install rg infra/helm/charts/rg \
             --namespace platform-dev \
-            --set image.tag=${{ github.sha }} \
+            --set service-chart.image.tag=${{ github.sha }} \
             --wait --timeout 5m
 
       - name: Run smoke tests

@@ -8,8 +8,12 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  RUST_VERSION: "1.75"
-  GO_VERSION: "1.21"
+  # The workspace depends on crates that need a modern rustc (sqlx 0.7,
+  # rust_decimal 1.36, tonic 0.11 ...). 1.75 could not resolve the lockfile.
+  RUST_VERSION: "stable"
+  # services/go/*/go.mod declare up to `go 1.25.0`; pinning lower only makes
+  # GOTOOLCHAIN download a newer toolchain on every step.
+  GO_VERSION: "1.25"
   PYTHON_VERSION: "3.11"
   NODE_VERSION: "20"
 
@@ -175,7 +179,7 @@ jobs:
       run: npm run build
     
     - name: Test
-      run: npm run test -- --run
+      run: npm run test
 
   # Security scanning
   security-scan:

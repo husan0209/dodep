@@ -20,7 +20,9 @@ on:
       - '.github/workflows/ci-go.yml'
 
 env:
-  GO_VERSION: '1.21'
+  # services/go/*/go.mod declare up to `go 1.25.0`; pinning lower only makes
+  # GOTOOLCHAIN download a newer toolchain on every step.
+  GO_VERSION: '1.25'
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
@@ -51,14 +53,16 @@ jobs:
           cache-dependency-path: services/go/${{ matrix.service }}/go.sum
 
       - name: Install golangci-lint
-        uses: golangci/golangci-lint-action@v4
+        uses: golangci/golangci-lint-action@v7
         with:
-          version: latest
+          # Pinned: `version: latest` silently jumped between golangci-lint v1
+          # and v2, and v2 removed --out-format entirely.
+          version: v2.1.0
           working-directory: services/go/${{ matrix.service }}
 
       - name: Run golangci-lint
         working-directory: services/go/${{ matrix.service }}
-        run: golangci-lint run --out-format=github-actions
+        run: golangci-lint run
 
   # ==========================================================================
   # Test

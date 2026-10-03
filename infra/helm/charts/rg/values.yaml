@@ -4,198 +4,210 @@
 # Ports come from services/go/rg/internal/config/config.go (HTTP 8091,
 # gRPC 50062). NOTE: CONVENTIONS.md has no RG row yet - keep these values in
 # sync with the service config, not with a guessed table.
+#
+# Every value lives under `service-chart:` because this chart has no templates
+# of its own: they all come from the service-chart dependency. A parent chart's
+# top-level values do NOT reach a subchart, so a flat values.yaml silently
+# deployed service-chart's own defaults (port 8080, no env, wrong image).
+service-chart:
+  replicaCount: 2
 
-replicaCount: 2
+  # The shared templates name objects "<release>-service-chart" and label
+  # pods app.kubernetes.io/name=service-chart. Override both so the RG objects
+  # are deployment/svc `rg` and the selector matches the podAntiAffinity in
+  # values-production.yaml (and the deploy job's `kubectl wait deployment/rg`).
+  nameOverride: rg
+  fullnameOverride: rg
 
-image:
-  repository: ghcr.io/opus-casino/rg
-  pullPolicy: IfNotPresent
-  tag: "latest"
+  image:
+    repository: ghcr.io/opus-casino/rg
+    pullPolicy: IfNotPresent
+    tag: "latest"
 
-serviceAccount:
-  create: true
-  annotations:
-    eks.amazonaws.com/role-arn: ""
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: ""
 
-podAnnotations:
-  prometheus.io/scrape: "true"
+  podAnnotations:
+    prometheus.io/scrape: "true"
 
-podSecurityContext:
-  fsGroup: 1000
+  podSecurityContext:
+    fsGroup: 1000
 
-securityContext:
-  runAsNonRoot: true
-  runAsUser: 1000
-  allowPrivilegeEscalation: false
-  readOnlyRootFilesystem: true
-  capabilities:
-    drop:
-      - ALL
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
 
-service:
-  type: ClusterIP
-  # HTTP (Fiber) - must match PORT env below.
-  port: 8091
-  targetPort: 8091
-  # gRPC (google.golang.org/grpc) - must match GRPC_PORT env below.
-  grpcPort: 50062
-  grpcTargetPort: 50062
+  service:
+    type: ClusterIP
+    # HTTP (Fiber) - must match PORT env below.
+    port: 8091
+    targetPort: 8091
+    # gRPC (google.golang.org/grpc) - must match GRPC_PORT env below.
+    grpcPort: 50062
+    grpcTargetPort: 50062
 
-ingress:
-  # Player-facing only (mobile/web RG cabinet). Operator endpoints under
-  # /admin/rg must NOT be exposed publicly - they are reached from inside the
-  # cluster via the admin BFF / VPN-only network policy.
-  enabled: true
-  className: "alb"
-  annotations:
-    alb.ingress.kubernetes.io/scheme: internet-facing
-    alb.ingress.kubernetes.io/target-type: ip
-    alb.ingress.kubernetes.io/healthcheck-path: /health
-    alb.ingress.kubernetes.io/ssl-redirect: "443"
-  hosts:
-    - host: api.opus.casino
-      paths:
-        - path: /api/v1/rg
-          pathType: Prefix
-  tls:
-    - secretName: opus-casino-tls
-      hosts:
-        - api.opus.casino
-
-resources:
-  limits:
-    cpu: 1000m
-    memory: 1Gi
-  requests:
-    cpu: 250m
-    memory: 256Mi
-
-# The gate is stateless and latency-sensitive: scale on CPU, keep headroom for
-# bursts of check traffic (every bet and deposit hits it).
-autoscaling:
-  enabled: true
-  minReplicas: 2
-  maxReplicas: 12
-  targetCPUUtilizationPercentage: 60
-  targetMemoryUtilizationPercentage: 70
-
-nodeSelector:
-  node-type: application
-
-healthCheck:
-  path: /health
-  port: 8091
-  liveness:
-    initialDelaySeconds: 10
-    periodSeconds: 10
-    timeoutSeconds: 5
-    failureThreshold: 3
-  readiness:
-    # Short and strict: a lagging RG pod must leave the load-balancer pool
-    # rather than let callers fall back to a stale decision.
-    initialDelaySeconds: 3
-    periodSeconds: 5
-    timeoutSeconds: 2
-    failureThreshold: 2
-
-env:
-  # Every name must match what services/go/rg/internal/config/config.go reads.
-  # No GIN_MODE (Fiber, NEVER-8) and no broker vars the service does not read.
-  - name: APP_ENV
-    value: "development"
-  - name: PORT
-    value: "8091"
-  - name: GRPC_PORT
-    value: "50062"
-  - name: DATABASE_URL
-    valueFrom:
-      secretKeyRef:
-        name: rg-secrets
-        key: database-url
-  - name: JWT_SECRET_KEY
-    valueFrom:
-      secretKeyRef:
-        name: rg-secrets
-        key: jwt-secret-key
-  - name: CORS_ORIGINS
-    value: "https://www.opus.casino,https://m.opus.casino"
-
-podDisruptionBudget:
-  enabled: true
-  minAvailable: 1
-
-networkPolicy:
-  enabled: true
   ingress:
-    - from:
-        - namespaceSelector:
-            matchLabels:
-              name: istio-system
-        - namespaceSelector:
-            matchLabels:
-              name: monitoring
-        # Platform services call CheckPlayAllowed before every bet,
-        # game launch and deposit.
-        - namespaceSelector:
-            matchLabels:
-              name: platform
-      ports:
-        - protocol: TCP
-          port: 8091
-        - protocol: TCP
-          port: 50062
-  egress:
-    - to:
-        - namespaceSelector:
-            matchLabels:
-              name: data
-      ports:
-        - protocol: TCP
-          port: 5432
-        - protocol: TCP
-          port: 6379
-    - to:
-        - namespaceSelector:
-            matchLabels:
-              name: monitoring
-      ports:
-        - protocol: TCP
-          port: 4317
-        - protocol: TCP
-          port: 4318
+    # Player-facing only (mobile/web RG cabinet). Operator endpoints under
+    # /admin/rg must NOT be exposed publicly - they are reached from inside the
+    # cluster via the admin BFF / VPN-only network policy.
+    enabled: true
+    className: "alb"
+    annotations:
+      alb.ingress.kubernetes.io/scheme: internet-facing
+      alb.ingress.kubernetes.io/target-type: ip
+      alb.ingress.kubernetes.io/healthcheck-path: /health
+      alb.ingress.kubernetes.io/ssl-redirect: "443"
+    hosts:
+      - host: api.opus.casino
+        paths:
+          - path: /api/v1/rg
+            pathType: Prefix
+    tls:
+      - secretName: opus-casino-tls
+        hosts:
+          - api.opus.casino
 
-serviceMonitor:
-  # Disabled: the service exposes only /health and /ready (no /metrics yet).
-  # Enable together with client_golang instrumentation and a metrics port.
-  enabled: false
-  interval: 30s
-  scrapeTimeout: 10s
-  path: /metrics
-  port: metrics
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 250m
+      memory: 256Mi
 
-# RG-specific settings (documentation only - behaviour lives in the service).
-rg:
-  limits:
-    # Cooling period applied to limit INCREASES. Decreases are immediate.
-    increase_cooldown_hours: 24
-    # Scheduler call that applies due increases: POST /admin/rg/apply-due.
-    apply_due_interval: "*/15 * * * *"
-  exclusion:
-    # UKGC LCCP SR 3.5 / GAMSTOP: 6 months is the minimum for multi-operator
-    # sync. `permanent` is never revocable through the API.
-    default_period: 6m
-    allowed_periods:
-      - 24h
-      - 7d
-      - 30d
-      - 6m
-      - 1y
-      - permanent
-  enforcement:
-    # Channels the gate covers. Withdrawal is audit-only and NEVER blocked.
-    gated_channels:
-      - bet
-      - game_launch
-      - deposit
-    always_allowed_channels:
-      - withdrawal
+  # The gate is stateless and latency-sensitive: scale on CPU, keep headroom for
+  # bursts of check traffic (every bet and deposit hits it).
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 12
+    targetCPUUtilizationPercentage: 60
+    targetMemoryUtilizationPercentage: 70
+
+  nodeSelector:
+    node-type: application
+
+  healthCheck:
+    path: /health
+    port: 8091
+    liveness:
+      initialDelaySeconds: 10
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 3
+    readiness:
+      # Short and strict: a lagging RG pod must leave the load-balancer pool
+      # rather than let callers fall back to a stale decision.
+      initialDelaySeconds: 3
+      periodSeconds: 5
+      timeoutSeconds: 2
+      failureThreshold: 2
+
+  env:
+    # Every name must match what services/go/rg/internal/config/config.go reads.
+    # No GIN_MODE (Fiber, NEVER-8) and no broker vars the service does not read.
+    - name: APP_ENV
+      value: "development"
+    - name: PORT
+      value: "8091"
+    - name: GRPC_PORT
+      value: "50062"
+    - name: DATABASE_URL
+      valueFrom:
+        secretKeyRef:
+          name: rg-secrets
+          key: database-url
+    - name: JWT_SECRET_KEY
+      valueFrom:
+        secretKeyRef:
+          name: rg-secrets
+          key: jwt-secret-key
+    - name: CORS_ORIGINS
+      value: "https://www.opus.casino,https://m.opus.casino"
+
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+
+  networkPolicy:
+    enabled: true
+    ingress:
+      - from:
+          - namespaceSelector:
+              matchLabels:
+                name: istio-system
+          - namespaceSelector:
+              matchLabels:
+                name: monitoring
+          # Platform services call CheckPlayAllowed before every bet,
+          # game launch and deposit.
+          - namespaceSelector:
+              matchLabels:
+                name: platform
+        ports:
+          - protocol: TCP
+            port: 8091
+          - protocol: TCP
+            port: 50062
+    egress:
+      - to:
+          - namespaceSelector:
+              matchLabels:
+                name: data
+        ports:
+          - protocol: TCP
+            port: 5432
+          - protocol: TCP
+            port: 6379
+      - to:
+          - namespaceSelector:
+              matchLabels:
+                name: monitoring
+        ports:
+          - protocol: TCP
+            port: 4317
+          - protocol: TCP
+            port: 4318
+
+  serviceMonitor:
+    # Disabled: the service exposes only /health and /ready (no /metrics yet).
+    # Enable together with client_golang instrumentation and a metrics port.
+    enabled: false
+    interval: 30s
+    scrapeTimeout: 10s
+    path: /metrics
+    port: metrics
+
+  # RG-specific settings (documentation only - behaviour lives in the service).
+  rg:
+    limits:
+      # Cooling period applied to limit INCREASES. Decreases are immediate.
+      increase_cooldown_hours: 24
+      # Scheduler call that applies due increases: POST /admin/rg/apply-due.
+      apply_due_interval: "*/15 * * * *"
+    exclusion:
+      # UKGC LCCP SR 3.5 / GAMSTOP: 6 months is the minimum for multi-operator
+      # sync. `permanent` is never revocable through the API.
+      default_period: 6m
+      allowed_periods:
+        - 24h
+        - 7d
+        - 30d
+        - 6m
+        - 1y
+        - permanent
+    enforcement:
+      # Channels the gate covers. Withdrawal is audit-only and NEVER blocked.
+      gated_channels:
+        - bet
+        - game_launch
+        - deposit
+      always_allowed_channels:
+        - withdrawal
