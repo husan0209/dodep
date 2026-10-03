@@ -12,7 +12,9 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  RUST_VERSION: '1.75'
+  # Floor imposed by the committed lockfile; see the comment in ci.yaml
+  # for the 1.75 / 1.78 / 1.85 evidence. Do not lower without re-checking.
+  RUST_VERSION: '1.85'
   GO_VERSION: '1.21'
   PYTHON_VERSION: '3.11'
   NODE_VERSION: '20'
@@ -37,7 +39,8 @@ jobs:
           cache: 'npm'
 
       - name: Setup Rust
-        uses: dtolnay/rust-action@stable
+        # dtolnay/rust-action does not resolve ("repository not found").
+        uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ env.RUST_VERSION }}
           components: clippy, rustfmt
