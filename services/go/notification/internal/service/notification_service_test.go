@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"go.uber.org/zap"
@@ -65,11 +66,25 @@ func TestProcessEvent_SupportedEventAliases(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// The repository is built without a database, so a correctly routed
+			// event reaches persistence and fails there. An unrecognised event
+			// would instead return nil from the default branch of the switch.
+			// Asserting on ErrDatabaseUnavailable is therefore what actually
+			// proves the alias was routed.
 			err := svc.ProcessEvent(context.Background(), tc.eventType, tc.data)
-			if err != nil {
-				t.Fatalf("expected no error, got: %v", err)
+			if !errors.Is(err, repository.ErrDatabaseUnavailable) {
+				t.Fatalf("expected %v to be routed to persistence, got: %v", tc.eventType, err)
 			}
 		})
+	}
+}
+
+func TestProcessEvent_UnknownEventIsIgnored(t *testing.T) {
+	repo := repository.NewNotificationRepository(nil, nil)
+	svc := NewNotificationService(repo, zap.NewNop())
+
+	if err := svc.ProcessEvent(context.Background(), "something.unmapped", map[string]string{"user_id": "42"}); err != nil {
+		t.Fatalf("expected an unknown event to be ignored, got: %v", err)
 	}
 }
 

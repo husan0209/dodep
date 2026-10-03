@@ -1,8 +1,14 @@
+// Pragmatic Play's callback verification is MD5(sorted_params + secret_key).
+// The digest is fixed by the provider, so the blocklisted-import rule is
+// switched off for this file; every call site still carries its own #nosec.
+//
+//gosec:disable G501
+
 package pragmatic
 
 import (
 	"context"
-	"crypto/md5" //nolint:gosec
+	"crypto/md5" // MD5 is mandated by the provider, not a security choice here.
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -127,7 +133,7 @@ func (a *Adapter) VerifyCallbackSignature(body []byte, headers map[string]string
 	sb.WriteString(a.cfg.SecretKey)
 
 	//nolint:gosec
-	expected := fmt.Sprintf("%x", md5.Sum([]byte(sb.String())))
+	expected := fmt.Sprintf("%x", md5.Sum([]byte(sb.String()))) // #nosec G401 - provider-mandated MD5 signature
 
 	if expected != strings.ToLower(receivedHash) {
 		a.log.Warn("Pragmatic: signature mismatch",

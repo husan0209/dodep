@@ -1,8 +1,15 @@
+// Amatic signs requests and callbacks with
+// MD5(api_password + sorted_params). The digest is fixed by the provider, so the
+// blocklisted-import rule is switched off for this file; every call site still
+// carries its own #nosec annotation.
+//
+//gosec:disable G501
+
 package amatic
 
 import (
 	"context"
-	"crypto/md5" //nolint:gosec // Amatic specifies MD5
+	"crypto/md5" // MD5 is mandated by the provider, not a security choice here.
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -104,7 +111,7 @@ func (a *Adapter) VerifyCallbackSignature(body []byte, _ map[string]string) bool
 
 	input := a.cfg.APIPassword + a.cfg.OperatorID + playerID + txID
 	//nolint:gosec
-	expected := fmt.Sprintf("%x", md5.Sum([]byte(input)))
+	expected := fmt.Sprintf("%x", md5.Sum([]byte(input))) // #nosec G401 - provider-mandated MD5 signature
 
 	if !strings.EqualFold(expected, receivedKey) {
 		a.log.Warn("Amatic: key mismatch")
@@ -179,5 +186,5 @@ func (a *Adapter) mapMethod(m string) provider.CallbackEventType {
 // sign generates MD5(api_password + data).
 func (a *Adapter) sign(data string) string {
 	//nolint:gosec
-	return fmt.Sprintf("%x", md5.Sum([]byte(a.cfg.APIPassword+data)))
+	return fmt.Sprintf("%x", md5.Sum([]byte(a.cfg.APIPassword+data))) // #nosec G401 - provider-mandated MD5 signature
 }

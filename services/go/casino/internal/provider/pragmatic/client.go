@@ -1,8 +1,14 @@
+// Pragmatic Play's request signing algorithm is MD5(params + secret_key). The
+// digest is fixed by the provider, so the blocklisted-import rule is switched
+// off for this file; every call site still carries its own #nosec annotation.
+//
+//gosec:disable G501
+
 package pragmatic
 
 import (
 	"context"
-	"crypto/md5" //nolint:gosec // Pragmatic Play requires MD5 for hash parameter
+	"crypto/md5" // MD5 is mandated by the provider, not a security choice here.
 	"encoding/json"
 	"fmt"
 	"io"
@@ -85,7 +91,7 @@ func (c *Client) GetGames(ctx context.Context) (*GetGamesResponse, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -138,7 +144,7 @@ func (c *Client) GetLaunchURL(ctx context.Context, opts LaunchURLOptions) (strin
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -195,7 +201,7 @@ func (c *Client) buildParams(kv map[string]string) url.Values {
 	sb.WriteString(c.cfg.SecretKey)
 
 	//nolint:gosec // Pragmatic Play specifies MD5 — cannot be changed
-	hash := fmt.Sprintf("%x", md5.Sum([]byte(sb.String())))
+	hash := fmt.Sprintf("%x", md5.Sum([]byte(sb.String()))) // #nosec G401 - provider-mandated MD5 signature
 	params.Set("hash", hash)
 
 	return params

@@ -31,7 +31,7 @@ func main() {
 
 	// Initialize logger
 	zapLogger, _ := zap.NewProduction()
-	defer zapLogger.Sync()
+	defer func() { _ = zapLogger.Sync() }()
 
 	// Initialize database connection
 	dbPool, err := pgxpool.New(context.Background(), cfg.DatabaseURL)
@@ -46,7 +46,11 @@ func main() {
 		Password: cfg.RedisPassword,
 		DB:       cfg.RedisDB,
 	})
-	defer rdb.Close()
+	defer func() {
+		if err := rdb.Close(); err != nil {
+			zapLogger.Error("Failed to close Redis client", zap.Error(err))
+		}
+	}()
 
 	// Initialize repository
 	notifRepo := repository.NewNotificationRepository(dbPool, rdb)
