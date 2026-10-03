@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/shopspring/decimal"
@@ -147,29 +148,43 @@ type CreditResult struct {
 	NewBalance    decimal.Decimal
 }
 
-// LockRequest represents a lock funds request
+// LockRequest reserves funds for a business operation.
+// Reference must be stable across retries (e.g. "withdrawal:<uuid>"): the
+// reservation is idempotent per (user, reference_type, reference).
 type LockRequest struct {
-	UserID         int64
-	Currency       string
-	Amount         decimal.Decimal
-	IdempotencyKey string
-	ReferenceType  string
+	UserID    int64
+	Currency  string
+	Amount    decimal.Decimal
+	Reference string
+	// ReferenceType selects the ledger counter-account, e.g. "withdrawal".
+	ReferenceType string
 }
 
 // LockResult represents a lock result
 type LockResult struct {
+	// LockID is the wallet-core handle of the reservation (audit trail).
 	LockID     string
 	NewBalance decimal.Decimal
 }
 
-// FinalizeDebitRequest represents a finalize debit request
-type FinalizeDebitRequest struct {
-	UserID         int64
-	Currency       string
-	Amount         decimal.Decimal
+// UnlockRequest releases a reservation back to the available balance.
+type UnlockRequest struct {
+	UserID    int64
+	Reference string
+	// ReferenceType must match the value used at LockFunds time.
+	ReferenceType string
+}
+
+// SettleRequest books a reservation as a completed debit after the reserved
+// money left the platform (crypto payout confirmed by the provider).
+type SettleRequest struct {
+	UserID    int64
+	Reference string
+	// ReferenceType must match the value used at LockFunds time.
+	ReferenceType string
+	// IdempotencyKey scopes the settlement transaction (UUID).
 	IdempotencyKey string
-	ReferenceType  string
-	ReferenceID    string
+	Description    string
 }
 
 // DebitResult represents a debit result
@@ -245,17 +260,28 @@ func (c *WalletClient) CreditWallet(ctx context.Context, req CreditRequest) (*Cr
 	}, nil
 }
 
-// LockFunds locks funds for withdrawal
+// LockFunds reserves funds (available -> locked) for a business reference.
+// Retries with the same reference return the existing reservation.
 func (c *WalletClient) LockFunds(ctx context.Context, req LockRequest) (*LockResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
+
+	reference := strings.TrimSpace(req.Reference)
+	if reference == "" {
+		return nil, fmt.Errorf("LockFunds: reference is required")
+	}
+	referenceType := strings.TrimSpace(req.ReferenceType)
+	if referenceType == "" {
+		return nil, fmt.Errorf("LockFunds: reference type is required")
+	}
 
 	resp, err := c.client.Lock(ctx, &walletpb.LockRequest{
 		UserId:         &commonv1.UserId{Value: strconv.FormatInt(req.UserID, 10)},
 		WalletType:     commonv1.WalletType_WALLET_TYPE_MAIN,
 		Amount:         &commonv1.Money{Amount: req.Amount.String(), Currency: req.Currency},
-		ReferenceId:    lockReferenceType(req.ReferenceType),
-		IdempotencyKey: req.IdempotencyKey,
+		ReferenceId:    reference,
+		ReferenceType:  referenceType,
+		IdempotencyKey: reference,
 	})
 	if err != nil {
 		return nil, c.mapError(err, "LockFunds")
@@ -267,38 +293,57 @@ func (c *WalletClient) LockFunds(ctx context.Context, req LockRequest) (*LockRes
 	}
 
 	return &LockResult{
-		LockID:     "lock-" + req.IdempotencyKey,
+		LockID:     resp.LockId,
 		NewBalance: parseDecimal(newBalance),
 	}, nil
 }
 
-// UnlockFunds unlocks funds after failed withdrawal
-func (c *WalletClient) UnlockFunds(ctx context.Context, lockID string, idempotencyKey string) error {
+// UnlockFunds releases a reservation. Idempotent: replaying a compensation
+// for an already released reservation succeeds without moving money again.
+func (c *WalletClient) UnlockFunds(ctx context.Context, req UnlockRequest) error {
 	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
 
+	reference := strings.TrimSpace(req.Reference)
+	referenceType := strings.TrimSpace(req.ReferenceType)
+	if reference == "" || referenceType == "" {
+		return fmt.Errorf("UnlockFunds: reference and reference type are required")
+	}
+
 	_, err := c.client.Unlock(ctx, &walletpb.UnlockRequest{
-		UserId:      &commonv1.UserId{Value: "0"},
-		ReferenceId: lockID,
+		UserId:        &commonv1.UserId{Value: strconv.FormatInt(req.UserID, 10)},
+		ReferenceId:   reference,
+		ReferenceType: referenceType,
 	})
 	return c.mapError(err, "UnlockFunds")
 }
 
-// FinalizeDebit finalizes withdrawal after successful payout
-func (c *WalletClient) FinalizeDebit(ctx context.Context, req FinalizeDebitRequest) (*DebitResult, error) {
+// SettleFunds books a reservation as a completed debit. Use it when the
+// reserved money actually left the platform (e.g. the crypto payout was
+// confirmed): the locked amount is written off instead of being unlocked and
+// debited a second time.
+func (c *WalletClient) SettleFunds(ctx context.Context, req SettleRequest) (*DebitResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
 
-	resp, err := c.client.Debit(ctx, &walletpb.DebitRequest{
+	reference := strings.TrimSpace(req.Reference)
+	referenceType := strings.TrimSpace(req.ReferenceType)
+	if reference == "" || referenceType == "" {
+		return nil, fmt.Errorf("SettleFunds: reference and reference type are required")
+	}
+	if strings.TrimSpace(req.IdempotencyKey) == "" {
+		return nil, fmt.Errorf("SettleFunds: idempotency key is required")
+	}
+
+	resp, err := c.client.ConsumeLock(ctx, &walletpb.ConsumeLockRequest{
 		UserId:         &commonv1.UserId{Value: strconv.FormatInt(req.UserID, 10)},
-		WalletType:     commonv1.WalletType_WALLET_TYPE_MAIN,
-		Amount:         &commonv1.Money{Amount: req.Amount.String(), Currency: req.Currency},
-		ReferenceId:    req.ReferenceID,
-		ReferenceType:  lockReferenceType(req.ReferenceType),
+		ReferenceId:    reference,
+		ReferenceType:  referenceType,
 		IdempotencyKey: req.IdempotencyKey,
+		Description:    req.Description,
 	})
 	if err != nil {
-		return nil, c.mapError(err, "FinalizeDebit")
+		return nil, c.mapError(err, "SettleFunds")
 	}
 
 	var txId string
@@ -306,9 +351,7 @@ func (c *WalletClient) FinalizeDebit(ctx context.Context, req FinalizeDebitReque
 		txId = resp.Transaction.Id.Value
 	}
 
-	return &DebitResult{
-		TransactionID: txId,
-	}, nil
+	return &DebitResult{TransactionID: txId}, nil
 }
 
 // mapError converts gRPC errors to domain errors
@@ -344,11 +387,4 @@ func (c *WalletClient) mapError(err error, operation string) error {
 func parseDecimal(s string) decimal.Decimal {
 	d, _ := decimal.NewFromString(s)
 	return d
-}
-
-func lockReferenceType(v string) string {
-	if v == "" {
-		return "withdrawal"
-	}
-	return v
 }

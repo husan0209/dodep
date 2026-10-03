@@ -1,9 +1,10 @@
 //! Ledger repository for double-entry bookkeeping
 
+use rust_decimal::Decimal;
 use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
-use crate::domain::{LedgerEntry, ReconciliationResult};
+use crate::domain::{AccountType, LedgerEntry, LedgerEntryType, ReconciliationResult, WalletType};
 
 /// Ledger repository
 pub struct LedgerRepository {
@@ -14,7 +15,7 @@ impl LedgerRepository {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
-    
+
     /// Insert a ledger entry pair (debit + credit)
     pub async fn insert_pair(
         &self,
@@ -22,14 +23,14 @@ impl LedgerRepository {
         credit: LedgerEntry,
     ) -> Result<(), sqlx::Error> {
         let mut tx = self.pool.begin().await?;
-        
+
         self.insert_pair_internal(&mut tx, debit, credit).await?;
-        
+
         tx.commit().await?;
-        
+
         Ok(())
     }
-    
+
     /// Insert a ledger entry pair within a transaction
     pub async fn insert_pair_internal(
         &self,
@@ -61,7 +62,7 @@ impl LedgerRepository {
         )
         .execute(&mut **tx)
         .await?;
-        
+
         // Insert credit entry
         sqlx::query!(
             r#"
@@ -86,22 +87,25 @@ impl LedgerRepository {
         )
         .execute(&mut **tx)
         .await?;
-        
+
         Ok(())
     }
-    
+
     /// Get entries by transaction ID
-    pub async fn get_by_transaction(&self, transaction_id: Uuid) -> Result<Vec<LedgerEntry>, sqlx::Error> {
+    pub async fn get_by_transaction(
+        &self,
+        transaction_id: Uuid,
+    ) -> Result<Vec<LedgerEntry>, sqlx::Error> {
         let entries = sqlx::query_as!(
             LedgerEntry,
             r#"
             SELECT
                 id, transaction_id,
-                account_type as "AccountType: _",
+                account_type as "account_type: AccountType",
                 account_id,
-                entry_type as "LedgerEntryType: _",
-                amount as "Decimal: rust_decimal::Decimal",
-                currency, balance_after as "Decimal: rust_decimal::Decimal",
+                entry_type as "entry_type: LedgerEntryType",
+                amount as "amount: Decimal",
+                currency, balance_after as "balance_after: Decimal",
                 reference_type, reference_id, idempotency_key,
                 created_at
             FROM ledger_entries
@@ -112,10 +116,10 @@ impl LedgerRepository {
         )
         .fetch_all(&self.pool)
         .await?;
-        
+
         Ok(entries)
     }
-    
+
     /// Get entries by account
     pub async fn get_by_account(
         &self,
@@ -128,11 +132,11 @@ impl LedgerRepository {
             r#"
             SELECT
                 id, transaction_id,
-                account_type as "AccountType: _",
+                account_type as "account_type: AccountType",
                 account_id,
-                entry_type as "LedgerEntryType: _",
-                amount as "Decimal: rust_decimal::Decimal",
-                currency, balance_after as "Decimal: rust_decimal::Decimal",
+                entry_type as "entry_type: LedgerEntryType",
+                amount as "amount: Decimal",
+                currency, balance_after as "balance_after: Decimal",
                 reference_type, reference_id, idempotency_key,
                 created_at
             FROM ledger_entries
@@ -146,56 +150,58 @@ impl LedgerRepository {
         )
         .fetch_all(&self.pool)
         .await?;
-        
+
         Ok(entries)
     }
-    
+
     /// Run reconciliation check
     pub async fn reconcile_wallet(
         &self,
         wallet_id: Uuid,
     ) -> Result<ReconciliationResult, sqlx::Error> {
-        let result = sqlx::query!(
+        let result = sqlx::query_as!(
+            ReconciliationResult,
             r#"
-            SELECT * FROM wallet_reconciliation
+            SELECT 
+                wallet_id as "wallet_id!",
+                user_id as "user_id!",
+                wallet_type as "wallet_type!: WalletType",
+                currency as "currency!",
+                actual_balance as "actual_balance!: Decimal",
+                expected_balance as "expected_balance!: Decimal",
+                discrepancy as "discrepancy!: Decimal"
+            FROM wallet_reconciliation
             WHERE wallet_id = $1
             "#,
             wallet_id
         )
         .fetch_optional(&self.pool)
         .await?;
-        
-        match result {
-            Some(row) => {
-                use sqlx::Row;
-                Ok(ReconciliationResult {
-                    wallet_id: row.try_get("wallet_id")?,
-                    user_id: row.try_get("user_id")?,
-                    wallet_type: row.try_get("wallet_type")?,
-                    currency: row.try_get("currency")?,
-                    actual_balance: row.try_get("actual_balance")?,
-                    expected_balance: row.try_get("expected_balance")?,
-                    discrepancy: row.try_get("discrepancy")?,
-                })
-            }
-            None => Err(sqlx::Error::RowNotFound),
-        }
+
+        result.ok_or(sqlx::Error::RowNotFound)
     }
-    
+
     /// Get all reconciliation alerts (discrepancy > $0.01)
     pub async fn get_reconciliation_alerts(
         &self,
     ) -> Result<Vec<ReconciliationResult>, sqlx::Error> {
-        let results = sqlx::query!(
+        let results = sqlx::query_as!(
+            ReconciliationResult,
             r#"
-            SELECT * FROM wallet_reconciliation_alerts
+            SELECT 
+                wallet_id as "wallet_id!",
+                user_id as "user_id!",
+                wallet_type as "wallet_type!: WalletType",
+                currency as "currency!",
+                actual_balance as "actual_balance!: Decimal",
+                expected_balance as "expected_balance!: Decimal",
+                discrepancy as "discrepancy!: Decimal"
+            FROM wallet_reconciliation_alerts
             "#
         )
         .fetch_all(&self.pool)
         .await?;
-        
-        // Map to ReconciliationResult
-        // Note: This requires custom mapping since we're using a view
-        Ok(Vec::new())  // TODO: implement proper mapping
+
+        Ok(results)
     }
 }

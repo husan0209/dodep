@@ -121,6 +121,44 @@ func (r *withdrawalRepo) UpdateStatus(ctx context.Context, id int64, fromStatus,
 	return nil
 }
 
+// RecordDecision stores the review decision atomically with the timestamp.
+func (r *withdrawalRepo) RecordDecision(ctx context.Context, id int64, decidedBy, reason string) error {
+	result := r.db.WithContext(ctx).
+		Model(&domain.Withdrawal{}).
+		Where("id = ?", id).
+		Updates(map[string]interface{}{
+			"decided_by":      decidedBy,
+			"decided_at":      time.Now(),
+			"decision_reason": reason,
+			"updated_at":      time.Now(),
+		})
+	if result.Error != nil {
+		return fmt.Errorf("record withdrawal decision: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return domain.ErrorWithdrawalNotFound(id)
+	}
+	return nil
+}
+
+// SetProviderWithdrawalID attaches the PSP payout id after approval.
+func (r *withdrawalRepo) SetProviderWithdrawalID(ctx context.Context, id int64, providerID string) error {
+	result := r.db.WithContext(ctx).
+		Model(&domain.Withdrawal{}).
+		Where("id = ?", id).
+		Updates(map[string]interface{}{
+			"withdrawal_id": providerID,
+			"updated_at":    time.Now(),
+		})
+	if result.Error != nil {
+		return fmt.Errorf("set provider withdrawal id: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return domain.ErrorWithdrawalNotFound(id)
+	}
+	return nil
+}
+
 // ListByUserID lists withdrawals for a user with pagination
 func (r *withdrawalRepo) ListByUserID(ctx context.Context, userID int64, filter ListFilter) (*ListResult[domain.Withdrawal], error) {
 	if filter.Limit <= 0 {
@@ -161,6 +199,63 @@ func (r *withdrawalRepo) ListByUserID(ctx context.Context, userID int64, filter 
 	var nextCursor string
 	if hasMore && len(withdrawals) > 0 {
 		nextCursor = encodeWithdrawalCursor(withdrawals[len(withdrawals)-1])
+	}
+
+	return &ListResult[domain.Withdrawal]{
+		Items:      withdrawals,
+		NextCursor: nextCursor,
+		HasMore:    hasMore,
+	}, nil
+}
+
+// ListAll lists withdrawals across users (the admin/ops review queue).
+//
+// Ordered oldest-first so the longest-waiting requests surface first, and
+// paginated with a keyset cursor on (created_at, id): approving a withdrawal
+// must not make rows shift between pages the operator is looking at.
+func (r *withdrawalRepo) ListAll(ctx context.Context, filter ListFilter) (*ListResult[domain.Withdrawal], error) {
+	if filter.Limit <= 0 {
+		filter.Limit = 20
+	}
+	if filter.Limit > 100 {
+		filter.Limit = 100
+	}
+
+	query := r.db.WithContext(ctx).Order("created_at ASC, id ASC")
+
+	if filter.Status != "" {
+		query = query.Where("status = ?", filter.Status)
+	}
+
+	if filter.Cursor != "" {
+		cursor, err := decodePaymentCursor(filter.Cursor)
+		if err == nil {
+			query = query.Where(
+				"created_at > $1 OR (created_at = $1 AND id > $2)",
+				cursor.CreatedAt, cursor.ID,
+			)
+		}
+	}
+
+	var withdrawals []domain.Withdrawal
+	// Fetch one extra row to learn whether another page exists.
+	if err := query.Limit(filter.Limit + 1).Find(&withdrawals).Error; err != nil {
+		return nil, fmt.Errorf("list all withdrawals: %w", err)
+	}
+
+	hasMore := len(withdrawals) > filter.Limit
+	if hasMore {
+		withdrawals = withdrawals[:filter.Limit]
+	}
+
+	var nextCursor string
+	if hasMore && len(withdrawals) > 0 {
+		last := withdrawals[len(withdrawals)-1]
+		nextCursor = encodePaymentCursorFrom(last.ID, last.CreatedAt)
+	}
+
+	if withdrawals == nil {
+		withdrawals = []domain.Withdrawal{}
 	}
 
 	return &ListResult[domain.Withdrawal]{

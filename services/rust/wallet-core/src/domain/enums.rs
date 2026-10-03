@@ -26,7 +26,7 @@ impl WalletType {
             WalletType::Cashback => "cashback",
         }
     }
-    
+
     pub fn from_str(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "main" => Some(WalletType::Main),
@@ -35,6 +35,20 @@ impl WalletType {
             "cashback" => Some(WalletType::Cashback),
             _ => None,
         }
+    }
+}
+
+impl std::fmt::Display for WalletType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl std::str::FromStr for WalletType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        WalletType::from_str(s).ok_or_else(|| format!("unknown wallet_type: {s}"))
     }
 }
 

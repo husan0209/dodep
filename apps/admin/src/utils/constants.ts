@@ -39,11 +39,14 @@ export const TRANSACTION_STATUSES: Record<string, StatusConfig> = {
 };
 
 export const WITHDRAWAL_STATUSES: Record<string, StatusConfig> = {
-  pending: { label: "Pending", color: "orange" },
+  pending_review: { label: "Pending Review", color: "orange" },
   approved: { label: "Approved", color: "processing" },
   processing: { label: "Processing", color: "processing" },
-  completed: { label: "Completed", color: "green" },
+  sending: { label: "Sending", color: "processing" },
+  sent: { label: "Sent", color: "cyan" },
+  finished: { label: "Completed", color: "green" },
   rejected: { label: "Rejected", color: "red" },
+  failed: { label: "Failed", color: "red" },
   cancelled: { label: "Cancelled", color: "default" },
 };
 

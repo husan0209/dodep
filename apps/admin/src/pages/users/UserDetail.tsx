@@ -107,7 +107,7 @@ export default function UserDetail() {
 
   const { data: withdrawals, isLoading: withdrawalsLoading } = useQuery({
     queryKey: ["user-withdrawals", id],
-    queryFn: () => financeService.getWithdrawals({ user_id: id, page: 1, page_size: 20 }),
+    queryFn: () => financeService.getWithdrawals({ player_id: id, page_size: 20 }),
     enabled: !!id && activeTab === "withdrawals",
   });
 
@@ -555,7 +555,8 @@ export default function UserDetail() {
         columns={columns}
         loading={withdrawalsLoading}
         rowKey="id"
-        pagination={{ total: withdrawals?.pagination.total, pageSize: 20 }}
+        // Cursor pagination: show the first page without a pager.
+        pagination={false}
       />
     );
   };

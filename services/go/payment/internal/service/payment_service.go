@@ -68,13 +68,13 @@ type InitiateDepositRequest struct {
 
 // InitiateDepositResponse represents a deposit response
 type InitiateDepositResponse struct {
-	PaymentUUID   string
-	PaymentID     string
-	PayAddress    string
-	PayAmount     decimal.Decimal
-	PayCurrency   string
-	FiatAmount    decimal.Decimal
-	ExpiresAt     time.Time
+	PaymentUUID string
+	PaymentID   string
+	PayAddress  string
+	PayAmount   decimal.Decimal
+	PayCurrency string
+	FiatAmount  decimal.Decimal
+	ExpiresAt   time.Time
 }
 
 // InitiateDeposit creates a new deposit payment
@@ -185,6 +185,15 @@ func (s *PaymentService) ListPayments(ctx context.Context, req ListPaymentsReque
 	}
 
 	return s.paymentRepo.ListByUserID(ctx, req.UserID, filter)
+}
+
+// ListAllPayments lists payments across users (admin/ops use-case).
+func (s *PaymentService) ListAllPayments(ctx context.Context, limit int, cursor, status string) (*repository.ListResult[domain.Payment], error) {
+	return s.paymentRepo.ListAll(ctx, repository.ListFilter{
+		Limit:  limit,
+		Cursor: cursor,
+		Status: status,
+	})
 }
 
 // validateDepositLimits validates KYC level and daily limits

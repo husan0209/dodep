@@ -1,47 +1,40 @@
 package config
 
-
-
 import (
-
 	"fmt"
 
 	"strings"
 
 	"time"
 
-
-
 	"github.com/spf13/viper"
-
 )
-
-
 
 // Config holds all configuration for the payment service
 
 type Config struct {
+	Environment string `mapstructure:"environment"`
 
-	Environment string        `mapstructure:"environment"`
+	Server ServerConfig `mapstructure:"server"`
 
-	Server      ServerConfig  `mapstructure:"server"`
+	Database DBConfig `mapstructure:"database"`
 
-	Database    DBConfig      `mapstructure:"database"`
+	Redis RedisConfig `mapstructure:"redis"`
 
-	Redis       RedisConfig   `mapstructure:"redis"`
+	Kafka KafkaConfig `mapstructure:"kafka"`
 
-	Kafka       KafkaConfig   `mapstructure:"kafka"`
+	NOWPayments NOWPayments `mapstructure:"nowpayments"`
 
-	NOWPayments NOWPayments   `mapstructure:"nowpayments"`
+	// Review holds the risk-based manual-review policy for withdrawals.
+	Review ReviewConfig `mapstructure:"review"`
 
-	Wallet      GRPCClient    `mapstructure:"wallet"`
+	Wallet GRPCClient `mapstructure:"wallet"`
 
-	User        GRPCClient    `mapstructure:"user"`
+	User GRPCClient `mapstructure:"user"`
 
-	Tracing     TracingConfig `mapstructure:"tracing"`
+	Tracing TracingConfig `mapstructure:"tracing"`
 
-	Auth        AuthConfig    `mapstructure:"auth"`
-
+	Auth AuthConfig `mapstructure:"auth"`
 }
 
 // AuthConfig holds JWT authentication configuration
@@ -49,49 +42,39 @@ type AuthConfig struct {
 	Ed25519PublicKey string `mapstructure:"ed25519_public_key"`
 }
 
-
-
 // ServerConfig holds HTTP server configuration
 
 type ServerConfig struct {
-
-	Port           int `mapstructure:"port"`
+	Port int `mapstructure:"port"`
 
 	ReadTimeoutSec int `mapstructure:"read_timeout_sec"`
 
 	WriteTimeoutSec int `mapstructure:"write_timeout_sec"`
 
 	IdleTimeoutSec int `mapstructure:"idle_timeout_sec"`
-
 }
-
-
 
 // DBConfig holds PostgreSQL database configuration
 
 type DBConfig struct {
+	Host string `mapstructure:"host"`
 
-	Host            string `mapstructure:"host"`
+	Port int `mapstructure:"port"`
 
-	Port            int    `mapstructure:"port"`
+	User string `mapstructure:"user"`
 
-	User            string `mapstructure:"user"`
+	Password string `mapstructure:"password"`
 
-	Password        string `mapstructure:"password"`
+	Database string `mapstructure:"database"`
 
-	Database        string `mapstructure:"database"`
+	SSLMode string `mapstructure:"ssl_mode"`
 
-	SSLMode         string `mapstructure:"ssl_mode"`
+	MaxOpenConns int `mapstructure:"max_open_conns"`
 
-	MaxOpenConns    int    `mapstructure:"max_open_conns"`
+	MaxIdleConns int `mapstructure:"max_idle_conns"`
 
-	MaxIdleConns    int    `mapstructure:"max_idle_conns"`
-
-	ConnMaxLifetime int    `mapstructure:"conn_max_lifetime_sec"`
-
+	ConnMaxLifetime int `mapstructure:"conn_max_lifetime_sec"`
 }
-
-
 
 // DSN returns the PostgreSQL connection string
 
@@ -102,30 +85,23 @@ func (c DBConfig) DSN() string {
 		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
 
 		c.Host, c.Port, c.User, c.Password, c.Database, c.SSLMode,
-
 	)
 
 }
 
-
-
 // RedisConfig holds DragonflyDB/Redis configuration
 
 type RedisConfig struct {
+	Host string `mapstructure:"host"`
 
-	Host     string `mapstructure:"host"`
-
-	Port     int    `mapstructure:"port"`
+	Port int `mapstructure:"port"`
 
 	Password string `mapstructure:"password"`
 
-	DB       int    `mapstructure:"db"`
+	DB int `mapstructure:"db"`
 
-	PoolSize int    `mapstructure:"pool_size"`
-
+	PoolSize int `mapstructure:"pool_size"`
 }
-
-
 
 // Addr returns the Redis address
 
@@ -135,93 +111,83 @@ func (c RedisConfig) Addr() string {
 
 }
 
-
-
 // KafkaConfig holds Redpanda/Kafka configuration
 
 type KafkaConfig struct {
+	Brokers []string `mapstructure:"brokers"`
 
-	Brokers       []string `mapstructure:"brokers"`
+	TopicPrefix string `mapstructure:"topic_prefix"`
 
-	TopicPrefix   string   `mapstructure:"topic_prefix"`
+	Acks string `mapstructure:"acks"`
 
-	Acks          string   `mapstructure:"acks"`
+	Compression string `mapstructure:"compression"`
 
-	Compression   string   `mapstructure:"compression"`
+	RetryMax int `mapstructure:"retry_max"`
 
-	RetryMax      int      `mapstructure:"retry_max"`
-
-	RetryBackoff  int      `mapstructure:"retry_backoff_ms"`
-
+	RetryBackoff int `mapstructure:"retry_backoff_ms"`
 }
-
-
 
 // NOWPayments holds NOWPayments API configuration
 type NOWPayments struct {
-	BaseURL         string        `mapstructure:"base_url"`
-	APIKey          string        `mapstructure:"api_key"`
-	IPNSecret       string        `mapstructure:"ipn_secret"`
-	IPNCallbackURL  string        `mapstructure:"ipn_callback_url"`
-	Timeout         time.Duration `mapstructure:"timeout"`
-	Retry           RetryConfig   `mapstructure:"retry"`
+	BaseURL        string        `mapstructure:"base_url"`
+	APIKey         string        `mapstructure:"api_key"`
+	IPNSecret      string        `mapstructure:"ipn_secret"`
+	IPNCallbackURL string        `mapstructure:"ipn_callback_url"`
+	Timeout        time.Duration `mapstructure:"timeout"`
+	Retry          RetryConfig   `mapstructure:"retry"`
 }
-
-
 
 // RetryConfig holds retry configuration for external API calls
 
 type RetryConfig struct {
-
-	MaxRetries     int           `mapstructure:"max_retries"`
+	MaxRetries int `mapstructure:"max_retries"`
 
 	InitialBackoff time.Duration `mapstructure:"initial_backoff"`
 
-	MaxBackoff     time.Duration `mapstructure:"max_backoff"`
+	MaxBackoff time.Duration `mapstructure:"max_backoff"`
 
-	BackoffFactor  float64       `mapstructure:"backoff_factor"`
-
+	BackoffFactor float64 `mapstructure:"backoff_factor"`
 }
 
-
+// ReviewConfig holds the risk-based manual-review policy.
+//
+// Withdrawals with fiat value at or above AutoApproveLimitUSD enter
+// `pending_review` (funds locked, no PSP payout) until a finance operator
+// approves or rejects them. Smaller withdrawals keep the instant flow.
+type ReviewConfig struct {
+	Enabled             bool   `mapstructure:"enabled"`
+	AutoApproveLimitUSD string `mapstructure:"auto_approve_limit_usd"`
+}
 
 // GRPCClient holds gRPC client configuration
 
 type GRPCClient struct {
+	Address string `mapstructure:"address"`
 
-	Address           string        `mapstructure:"address"`
+	Timeout time.Duration `mapstructure:"timeout"`
 
-	Timeout           time.Duration `mapstructure:"timeout"`
+	EnableTLS bool `mapstructure:"enable_tls"`
 
-	EnableTLS         bool          `mapstructure:"enable_tls"`
+	MaxRecvMsgSize int `mapstructure:"max_recv_msg_size"`
 
-	MaxRecvMsgSize    int           `mapstructure:"max_recv_msg_size"`
-
-	MaxSendMsgSize    int           `mapstructure:"max_send_msg_size"`
-
+	MaxSendMsgSize int `mapstructure:"max_send_msg_size"`
 }
-
-
 
 // TracingConfig holds OpenTelemetry tracing configuration
 
 type TracingConfig struct {
+	Enabled bool `mapstructure:"enabled"`
 
-	Enabled      bool    `mapstructure:"enabled"`
+	Endpoint string `mapstructure:"endpoint"`
 
-	Endpoint     string  `mapstructure:"endpoint"`
+	Protocol string `mapstructure:"protocol"` // "grpc" or "http"
 
-	Protocol     string  `mapstructure:"protocol"` // "grpc" or "http"
+	SampleRate float64 `mapstructure:"sample_rate"`
 
-	SampleRate   float64 `mapstructure:"sample_rate"`
+	Insecure bool `mapstructure:"insecure"`
 
-	Insecure     bool    `mapstructure:"insecure"`
-
-	ServiceName  string  `mapstructure:"service_name"`
-
+	ServiceName string `mapstructure:"service_name"`
 }
-
-
 
 // Load reads configuration from file and environment variables
 
@@ -231,21 +197,15 @@ func Load() (*Config, error) {
 
 }
 
-
-
 // LoadWithPath reads configuration from a specific path
 
 func LoadWithPath(configPath string) (*Config, error) {
 
 	v := viper.New()
 
-
-
 	// Set defaults
 
 	setDefaults(v)
-
-
 
 	// Read config file
 
@@ -265,8 +225,6 @@ func LoadWithPath(configPath string) (*Config, error) {
 
 	}
 
-
-
 	// Environment variable overrides
 	// SetEnvKeyReplacer converts nested key "nowpayments.api_key"
 	// → env var "PAYMENT_NOWPAYMENTS_API_KEY"
@@ -275,8 +233,6 @@ func LoadWithPath(configPath string) (*Config, error) {
 	v.AutomaticEnv()
 
 	v.SetEnvPrefix("PAYMENT")
-
-
 
 	// Read config
 
@@ -289,8 +245,6 @@ func LoadWithPath(configPath string) (*Config, error) {
 		}
 
 	}
-
-
 
 	// Load environment-specific config
 
@@ -312,8 +266,6 @@ func LoadWithPath(configPath string) (*Config, error) {
 
 	}
 
-
-
 	var cfg Config
 
 	if err := v.Unmarshal(&cfg); err != nil {
@@ -321,8 +273,6 @@ func LoadWithPath(configPath string) (*Config, error) {
 		return nil, fmt.Errorf("unmarshal config: %w", err)
 
 	}
-
-
 
 	// Validate configuration
 
@@ -332,13 +282,9 @@ func LoadWithPath(configPath string) (*Config, error) {
 
 	}
 
-
-
 	return &cfg, nil
 
 }
-
-
 
 // Validate validates the configuration values
 
@@ -351,8 +297,6 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("server port must be between 1 and 65535")
 
 	}
-
-
 
 	// Validate database config
 
@@ -368,8 +312,6 @@ func (c *Config) Validate() error {
 
 	}
 
-
-
 	// Validate Redis config
 
 	if c.Redis.Host == "" {
@@ -378,8 +320,6 @@ func (c *Config) Validate() error {
 
 	}
 
-
-
 	// Validate Kafka config
 
 	if len(c.Kafka.Brokers) == 0 {
@@ -387,8 +327,6 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("kafka brokers are required")
 
 	}
-
-
 
 	// Validate NOWPayments config
 
@@ -429,8 +367,6 @@ func (c *Config) Validate() error {
 
 	}
 
-
-
 	// Validate gRPC clients
 
 	if c.Wallet.Address == "" {
@@ -444,8 +380,6 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("user address is required")
 
 	}
-
-
 
 	// Validate tracing config
 
@@ -465,13 +399,9 @@ func (c *Config) Validate() error {
 
 	}
 
-
-
 	return nil
 
 }
-
-
 
 func setDefaults(v *viper.Viper) {
 
@@ -486,8 +416,6 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("server.write_timeout_sec", 10)
 
 	v.SetDefault("server.idle_timeout_sec", 60)
-
-
 
 	// Database defaults
 
@@ -509,8 +437,6 @@ func setDefaults(v *viper.Viper) {
 
 	v.SetDefault("database.conn_max_lifetime_sec", 300)
 
-
-
 	// Redis defaults
 
 	v.SetDefault("redis.host", "localhost")
@@ -522,8 +448,6 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("redis.db", 0)
 
 	v.SetDefault("redis.pool_size", 100)
-
-
 
 	// Kafka defaults
 
@@ -539,8 +463,6 @@ func setDefaults(v *viper.Viper) {
 
 	v.SetDefault("kafka.retry_backoff_ms", 100)
 
-
-
 	// NOWPayments defaults
 
 	v.SetDefault("nowpayments.base_url", "https://api.nowpayments.io/v1")
@@ -555,7 +477,11 @@ func setDefaults(v *viper.Viper) {
 
 	v.SetDefault("nowpayments.retry.backoff_factor", 2.0)
 
+	// Manual-review policy defaults (risk-based review)
 
+	v.SetDefault("review.enabled", true)
+
+	v.SetDefault("review.auto_approve_limit_usd", "1000")
 
 	// Wallet service defaults
 
@@ -567,8 +493,6 @@ func setDefaults(v *viper.Viper) {
 
 	v.SetDefault("wallet.max_send_msg_size", 4*1024*1024)
 
-
-
 	// User service defaults
 
 	v.SetDefault("user.address", "localhost:50052")
@@ -578,8 +502,6 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("user.max_recv_msg_size", 4*1024*1024)
 
 	v.SetDefault("user.max_send_msg_size", 4*1024*1024)
-
-
 
 	// Tracing defaults
 
@@ -596,4 +518,3 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("tracing.service_name", "payment-service")
 
 }
-

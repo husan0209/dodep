@@ -50,6 +50,9 @@ type Withdrawal struct {
 	ApprovedBy       *string             `gorm:"type:varchar(36)" json:"approved_by,omitempty"`
 	ApprovedByName   *string             `gorm:"type:varchar(255)" json:"approved_by_name,omitempty"`
 	ApprovedAt       *time.Time          `json:"approved_at,omitempty"`
+	// PaymentUUID links the triage row to the payment-service withdrawal
+	// (payment.withdrawals.uuid), the source of truth for money movement.
+	PaymentUUID      *string             `gorm:"type:uuid;index" json:"payment_uuid,omitempty"`
 	RejectedBy       *string             `gorm:"type:varchar(36)" json:"rejected_by,omitempty"`
 	RejectedByName   *string             `gorm:"type:varchar(255)" json:"rejected_by_name,omitempty"`
 	RejectedAt       *time.Time          `json:"rejected_at,omitempty"`

@@ -20,7 +20,12 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  RUST_VERSION: '1.75'
+  # 1.75 could not even read the workspace lock file ("lock file version `4`
+  # was found, but this version of Cargo does not understand this lock file"),
+  # so every Rust job died before compiling anything, and `cargo install
+  # cargo-audit` refused to run (0.22.2 requires rustc >= 1.88).
+  # v4 of the lock file format needs cargo >= 1.78; 1.88 satisfies both.
+  RUST_VERSION: '1.88'
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
@@ -44,8 +49,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # dtolnay/rust-action is unresolvable ("repository not found"), which killed
+      # every Rust job before a single line was compiled. rustup + the official
+      # setup action is the maintained equivalent.
       - name: Install Rust toolchain
-        uses: dtolnay/rust-action@stable
+        uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_VERSION }}
           components: clippy, rustfmt
@@ -75,9 +83,20 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
+      # Without fail-fast:false the first failing service cancels every other
+      # job in the matrix, so the remaining services report "cancelled" and
+      # never produce a verdict.
+      fail-fast: false
       matrix:
         service: [betting-engine, wallet-core, websocket-gateway]
-    
+
+    # wallet-core uses sqlx macros, which validate every query against a live
+    # database at COMPILE time. The variable must be set for the whole job,
+    # not only for the integration-test step, or the build itself fails.
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/test_db
+      REDIS_URL: redis://localhost:6379
+
     services:
       postgres:
         image: postgres:16-alpine
@@ -108,7 +127,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-action@stable
+        uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_VERSION }}
 
@@ -123,6 +142,16 @@ jobs:
             ~/.cargo/git
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      # wallet-core's tests exercise real reservations against the real schema,
+      # so the tables must exist before nextest runs.
+      - name: Apply wallet schema
+        if: matrix.service == 'wallet-core'
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+            -f libs/migrations/postgresql/015_wallet_core.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+            -f libs/migrations/postgresql/023_wallet_lock_settlement.sql
 
       - name: Run unit tests
         working-directory: services/rust/${{ matrix.service }}
@@ -158,19 +187,23 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-action@stable
+        uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_VERSION }}
 
       - name: Install cargo-audit
-        run: cargo install cargo-audit
+        # --locked is required: resolving cargo-audit fresh pulls transitive deps
+        # whose MSRV exceeds the pinned toolchain (kstring 2.0.5 wants 1.96),
+        # so an unlocked install fails on any toolchain that is not bleeding
+        # edge. The crate ships its own lockfile with compatible versions.
+        run: cargo install cargo-audit --locked
 
       - name: Run cargo audit
         working-directory: services/rust/${{ matrix.service }}
         run: cargo audit --deny warnings
 
       - name: Install cargo-deny
-        run: cargo install cargo-deny
+        run: cargo install cargo-deny --locked
 
       - name: Run cargo deny
         working-directory: services/rust

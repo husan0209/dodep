@@ -7,12 +7,21 @@ import (
 )
 
 // WalletAPI is the minimal wallet client surface used by services.
+//
+// Reservation lifecycle (withdrawal):
+//
+//	LockFunds   reserve funds (available -> locked), idempotent per reference
+//	SettleFunds book the reservation as a debit after the money left the platform
+//	UnlockFunds return the reservation when the operation did not happen
+//
+// SettleFunds is NOT "unlock + debit": the amount already left the available
+// balance at lock time, so debiting again would charge the player twice.
 type WalletAPI interface {
 	GetBalance(ctx context.Context, userID int64, currency string) (*Balance, error)
 	CreditWallet(ctx context.Context, req CreditRequest) (*CreditResult, error)
 	LockFunds(ctx context.Context, req LockRequest) (*LockResult, error)
-	UnlockFunds(ctx context.Context, lockID string, idempotencyKey string) error
-	FinalizeDebit(ctx context.Context, req FinalizeDebitRequest) (*DebitResult, error)
+	UnlockFunds(ctx context.Context, req UnlockRequest) error
+	SettleFunds(ctx context.Context, req SettleRequest) (*DebitResult, error)
 	Close() error
 }
 
@@ -34,4 +43,3 @@ type NOWPaymentsAPI interface {
 	// Withdrawal flow
 	CreatePayout(ctx context.Context, req CreatePayoutRequest) (*CreatePayoutResponse, error)
 }
-
