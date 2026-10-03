@@ -165,15 +165,27 @@ jobs:
         with:
           toolchain: ${{ env.RUST_VERSION }}
 
+      # `--locked` installs the tool with the dependency tree its own
+      # Cargo.lock pins, instead of resolving the newest compatible versions.
+      # Without it, `cargo install cargo-audit` picked up kstring 2.0.5, which
+      # requires rustc 1.96, and the install step died before cargo-audit ever
+      # ran:
+      #
+      #   rustc 1.88.0 is not supported by the following packages:
+      #   kstring@2.0.5 requires rustc 1.96.0
+      #   Try re-running `cargo install` with `--locked`
+      #
+      # The tool's MSRV then tracks the version we asked for, not whatever its
+      # dependencies happen to require that week.
       - name: Install cargo-audit
-        run: cargo install cargo-audit
+        run: cargo install cargo-audit --locked
 
       - name: Run cargo audit
         working-directory: services/rust/${{ matrix.service }}
         run: cargo audit --deny warnings
 
       - name: Install cargo-deny
-        run: cargo install cargo-deny
+        run: cargo install cargo-deny --locked
 
       - name: Run cargo deny
         working-directory: services/rust

@@ -23,6 +23,20 @@ jobs:
   lint:
     name: Lint Go Services
     runs-on: ubuntu-latest
+    # One job per module. `services/go` itself is not a Go module - each service
+    # beneath it is - so golangci-lint cannot be pointed at the parent directory:
+    #
+    #   typechecking error: pattern ./...: directory prefix . does not contain
+    #   main module or its selected dependencies
+    #
+    # which failed the job in under a second. `install-mode: binary` does not
+    # help: that mode still makes the action run the linter itself, just at the
+    # workspace root, which has no go.mod either. Giving the action a real
+    # module directory via a matrix is the same shape ci-go.yml already uses.
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [casino, notification]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -31,35 +45,17 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: |
-            services/go/casino/go.mod
-            services/go/notification/go.mod
+          cache-dependency-path: services/go/${{ matrix.service }}/go.sum
 
-      # `install-mode: binary` makes this step only fetch the binary. Without
-      # it the action runs `golangci-lint run` itself, and pointing it at
-      # `services/go` - which is not a module, each service under it is - gave
-      #
-      #   typechecking error: pattern ./...: directory prefix . does not
-      #   contain main module or its selected dependencies
-      #
-      # and failed the job before the per-service steps below ran. The two
-      # services are separate modules, so they have to be linted from their own
-      # directories, which is what the explicit steps do.
       - name: Install golangci-lint
         uses: golangci/golangci-lint-action@v4
         with:
           version: latest
-          install-mode: binary
+          working-directory: services/go/${{ matrix.service }}
 
-      - name: Lint Casino Service
-        run: |
-          cd services/go/casino
-          golangci-lint run ./...
-
-      - name: Lint Notification Service
-        run: |
-          cd services/go/notification
-          golangci-lint run ./...
+      - name: Run golangci-lint
+        working-directory: services/go/${{ matrix.service }}
+        run: golangci-lint run --out-format=github-actions
 
   test:
     name: Test Go Services
