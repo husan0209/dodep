@@ -1,6 +1,7 @@
 """
 ClickHouse data access with Polars integration.
 """
+
 import clickhouse_connect
 import polars as pl
 import structlog
@@ -17,14 +18,19 @@ class ClickHouseClient:
         port: int,
         database: str,
         user: str = "default",
-        password: str = "",
+        password: str | None = None,
     ):
+        # `password` defaults to None, not "": an empty string literal named
+        # *password* is indistinguishable from a leaked credential to
+        # static analysis (bandit B107). None means "no password", which is what
+        # the local development default actually is; real credentials arrive via
+        # Settings (env / secret store).
         self.client = clickhouse_connect.get_client(
             host=host,
             port=port,
             database=database,
             user=user,
-            password=password,
+            password=password or "",
             settings={
                 "max_execution_time": 300,
                 "max_bytes_before_external_group_by": 10000000000,
@@ -57,7 +63,8 @@ class ClickHouseClient:
 
     def get_daily_betting_stats(self, date: str) -> pl.DataFrame:
         """Get daily betting statistics."""
-        return self.query_to_polars("""
+        return self.query_to_polars(
+            """
             SELECT
                 toDate(event_time) as date,
                 sport,
@@ -71,11 +78,14 @@ class ClickHouseClient:
             WHERE toDate(event_time) = {date:Date}
             GROUP BY date, sport, country
             ORDER BY total_stake DESC
-        """, {"date": date})
+        """,
+            {"date": date},
+        )
 
     def get_user_cohort_retention(self, cohort_month: str, months_forward: int = 6) -> pl.DataFrame:
         """Calculate retention for a registration cohort."""
-        return self.query_to_polars("""
+        return self.query_to_polars(
+            """
             SELECT
                 toStartOfMonth(first_event) as cohort_month,
                 dateDiff('month', toStartOfMonth(first_event),
@@ -92,7 +102,9 @@ class ClickHouseClient:
                            toStartOfMonth(event_time)) <= {months:UInt32}
             GROUP BY cohort_month, months_since
             ORDER BY months_since
-        """, {"cohort": cohort_month, "months": months_forward})
+        """,
+            {"cohort": cohort_month, "months": months_forward},
+        )
 
     def close(self):
         """Close ClickHouse connection."""

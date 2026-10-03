@@ -1,4 +1,5 @@
 """Tests for the analytics service application wiring and endpoints."""
+
 from analytics.main import (
     app,
     export_data,

@@ -1,6 +1,7 @@
 """
 Configuration for Fraud ML Service
 """
+
 from pydantic_settings import BaseSettings
 
 
@@ -9,7 +10,10 @@ class Settings(BaseSettings):
 
     # Server
     http_port: int = 8000
-    http_host: str = "0.0.0.0"
+    # Loopback by default: binding every interface is a decision for the
+    # deployment, not for a config default (bandit B104). The container entrypoint
+    # passes `--host 0.0.0.0` to uvicorn explicitly, so images are unaffected.
+    http_host: str = "127.0.0.1"
 
     # Environment
     app_env: str = "development"

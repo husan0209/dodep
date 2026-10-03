@@ -47,14 +47,24 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
+          # analytics has no requirements.txt, so the cache key must key off the
+          # pyproject.toml that both services actually declare.
           cache-dependency-path: |
             services/python/${{ matrix.service }}/requirements*.txt
+            services/python/${{ matrix.service }}/pyproject.toml
 
       - name: Install dependencies
         working-directory: services/python/${{ matrix.service }}
         run: |
           pip install --upgrade pip
-          pip install ruff black mypy
+          # black is pinned: it is a formatter, so its output changes between
+          # releases and an unpinned `black --check` would break on its own
+          # upgrades. ruff and mypy stay unpinned.
+          pip install ruff mypy "black==26.5.1"
+          # mypy only means anything if the third-party packages resolve;
+          # without this every external import is Any and the check is a
+          # rubber stamp. Same install as ci.yaml's python-build.
+          pip install -e ".[dev]"
 
       - name: Run ruff
         working-directory: services/python/${{ matrix.service }}
@@ -64,6 +74,8 @@ jobs:
         working-directory: services/python/${{ matrix.service }}
         run: black --check .
 
+      # Whole tree (main.py, internal/, src/, tests/) - a superset of ci.yaml's
+      # `mypy src/`, so the two cannot drift apart.
       - name: Run mypy
         working-directory: services/python/${{ matrix.service }}
         run: mypy .
@@ -117,14 +129,21 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
+          # analytics has no requirements.txt, so the cache key must key off the
+          # pyproject.toml that both services actually declare.
           cache-dependency-path: |
             services/python/${{ matrix.service }}/requirements*.txt
+            services/python/${{ matrix.service }}/pyproject.toml
 
       - name: Install dependencies
         working-directory: services/python/${{ matrix.service }}
         run: |
           pip install --upgrade pip
-          pip install -r requirements.txt
+          # analytics has no requirements.txt at all, so `pip install -r
+          # requirements.txt` could never work for it. Both services are
+          # installable as packages from pyproject.toml - this is the same
+          # install ci.yaml's python-build uses.
+          pip install -e ".[dev]"
           pip install pytest pytest-cov pytest-asyncio
 
       - name: Run tests
@@ -176,31 +195,44 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install safety
-        run: pip install safety
+      - name: Install pip-audit
+        run: pip install pip-audit
 
-      - name: Run safety check
+      # `safety check --json` cannot pass: `safety check` is documented as
+      # unsupported beyond 1 May 2024 and `--json` is not a flag safety 3 accepts
+      # (it exits 64, a usage error), while `safety scan` refuses to run without
+      # an interactive login, so it can never be unattended. pip-audit needs no
+      # account and is the scanner this repo's own security skill prescribes for
+      # Python CI. It audits the resolved dependency set - i.e. exactly what the
+      # image ships - rather than the bare runner environment that a bare
+      # `safety check` would have inspected.
+      - name: Audit dependencies with pip-audit
         working-directory: services/python/${{ matrix.service }}
-        run: safety check --json > safety-results.json
+        run: |
+          pip install -e ".[dev]"
+          pip-audit --local --format json --output pip-audit.txt
 
-      - name: Upload safety results
+      - name: Upload pip-audit results
         uses: actions/upload-artifact@v4
         with:
-          name: safety-results-${{ matrix.service }}
-          path: safety-results.json
+          name: pip-audit-${{ matrix.service }}
+          path: services/python/${{ matrix.service }}/pip-audit.txt
 
       - name: Run bandit
         run: pip install bandit
 
+      # -c pyproject.toml so each service's own [tool.bandit] config applies
+      # (currently: tests/ is excluded, because B101 `assert` is not a
+      # vulnerability and a pytest suite cannot use anything else).
       - name: Scan with bandit
         working-directory: services/python/${{ matrix.service }}
-        run: bandit -r . -f json -o bandit-results.json
+        run: bandit -c pyproject.toml -r . -f json -o bandit-results.json
 
       - name: Upload bandit results
         uses: actions/upload-artifact@v4
         with:
           name: bandit-results-${{ matrix.service }}
-          path: bandit-results.json
+          path: services/python/${{ matrix.service }}/bandit-results.json
 
   # ==========================================================================
   # Build

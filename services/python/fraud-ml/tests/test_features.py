@@ -1,4 +1,5 @@
 """Tests for feature extraction."""
+
 import polars as pl
 import pytest
 
@@ -31,19 +32,21 @@ class TestFeatureExtractor:
         """Test derived feature computation."""
         # compute_derived_features() reads every extraction feature, so the
         # fixture has to provide all of them (not just the asserted ones).
-        df = pl.DataFrame({
-            "user_id": [1, 2],
-            "bets_7d": [20, 40],
-            "bets_24h": [5, 25],
-            "wins_7d": [5, 10],
-            "settled_7d": [10, 20],
-            "std_bet_30d": [50.0, 100.0],
-            "avg_bet_30d": [100.0, 200.0],
-            "max_bet_30d": [500.0, 900.0],
-            "total_deposit_30d": [1000.0, 2000.0],
-            "device_count_30d": [5, 2],
-            "ip_count_30d": [15, 5],
-        })
+        df = pl.DataFrame(
+            {
+                "user_id": [1, 2],
+                "bets_7d": [20, 40],
+                "bets_24h": [5, 25],
+                "wins_7d": [5, 10],
+                "settled_7d": [10, 20],
+                "std_bet_30d": [50.0, 100.0],
+                "avg_bet_30d": [100.0, 200.0],
+                "max_bet_30d": [500.0, 900.0],
+                "total_deposit_30d": [1000.0, 2000.0],
+                "device_count_30d": [5, 2],
+                "ip_count_30d": [15, 5],
+            }
+        )
 
         derived = extractor.compute_derived_features(df)
 

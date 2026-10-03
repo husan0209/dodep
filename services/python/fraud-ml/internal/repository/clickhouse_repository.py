@@ -6,8 +6,8 @@ Provides data access for ML models
 import logging
 from typing import Any
 
-import clickhouse_connect
 import pandas as pd
+from clickhouse_connect.driver.client import Client
 
 logger = logging.getLogger(__name__)
 
@@ -17,15 +17,10 @@ class ClickHouseRepository:
     Repository for accessing fraud detection data from ClickHouse
     """
 
-    def __init__(self, client: clickhouse_connect.Client):
+    def __init__(self, client: Client):
         self.client = client
 
-    def get_user_bets(
-        self,
-        user_id: int,
-        hours: int = 24,
-        limit: int = 1000
-    ) -> pd.DataFrame:
+    def get_user_bets(self, user_id: int, hours: int = 24, limit: int = 1000) -> pd.DataFrame:
         """Get user's betting history"""
         query = """
             SELECT
@@ -45,22 +40,16 @@ class ClickHouseRepository:
             LIMIT %(limit)s
         """
 
-        result = self.client.query(
-            query,
-            {"user_id": user_id, "hours": hours, "limit": limit}
-        )
+        result = self.client.query(query, {"user_id": user_id, "hours": hours, "limit": limit})
 
         if not result.result_rows:
             return pd.DataFrame()
 
-        columns = [col.name for col in result.column_names]
+        columns = list(result.column_names)
         return pd.DataFrame(result.result_rows, columns=columns)
 
     def get_user_transactions(
-        self,
-        user_id: int,
-        hours: int = 24,
-        limit: int = 1000
+        self, user_id: int, hours: int = 24, limit: int = 1000
     ) -> pd.DataFrame:
         """Get user's transaction history"""
         query = """
@@ -79,22 +68,16 @@ class ClickHouseRepository:
             LIMIT %(limit)s
         """
 
-        result = self.client.query(
-            query,
-            {"user_id": user_id, "hours": hours, "limit": limit}
-        )
+        result = self.client.query(query, {"user_id": user_id, "hours": hours, "limit": limit})
 
         if not result.result_rows:
             return pd.DataFrame()
 
-        columns = [col.name for col in result.column_names]
+        columns = list(result.column_names)
         return pd.DataFrame(result.result_rows, columns=columns)
 
     def get_user_login_history(
-        self,
-        user_id: int,
-        hours: int = 168,  # 7 days
-        limit: int = 100
+        self, user_id: int, hours: int = 168, limit: int = 100  # 7 days
     ) -> pd.DataFrame:
         """Get user's login history"""
         query = """
@@ -113,22 +96,16 @@ class ClickHouseRepository:
             LIMIT %(limit)s
         """
 
-        result = self.client.query(
-            query,
-            {"user_id": user_id, "hours": hours, "limit": limit}
-        )
+        result = self.client.query(query, {"user_id": user_id, "hours": hours, "limit": limit})
 
         if not result.result_rows:
             return pd.DataFrame()
 
-        columns = [col.name for col in result.column_names]
+        columns = list(result.column_names)
         return pd.DataFrame(result.result_rows, columns=columns)
 
     def get_user_bonus_history(
-        self,
-        user_id: int,
-        days: int = 30,
-        limit: int = 100
+        self, user_id: int, days: int = 30, limit: int = 100
     ) -> pd.DataFrame:
         """Get user's bonus history"""
         query = """
@@ -148,15 +125,12 @@ class ClickHouseRepository:
             LIMIT %(limit)s
         """
 
-        result = self.client.query(
-            query,
-            {"user_id": user_id, "days": days, "limit": limit}
-        )
+        result = self.client.query(query, {"user_id": user_id, "days": days, "limit": limit})
 
         if not result.result_rows:
             return pd.DataFrame()
 
-        columns = [col.name for col in result.column_names]
+        columns = list(result.column_names)
         return pd.DataFrame(result.result_rows, columns=columns)
 
     def get_user_profile(self, user_id: int) -> dict[str, Any] | None:
@@ -250,15 +224,17 @@ class ClickHouseRepository:
         result = self.client.query(bets_query, {"user_id": user_id})
         if result.result_rows:
             row = result.result_rows[0]
-            features.update({
-                "total_bets_30d": row[0],
-                "total_staked_30d": float(row[1]) if row[1] else 0,
-                "avg_stake": float(row[2]) if row[2] else 0,
-                "max_stake": float(row[3]) if row[3] else 0,
-                "total_won_30d": float(row[4]) if row[4] else 0,
-                "wins_30d": row[5],
-                "losses_30d": row[6],
-            })
+            features.update(
+                {
+                    "total_bets_30d": row[0],
+                    "total_staked_30d": float(row[1]) if row[1] else 0,
+                    "avg_stake": float(row[2]) if row[2] else 0,
+                    "max_stake": float(row[3]) if row[3] else 0,
+                    "total_won_30d": float(row[4]) if row[4] else 0,
+                    "wins_30d": row[5],
+                    "losses_30d": row[6],
+                }
+            )
 
         # Get transaction stats
         tx_query = """
@@ -274,10 +250,12 @@ class ClickHouseRepository:
         result = self.client.query(tx_query, {"user_id": user_id})
         if result.result_rows:
             row = result.result_rows[0]
-            features.update({
-                "total_transactions_30d": row[0],
-                "total_transaction_amount_30d": float(row[1]) if row[1] else 0,
-                "failed_transactions_30d": row[2],
-            })
+            features.update(
+                {
+                    "total_transactions_30d": row[0],
+                    "total_transaction_amount_30d": float(row[1]) if row[1] else 0,
+                    "failed_transactions_30d": row[2],
+                }
+            )
 
         return features

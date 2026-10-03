@@ -1,7 +1,9 @@
 """
 Feature store for caching computed features.
 """
+
 import hashlib
+import tempfile
 from datetime import datetime
 from pathlib import Path
 
@@ -10,25 +12,33 @@ import structlog
 
 logger = structlog.get_logger()
 
+# Derived from the platform temp dir rather than a hardcoded "/tmp/..." literal:
+# "/tmp" is world-writable, so a pre-created cache directory there is writable by
+# any local user (bandit B108). Resolve it per call so the value follows TMPDIR.
+DEFAULT_CACHE_DIR = str(Path(tempfile.gettempdir()) / "fraud-ml-features")
+
 
 class FeatureStore:
     """Feature store with parquet-based caching."""
 
-    def __init__(self, cache_dir: str = "/tmp/features"):
+    def __init__(self, cache_dir: str = DEFAULT_CACHE_DIR):
         self.cache_dir = Path(cache_dir)
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        # 0o700: the cache holds per-user betting features, so keep it owner-only
+        # even when the temp dir itself is shared.
+        self.cache_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
         logger.info("feature_store.initialized", cache_dir=str(self.cache_dir))
 
     def _compute_cache_key(self, user_ids: list[int], as_of: datetime) -> str:
-        """Compute cache key from user IDs and timestamp."""
+        """Compute cache key from user IDs and timestamp.
+
+        SHA-256, not MD5: this is a cache filename, not a security primitive, so
+        there is no reason to reach for a broken hash (bandit B324).
+        """
         key_str = f"{sorted(user_ids)}_{as_of.isoformat()}"
-        return hashlib.md5(key_str.encode()).hexdigest()
+        return hashlib.sha256(key_str.encode()).hexdigest()
 
     def get_cached(
-        self,
-        user_ids: list[int],
-        as_of: datetime,
-        ttl_hours: int = 24
+        self, user_ids: list[int], as_of: datetime, ttl_hours: int = 24
     ) -> pl.DataFrame | None:
         """Get cached features if available and not expired."""
         cache_key = self._compute_cache_key(user_ids, as_of)

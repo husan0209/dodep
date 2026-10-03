@@ -1,6 +1,7 @@
 """
 Training pipeline for fraud detection model.
 """
+
 from datetime import datetime
 from pathlib import Path
 

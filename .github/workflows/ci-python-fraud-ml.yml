@@ -36,7 +36,10 @@ jobs:
         run: |
           cd services/python/fraud-ml
           pip install --upgrade pip
-          pip install ruff black mypy
+          # black is pinned: it is a formatter, so its output changes between
+          # releases and an unpinned `black --check` would break on its own
+          # upgrades. ruff and mypy stay unpinned.
+          pip install ruff mypy "black==26.5.1"
           pip install -r requirements.txt
 
       - name: Lint with ruff
@@ -49,10 +52,13 @@ jobs:
           cd services/python/fraud-ml
           black --check .
 
+      # Same scope as ci-python.yml and a superset of ci.yaml's `mypy src/`.
+      # --ignore-missing-imports is already set in [tool.mypy] in pyproject.toml,
+      # so repeating it on the command line only invited the two to drift.
       - name: Type check with mypy
         run: |
           cd services/python/fraud-ml
-          mypy . --ignore-missing-imports
+          mypy .
 
   test:
     name: Test Python ML

@@ -1,6 +1,7 @@
 """
 ONNX model export and validation.
 """
+
 from pathlib import Path
 
 import numpy as np
@@ -107,10 +108,7 @@ def optimize_onnx_model(onnx_path: Path, output_path: Path | None = None) -> Pat
 
 
 def compare_predictions(
-    original_model,
-    onnx_path: Path,
-    test_data: np.ndarray,
-    tolerance: float = 0.01
+    original_model, onnx_path: Path, test_data: np.ndarray, tolerance: float = 0.01
 ) -> dict:
     """
     Compare predictions between original and ONNX model.

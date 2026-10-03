@@ -1,4 +1,5 @@
 """Tests for the analytics package metadata."""
+
 import analytics
 
 

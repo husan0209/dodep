@@ -19,12 +19,7 @@ class RedpandaConsumer:
     Consumes events from Redpanda/Kafka and runs fraud detection
     """
 
-    def __init__(
-        self,
-        brokers: list,
-        fraud_detector: Any,
-        group_id: str = "fraud-ml-service"
-    ):
+    def __init__(self, brokers: list, fraud_detector: Any, group_id: str = "fraud-ml-service"):
         self.brokers = brokers
         self.fraud_detector = fraud_detector
         self.group_id = group_id
@@ -220,9 +215,7 @@ class RedpandaConsumer:
         }
 
         # Run account takeover detection
-        prediction = self.fraud_detector.detect_account_takeover(
-            user_id, login_data
-        )
+        prediction = self.fraud_detector.detect_account_takeover(user_id, login_data)
 
         if prediction.is_fraud:
             logger.warning(

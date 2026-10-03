@@ -1,6 +1,7 @@
 """
 Fraud detection model using XGBoost.
 """
+
 from pathlib import Path
 
 import numpy as np
@@ -74,7 +75,8 @@ class FraudModel:
         # Train
         self.model = xgb.XGBClassifier(**self.params)
         self.model.fit(
-            x_train, y_train,
+            x_train,
+            y_train,
             eval_set=[(x_test, y_test)],
             verbose=False,
         )
@@ -126,11 +128,7 @@ class FraudModel:
         proba: np.ndarray = self.model.predict_proba(x)[:, 1]
         return proba
 
-    def predict_with_threshold(
-        self,
-        x: np.ndarray,
-        threshold: float = 0.5
-    ) -> np.ndarray:
+    def predict_with_threshold(self, x: np.ndarray, threshold: float = 0.5) -> np.ndarray:
         """Predict fraud class with custom threshold."""
         proba = self.predict(x)
         return (proba >= threshold).astype(int)
@@ -163,9 +161,7 @@ class FraudModel:
         if self.model is None:
             raise ValueError("Model not trained")
 
-        initial_type = [
-            ("features", FloatTensorType([None, len(self.FEATURE_COLUMNS)]))
-        ]
+        initial_type = [("features", FloatTensorType([None, len(self.FEATURE_COLUMNS)]))]
 
         onnx_model = onnxmltools.convert_xgboost(self.model, initial_types=initial_type)
 

@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class FraudPrediction:
     """Fraud prediction result"""
+
     user_id: int
     fraud_type: str
     risk_score: float
@@ -38,10 +39,7 @@ class BetAnomalyDetector:
 
     def __init__(self):
         self.model = IsolationForest(
-            n_estimators=100,
-            contamination=0.05,
-            random_state=42,
-            n_jobs=-1
+            n_estimators=100, contamination=0.05, random_state=42, n_jobs=-1
         )
         self.scaler = StandardScaler()
         self.is_fitted = False
@@ -54,32 +52,30 @@ class BetAnomalyDetector:
         features = pd.DataFrame()
 
         # Bet amount statistics
-        features['bet_amount_mean'] = bets['stake'].mean()
-        features['bet_amount_std'] = bets['stake'].std()
-        features['bet_amount_max'] = bets['stake'].max()
-        features['bet_amount_min'] = bets['stake'].min()
+        features["bet_amount_mean"] = bets["stake"].mean()
+        features["bet_amount_std"] = bets["stake"].std()
+        features["bet_amount_max"] = bets["stake"].max()
+        features["bet_amount_min"] = bets["stake"].min()
 
         # Betting frequency
-        features['bets_per_hour'] = len(bets) / max(
-            (bets['placed_at'].max() - bets['placed_at'].min()).total_seconds() / 3600, 1
+        features["bets_per_hour"] = len(bets) / max(
+            (bets["placed_at"].max() - bets["placed_at"].min()).total_seconds() / 3600, 1
         )
 
         # Win/loss ratio
-        features['win_rate'] = (bets['status'] == 'won').mean()
+        features["win_rate"] = (bets["status"] == "won").mean()
 
         # Odds statistics
-        if 'odds' in bets.columns:
-            features['avg_odds'] = bets['odds'].mean()
-            features['max_odds'] = bets['odds'].max()
+        if "odds" in bets.columns:
+            features["avg_odds"] = bets["odds"].mean()
+            features["max_odds"] = bets["odds"].max()
 
         # Time patterns
-        features['night_betting_ratio'] = (
-            bets['placed_at'].dt.hour.isin(range(0, 6))
-        ).mean()
+        features["night_betting_ratio"] = (bets["placed_at"].dt.hour.isin(range(0, 6))).mean()
 
         # Rapid betting (multiple bets within short time)
-        bet_diffs = bets['placed_at'].diff().dt.total_seconds()
-        features['rapid_bet_ratio'] = (bet_diffs < 10).mean()
+        bet_diffs = bets["placed_at"].diff().dt.total_seconds()
+        features["rapid_bet_ratio"] = (bet_diffs < 10).mean()
 
         return features.fillna(0)
 
@@ -106,13 +102,13 @@ class BetAnomalyDetector:
 
     def save(self, path: Path):
         """Save model to disk"""
-        joblib.dump({'model': self.model, 'scaler': self.scaler}, path)
+        joblib.dump({"model": self.model, "scaler": self.scaler}, path)
 
     def load(self, path: Path):
         """Load model from disk"""
         data = joblib.load(path)
-        self.model = data['model']
-        self.scaler = data['scaler']
+        self.model = data["model"]
+        self.scaler = data["scaler"]
         self.is_fitted = True
 
 
@@ -123,11 +119,7 @@ class BonusAbuseDetector:
 
     def __init__(self):
         self.model = XGBClassifier(
-            n_estimators=100,
-            max_depth=6,
-            learning_rate=0.1,
-            random_state=42,
-            n_jobs=-1
+            n_estimators=100, max_depth=6, learning_rate=0.1, random_state=42, n_jobs=-1
         )
         self.scaler = StandardScaler()
         self.is_fitted = False
@@ -137,19 +129,18 @@ class BonusAbuseDetector:
         features = pd.DataFrame([user_data])
 
         # Bonus-related features
-        features['bonuses_claimed_24h'] = features.get('bonuses_claimed_24h', 0)
-        features['bonus_amount_total'] = features.get('bonus_amount_total', 0)
-        features['wagering_completed'] = features.get('wagering_completed', 0)
-        features['withdrawal_after_bonus'] = features.get('withdrawal_after_bonus', False)
+        features["bonuses_claimed_24h"] = features.get("bonuses_claimed_24h", 0)
+        features["bonus_amount_total"] = features.get("bonus_amount_total", 0)
+        features["wagering_completed"] = features.get("wagering_completed", 0)
+        features["withdrawal_after_bonus"] = features.get("withdrawal_after_bonus", False)
 
         # Account age
-        features['account_age_days'] = features.get('account_age_days', 0)
+        features["account_age_days"] = features.get("account_age_days", 0)
 
         # Deposit pattern
-        features['deposits_count'] = features.get('deposits_count', 0)
-        features['deposit_bonus_ratio'] = (
-            features['bonus_amount_total'] /
-            (features.get('total_deposits', 1) or 1)
+        features["deposits_count"] = features.get("deposits_count", 0)
+        features["deposit_bonus_ratio"] = features["bonus_amount_total"] / (
+            features.get("total_deposits", 1) or 1
         )
 
         return features
@@ -167,29 +158,39 @@ class BonusAbuseDetector:
             raise ValueError("Model not fitted")
 
         scaled = self.scaler.transform(features)
-        return self.model.predict_proba(scaled)[:, 1]
+        # np.asarray: xgboost's predict_proba is typed as returning Any, which
+        # would otherwise leak into this method's declared ndarray return type.
+        return np.asarray(self.model.predict_proba(scaled))[:, 1]
 
     def get_feature_importance(self) -> dict[str, float]:
         """Get feature importance scores"""
         if not self.is_fitted:
             return {}
-        return dict(zip(
-            ['bonuses_claimed_24h', 'bonus_amount_total', 'wagering_completed',
-             'withdrawal_after_bonus', 'account_age_days', 'deposits_count',
-             'deposit_bonus_ratio'],
-            self.model.feature_importances_,
-            strict=False,
-        ))
+        return dict(
+            zip(
+                [
+                    "bonuses_claimed_24h",
+                    "bonus_amount_total",
+                    "wagering_completed",
+                    "withdrawal_after_bonus",
+                    "account_age_days",
+                    "deposits_count",
+                    "deposit_bonus_ratio",
+                ],
+                self.model.feature_importances_,
+                strict=False,
+            )
+        )
 
     def save(self, path: Path):
         """Save model to disk"""
-        joblib.dump({'model': self.model, 'scaler': self.scaler}, path)
+        joblib.dump({"model": self.model, "scaler": self.scaler}, path)
 
     def load(self, path: Path):
         """Load model from disk"""
         data = joblib.load(path)
-        self.model = data['model']
-        self.scaler = data['scaler']
+        self.model = data["model"]
+        self.scaler = data["scaler"]
         self.is_fitted = True
 
 
@@ -200,11 +201,7 @@ class PaymentFraudDetector:
 
     def __init__(self):
         self.model = RandomForestClassifier(
-            n_estimators=100,
-            max_depth=10,
-            random_state=42,
-            n_jobs=-1,
-            class_weight='balanced'
+            n_estimators=100, max_depth=10, random_state=42, n_jobs=-1, class_weight="balanced"
         )
         self.scaler = StandardScaler()
         self.is_fitted = False
@@ -217,30 +214,26 @@ class PaymentFraudDetector:
         features = pd.DataFrame()
 
         # Transaction statistics
-        features['transaction_count_24h'] = len(transactions)
-        features['total_amount_24h'] = transactions['amount'].sum()
-        features['avg_transaction_amount'] = transactions['amount'].mean()
+        features["transaction_count_24h"] = len(transactions)
+        features["total_amount_24h"] = transactions["amount"].sum()
+        features["avg_transaction_amount"] = transactions["amount"].mean()
 
         # Payment method diversity
-        features['unique_payment_methods'] = transactions['payment_method'].nunique()
+        features["unique_payment_methods"] = transactions["payment_method"].nunique()
 
         # Failed transactions
-        features['failed_tx_ratio'] = (transactions['status'] == 'failed').mean()
+        features["failed_tx_ratio"] = (transactions["status"] == "failed").mean()
 
         # Time patterns
-        features['night_tx_ratio'] = (
-            transactions['created_at'].dt.hour.isin(range(0, 6))
-        ).mean()
+        features["night_tx_ratio"] = (transactions["created_at"].dt.hour.isin(range(0, 6))).mean()
 
         # Rapid transactions
-        tx_diffs = transactions['created_at'].diff().dt.total_seconds()
-        features['rapid_tx_ratio'] = (tx_diffs < 60).mean()
+        tx_diffs = transactions["created_at"].diff().dt.total_seconds()
+        features["rapid_tx_ratio"] = (tx_diffs < 60).mean()
 
         # Amount patterns
-        features['amount_std'] = transactions['amount'].std()
-        features['round_amount_ratio'] = (
-            (transactions['amount'] % 100 == 0).mean()
-        )
+        features["amount_std"] = transactions["amount"].std()
+        features["round_amount_ratio"] = (transactions["amount"] % 100 == 0).mean()
 
         return features.fillna(0)
 
@@ -257,17 +250,19 @@ class PaymentFraudDetector:
             raise ValueError("Model not fitted")
 
         scaled = self.scaler.transform(features)
-        return self.model.predict_proba(scaled)[:, 1]
+        # np.asarray: xgboost's predict_proba is typed as returning Any, which
+        # would otherwise leak into this method's declared ndarray return type.
+        return np.asarray(self.model.predict_proba(scaled))[:, 1]
 
     def save(self, path: Path):
         """Save model to disk"""
-        joblib.dump({'model': self.model, 'scaler': self.scaler}, path)
+        joblib.dump({"model": self.model, "scaler": self.scaler}, path)
 
     def load(self, path: Path):
         """Load model from disk"""
         data = joblib.load(path)
-        self.model = data['model']
-        self.scaler = data['scaler']
+        self.model = data["model"]
+        self.scaler = data["scaler"]
         self.is_fitted = True
 
 
@@ -278,11 +273,7 @@ class AccountTakeoverDetector:
 
     def __init__(self):
         self.model = XGBClassifier(
-            n_estimators=100,
-            max_depth=6,
-            learning_rate=0.1,
-            random_state=42,
-            n_jobs=-1
+            n_estimators=100, max_depth=6, learning_rate=0.1, random_state=42, n_jobs=-1
         )
         self.scaler = StandardScaler()
         self.is_fitted = False
@@ -298,34 +289,33 @@ class AccountTakeoverDetector:
         baseline = self.user_baselines.get(user_id, {})
 
         # Location features
-        features['new_country'] = (
-            login_data.get('country') != baseline.get('country', login_data.get('country'))
+        features["new_country"] = login_data.get("country") != baseline.get(
+            "country", login_data.get("country")
         )
-        features['new_ip'] = login_data.get('ip') != baseline.get('ip', login_data.get('ip'))
-        features['new_device'] = (
-            login_data.get('device_fingerprint')
-            != baseline.get('device_fingerprint', login_data.get('device_fingerprint'))
+        features["new_ip"] = login_data.get("ip") != baseline.get("ip", login_data.get("ip"))
+        features["new_device"] = login_data.get("device_fingerprint") != baseline.get(
+            "device_fingerprint", login_data.get("device_fingerprint")
         )
 
         # Time features
-        features['unusual_hour'] = login_data.get('hour', 12) in range(0, 6)
-        features['time_since_last_login'] = login_data.get('hours_since_last_login', 24)
+        features["unusual_hour"] = login_data.get("hour", 12) in range(0, 6)
+        features["time_since_last_login"] = login_data.get("hours_since_last_login", 24)
 
         # Failed attempts
-        features['failed_attempts_24h'] = login_data.get('failed_attempts_24h', 0)
+        features["failed_attempts_24h"] = login_data.get("failed_attempts_24h", 0)
 
         # Multiple locations
-        features['locations_24h'] = login_data.get('locations_24h', 1)
+        features["locations_24h"] = login_data.get("locations_24h", 1)
 
         return features
 
     def update_baseline(self, user_id: int, login_data: dict):
         """Update user behavior baseline"""
         self.user_baselines[user_id] = {
-            'country': login_data.get('country'),
-            'ip': login_data.get('ip'),
-            'device_fingerprint': login_data.get('device_fingerprint'),
-            'typical_hours': login_data.get('hour', 12),
+            "country": login_data.get("country"),
+            "ip": login_data.get("ip"),
+            "device_fingerprint": login_data.get("device_fingerprint"),
+            "typical_hours": login_data.get("hour", 12),
         }
 
     def fit(self, features: pd.DataFrame, y: pd.Series):
@@ -341,22 +331,22 @@ class AccountTakeoverDetector:
             raise ValueError("Model not fitted")
 
         scaled = self.scaler.transform(features)
-        return self.model.predict_proba(scaled)[:, 1]
+        # np.asarray: xgboost's predict_proba is typed as returning Any, which
+        # would otherwise leak into this method's declared ndarray return type.
+        return np.asarray(self.model.predict_proba(scaled))[:, 1]
 
     def save(self, path: Path):
         """Save model to disk"""
-        joblib.dump({
-            'model': self.model,
-            'scaler': self.scaler,
-            'baselines': self.user_baselines
-        }, path)
+        joblib.dump(
+            {"model": self.model, "scaler": self.scaler, "baselines": self.user_baselines}, path
+        )
 
     def load(self, path: Path):
         """Load model from disk"""
         data = joblib.load(path)
-        self.model = data['model']
-        self.scaler = data['scaler']
-        self.user_baselines = data.get('baselines', {})
+        self.model = data["model"]
+        self.scaler = data["scaler"]
+        self.user_baselines = data.get("baselines", {})
         self.is_fitted = True
 
 
@@ -390,7 +380,7 @@ class FraudDetector:
                 is_fraud=False,
                 confidence=0.0,
                 features={},
-                timestamp=datetime.now()
+                timestamp=datetime.now(),
             )
 
         predictions, scores = self.bet_anomaly_detector.predict(features)
@@ -405,7 +395,7 @@ class FraudDetector:
             confidence=1.0 - risk_score if is_anomaly else risk_score,
             features=features.iloc[0].to_dict(),
             timestamp=datetime.now(),
-            explanation="Anomalous betting pattern detected" if is_anomaly else None
+            explanation="Anomalous betting pattern detected" if is_anomaly else None,
         )
 
     def detect_bonus_abuse(self, user_id: int, user_data: dict) -> FraudPrediction:
@@ -420,7 +410,7 @@ class FraudDetector:
                 is_fraud=False,
                 confidence=0.0,
                 features={},
-                timestamp=datetime.now()
+                timestamp=datetime.now(),
             )
 
         proba = self.bonus_abuse_detector.predict_proba(features)[0]
@@ -434,7 +424,7 @@ class FraudDetector:
             confidence=proba if is_abuse else 1 - proba,
             features=features.iloc[0].to_dict(),
             timestamp=datetime.now(),
-            explanation="Potential bonus abuse detected" if is_abuse else None
+            explanation="Potential bonus abuse detected" if is_abuse else None,
         )
 
     def detect_payment_fraud(self, user_id: int, transactions: pd.DataFrame) -> FraudPrediction:
@@ -449,7 +439,7 @@ class FraudDetector:
                 is_fraud=False,
                 confidence=0.0,
                 features={},
-                timestamp=datetime.now()
+                timestamp=datetime.now(),
             )
 
         proba = self.payment_fraud_detector.predict_proba(features)[0]
@@ -463,7 +453,7 @@ class FraudDetector:
             confidence=proba if is_fraud else 1 - proba,
             features=features.iloc[0].to_dict(),
             timestamp=datetime.now(),
-            explanation="Potential payment fraud detected" if is_fraud else None
+            explanation="Potential payment fraud detected" if is_fraud else None,
         )
 
     def detect_account_takeover(self, user_id: int, login_data: dict) -> FraudPrediction:
@@ -478,7 +468,7 @@ class FraudDetector:
                 is_fraud=False,
                 confidence=0.0,
                 features={},
-                timestamp=datetime.now()
+                timestamp=datetime.now(),
             )
 
         proba = self.account_takeover_detector.predict_proba(features)[0]
@@ -496,7 +486,7 @@ class FraudDetector:
             confidence=proba if is_takeover else 1 - proba,
             features=features.iloc[0].to_dict(),
             timestamp=datetime.now(),
-            explanation="Potential account takeover detected" if is_takeover else None
+            explanation="Potential account takeover detected" if is_takeover else None,
         )
 
     def save_models(self):

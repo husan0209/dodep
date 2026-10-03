@@ -1,6 +1,7 @@
 """
 Model evaluation metrics for fraud detection.
 """
+
 import numpy as np
 import structlog
 from sklearn.metrics import (
@@ -16,9 +17,7 @@ logger = structlog.get_logger()
 
 
 def calculate_metrics(
-    y_true: np.ndarray,
-    y_pred_proba: np.ndarray,
-    target_recall: float = 0.90
+    y_true: np.ndarray, y_pred_proba: np.ndarray, target_recall: float = 0.90
 ) -> dict:
     """
     Calculate comprehensive fraud detection metrics.
@@ -66,28 +65,23 @@ def calculate_metrics(
         # Discrimination
         "auc_roc": float(auc),
         "avg_precision": float(ap),
-
         # Threshold-based
         f"precision_at_{recall_key}_recall": float(precision_at_recall),
         "threshold": float(threshold),
-
         # Confusion matrix
         "true_positives": int(cm[1, 1]),
         "false_positives": int(cm[0, 1]),
         "true_negatives": int(cm[0, 0]),
         "false_negatives": int(cm[1, 0]),
-
         # Classification metrics
         "precision": precision,
         "recall": recall,
         "f1_score": f1_score,
-
         # Class distribution
         "samples_total": len(y_true),
         "samples_positive": int(y_true.sum()),
         "samples_negative": int(len(y_true) - y_true.sum()),
         "positive_rate": float(y_true.mean()),
-
         # ROC curve (sampled for storage)
         "roc_curve": {
             "fpr": fpr[::10].tolist(),  # Sample every 10th point
@@ -106,11 +100,7 @@ def calculate_metrics(
     return metrics
 
 
-def compare_models(
-    metrics_a: dict,
-    metrics_b: dict,
-    metric_names: list[str] | None = None
-) -> dict:
+def compare_models(metrics_a: dict, metrics_b: dict, metric_names: list[str] | None = None) -> dict:
     """
     Compare two models' metrics.
 
@@ -136,9 +126,7 @@ def compare_models(
 
 
 def validate_quality_gates(
-    metrics: dict,
-    auc_threshold: float = 0.90,
-    precision_threshold: float = 0.50
+    metrics: dict, auc_threshold: float = 0.90, precision_threshold: float = 0.50
 ) -> tuple[bool, list[str]]:
     """
     Validate model meets quality gates.
@@ -149,9 +137,7 @@ def validate_quality_gates(
     failures = []
 
     if metrics["auc_roc"] < auc_threshold:
-        failures.append(
-            f"AUC {metrics['auc_roc']:.4f} below threshold {auc_threshold}"
-        )
+        failures.append(f"AUC {metrics['auc_roc']:.4f} below threshold {auc_threshold}")
 
     if metrics["precision_at_90_recall"] < precision_threshold:
         failures.append(

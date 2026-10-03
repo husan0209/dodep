@@ -1,4 +1,5 @@
 """Tests for fraud detection model."""
+
 import numpy as np
 import polars as pl
 import pytest

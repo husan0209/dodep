@@ -1,6 +1,7 @@
 """
 Feature transformation and registry.
 """
+
 import polars as pl
 import structlog
 

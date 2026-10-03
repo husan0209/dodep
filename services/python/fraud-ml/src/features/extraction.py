@@ -1,6 +1,7 @@
 """
 Feature extraction from ClickHouse.
 """
+
 from datetime import datetime, timedelta
 
 import polars as pl
@@ -17,11 +18,7 @@ class FeatureExtractor:
     def __init__(self, ch_client: ClickHouseClient):
         self.ch = ch_client
 
-    def extract_user_features(
-        self,
-        user_ids: list[int],
-        as_of: datetime
-    ) -> pl.DataFrame:
+    def extract_user_features(self, user_ids: list[int], as_of: datetime) -> pl.DataFrame:
         """
         Extract features for a batch of users as of a specific time.
 
@@ -76,13 +73,16 @@ class FeatureExtractor:
         GROUP BY user_id
         """
 
-        result = self.ch.query_to_polars(query, {
-            "user_ids": ",".join(str(uid) for uid in user_ids),
-            "as_of": as_of.isoformat(),
-            "cutoff_24h": (as_of - timedelta(hours=24)).isoformat(),
-            "cutoff_7d": (as_of - timedelta(days=7)).isoformat(),
-            "cutoff_30d": (as_of - timedelta(days=30)).isoformat(),
-        })
+        result = self.ch.query_to_polars(
+            query,
+            {
+                "user_ids": ",".join(str(uid) for uid in user_ids),
+                "as_of": as_of.isoformat(),
+                "cutoff_24h": (as_of - timedelta(hours=24)).isoformat(),
+                "cutoff_7d": (as_of - timedelta(days=7)).isoformat(),
+                "cutoff_30d": (as_of - timedelta(days=30)).isoformat(),
+            },
+        )
 
         logger.info(
             "features.extracted",
@@ -106,48 +106,51 @@ class FeatureExtractor:
         if df.is_empty():
             return df
 
-        derived = df.with_columns([
-            # Win rate
-            (pl.col("wins_7d") / pl.col("settled_7d").clip(lower_bound=1))
-                .alias("win_rate_7d"),
-
-            # Coefficient of variation (bet amount consistency)
-            (pl.col("std_bet_30d") / pl.col("avg_bet_30d").clip(lower_bound=0.01))
-                .alias("bet_cv_30d"),
-
-            # Deposit to bet ratio
-            (pl.col("total_deposit_30d") /
-             pl.col("avg_bet_30d").clip(lower_bound=0.01) /
-             pl.col("bets_7d").clip(lower_bound=1) * 7)
-                .alias("deposit_bet_ratio"),
-
-            # Multi-device indicator
-            (pl.col("device_count_30d") > 3).cast(pl.Int8).alias("multi_device"),
-
-            # Multi-IP indicator
-            (pl.col("ip_count_30d") > 10).cast(pl.Int8).alias("multi_ip"),
-
-            # High roller indicator
-            (pl.col("max_bet_30d") > pl.col("avg_bet_30d") * 10).cast(pl.Int8).alias("high_roller"),
-
-            # Rapid bettor indicator
-            (pl.col("bets_24h") > pl.col("bets_7d") * 0.5).cast(pl.Int8).alias("rapid_bettor"),
-        ]).fill_null(0)
+        derived = df.with_columns(
+            [
+                # Win rate
+                (pl.col("wins_7d") / pl.col("settled_7d").clip(lower_bound=1)).alias("win_rate_7d"),
+                # Coefficient of variation (bet amount consistency)
+                (pl.col("std_bet_30d") / pl.col("avg_bet_30d").clip(lower_bound=0.01)).alias(
+                    "bet_cv_30d"
+                ),
+                # Deposit to bet ratio
+                (
+                    pl.col("total_deposit_30d")
+                    / pl.col("avg_bet_30d").clip(lower_bound=0.01)
+                    / pl.col("bets_7d").clip(lower_bound=1)
+                    * 7
+                ).alias("deposit_bet_ratio"),
+                # Multi-device indicator
+                (pl.col("device_count_30d") > 3).cast(pl.Int8).alias("multi_device"),
+                # Multi-IP indicator
+                (pl.col("ip_count_30d") > 10).cast(pl.Int8).alias("multi_ip"),
+                # High roller indicator
+                (pl.col("max_bet_30d") > pl.col("avg_bet_30d") * 10)
+                .cast(pl.Int8)
+                .alias("high_roller"),
+                # Rapid bettor indicator
+                (pl.col("bets_24h") > pl.col("bets_7d") * 0.5).cast(pl.Int8).alias("rapid_bettor"),
+            ]
+        ).fill_null(0)
 
         logger.debug(
             "features.derived_computed",
             features=[
-                "win_rate_7d", "bet_cv_30d", "deposit_bet_ratio",
-                "multi_device", "multi_ip", "high_roller", "rapid_bettor",
+                "win_rate_7d",
+                "bet_cv_30d",
+                "deposit_bet_ratio",
+                "multi_device",
+                "multi_ip",
+                "high_roller",
+                "rapid_bettor",
             ],
         )
 
         return derived
 
     def extract_training_data(
-        self,
-        lookback_days: int = 90,
-        as_of: datetime | None = None
+        self, lookback_days: int = 90, as_of: datetime | None = None
     ) -> pl.DataFrame:
         """
         Extract training data with labels for model training.
@@ -215,10 +218,13 @@ class FeatureExtractor:
         QUALIFY row_number() OVER (PARTITION BY ue.user_id ORDER BY ue.event_time DESC) = 1
         """
 
-        df = self.ch.query_to_polars(query, {
-            "cutoff": cutoff.isoformat(),
-            "as_of": as_of.isoformat(),
-        })
+        df = self.ch.query_to_polars(
+            query,
+            {
+                "cutoff": cutoff.isoformat(),
+                "as_of": as_of.isoformat(),
+            },
+        )
 
         logger.info(
             "features.training_data_extracted",

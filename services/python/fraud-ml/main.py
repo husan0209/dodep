@@ -7,6 +7,7 @@ Architecture:
 - Rust serves models in production (< 5ms inference)
 - This FastAPI service is for training and batch scoring
 """
+
 import logging
 from contextlib import asynccontextmanager
 
