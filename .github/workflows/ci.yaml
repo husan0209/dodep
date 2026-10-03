@@ -182,8 +182,11 @@ jobs:
     - name: Build
       run: npm run build
     
+    # No `--run` here: it is a vitest flag, and apps/web runs jest, which
+    # rejects it with 'Unrecognized option "run"'. Each app's `test` script is
+    # already non-interactive (jest exits on its own, admin uses `vitest run`).
     - name: Test
-      run: npm run test -- --run
+      run: npm run test
 
   # Security scanning
   security-scan:
