@@ -63,7 +63,9 @@ jobs:
 
       - name: Run rustfmt
         working-directory: services/rust/${{ matrix.service }}
-        run: cargo fmt -- --check
+        # --all matches ci.yaml: it also covers libs/shared/rust, which is a
+        # path dependency and therefore an implicit workspace member.
+        run: cargo fmt --all -- --check
 
       - name: Run clippy
         working-directory: services/rust/${{ matrix.service }}
