@@ -838,6 +838,9 @@ func (s *AuthService) ChangePassword(ctx context.Context, userID string, current
 	return nil
 }
 
+// resetTokenTTL is how long a password-reset token stays redeemable.
+const resetTokenTTL = 60 * time.Minute
+
 // ResetPasswordRequest initiates password reset flow
 func (s *AuthService) ResetPasswordRequest(ctx context.Context, email, ip string) error {
 	// Always return success to prevent email enumeration
@@ -846,18 +849,67 @@ func (s *AuthService) ResetPasswordRequest(ctx context.Context, email, ip string
 		return nil
 	}
 
-	// In production: send email with reset token
-	// For now: just log
-	s.log.Info("Password reset requested", zap.String("email", email), zap.String("ip", ip))
+	token, err := crypto.GenerateTempToken()
+	if err != nil {
+		s.log.Error("Failed to generate password reset token", zap.Error(err))
+		return nil
+	}
+
+	if err := s.repo.StoreTempToken(ctx, token, user.ID, resetTokenTTL); err != nil {
+		// The caller still learns nothing: a stored token we cannot email is
+		// equivalent to no token at all.
+		s.log.Error("Failed to store password reset token", zap.Error(err))
+		return nil
+	}
+
+	// In production: email the token to the address on the account.
+	// Until the mailer is wired, the token is logged so the flow stays usable.
+	s.log.Info("Password reset requested",
+		zap.String("user_id", user.ID),
+		zap.String("ip", ip),
+		zap.String("reset_token", token))
 
 	return nil
 }
 
 // ResetPassword completes password reset with token
 func (s *AuthService) ResetPassword(ctx context.Context, token, newPassword string) error {
-	// In production: validate reset token from Redis/DB
-	// For now: placeholder
-	return fmt.Errorf("password reset not implemented")
+	if strings.TrimSpace(token) == "" {
+		return fmt.Errorf("%w: reset token is required", domain.ErrValidation)
+	}
+	if len(newPassword) < 8 {
+		return fmt.Errorf("%w: password must be at least 8 characters", domain.ErrValidation)
+	}
+
+	userID, err := s.repo.GetTempToken(ctx, token)
+	if err != nil {
+		return fmt.Errorf("%w: failed to validate reset token", domain.ErrInternal)
+	}
+	if userID == "" {
+		// Unknown, expired or already redeemed token.
+		return domain.ErrInvalidToken
+	}
+
+	hash, err := crypto.HashPassword(newPassword)
+	if err != nil {
+		return fmt.Errorf("%w: failed to hash new password", domain.ErrInternal)
+	}
+
+	if err := s.repo.UpdatePassword(ctx, userID, hash); err != nil {
+		return fmt.Errorf("%w: failed to update password", domain.ErrInternal)
+	}
+
+	// One-time use, and every session opened with the old password goes away.
+	if err := s.repo.DeleteTempToken(ctx, token); err != nil {
+		s.log.Error("Failed to consume password reset token", zap.Error(err))
+	}
+	if err := s.repo.DeleteAllUserSessions(ctx, userID); err != nil {
+		s.log.Error("Failed to revoke sessions after password reset", zap.Error(err))
+	}
+
+	s.log.Info("Password reset completed", zap.String("user_id", userID))
+
+	return nil
 }
 
 // createSession creates a session and tokens for a user
