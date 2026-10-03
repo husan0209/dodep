@@ -176,7 +176,11 @@ jobs:
       run: npm run build
     
     - name: Test
-      run: npm run test -- --run
+      # Jest has no --run flag (that is Vitest's); it rejected the option and
+      # the job died before a single test executed. --ci is the documented
+      # Jest flag: it disables watch mode and makes snapshot writes fail
+      # instead of silently updating.
+      run: npm run test -- --ci
 
   # Security scanning
   security-scan:

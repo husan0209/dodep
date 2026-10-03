@@ -50,10 +50,25 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: services/go/${{ matrix.service }}/go.sum
 
+      - name: Install buf (pinned)
+        run: |
+          BUF_VERSION=1.73.0
+          curl -fsSL -o /tmp/buf.tar.gz "https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/buf-Linux-x86_64.tar.gz"
+          sudo tar -xzf /tmp/buf.tar.gz -C /tmp
+          sudo install -m 0755 /tmp/buf/bin/buf /usr/local/bin/buf
+          buf --version
+
+      # libs/proto/gen is gitignored, so a clean checkout has no Go stubs.
+      # Without them every service that imports the shared contracts fails to
+      # type-check ("no required module provides package .../gen/go/common/v1")
+      # or, under golangci-lint, "no export data for ...".
+      - name: Generate Proto stubs
+        run: make -C libs/proto gen-go
+
       - name: Install golangci-lint
         uses: golangci/golangci-lint-action@v4
         with:
-          version: latest
+          version: v1.64.8
           working-directory: services/go/${{ matrix.service }}
 
       - name: Run golangci-lint
@@ -106,6 +121,17 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: services/go/${{ matrix.service }}/go.sum
 
+      - name: Install buf (pinned)
+        run: |
+          BUF_VERSION=1.73.0
+          curl -fsSL -o /tmp/buf.tar.gz "https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/buf-Linux-x86_64.tar.gz"
+          sudo tar -xzf /tmp/buf.tar.gz -C /tmp
+          sudo install -m 0755 /tmp/buf/bin/buf /usr/local/bin/buf
+          buf --version
+
+      - name: Generate Proto stubs
+        run: make -C libs/proto gen-go
+
       - name: Install gotestsum
         run: go install gotest.tools/gotestsum@latest
 
@@ -150,6 +176,19 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
+
+      - name: Install buf (pinned)
+        run: |
+          BUF_VERSION=1.73.0
+          curl -fsSL -o /tmp/buf.tar.gz "https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/buf-Linux-x86_64.tar.gz"
+          sudo tar -xzf /tmp/buf.tar.gz -C /tmp
+          sudo install -m 0755 /tmp/buf/bin/buf /usr/local/bin/buf
+          buf --version
+
+      # gosec and govulncheck both load the package graph, so they need the
+      # generated stubs for exactly the same reason the lint and test jobs do.
+      - name: Generate Proto stubs
+        run: make -C libs/proto gen-go
 
       - name: Install gosec
         run: go install github.com/securego/gosec/v2/cmd/gosec@latest
