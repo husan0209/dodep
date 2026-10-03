@@ -15,7 +15,9 @@ on:
       - 'libs/proto/**'
 
 env:
-  GO_VERSION: '1.21'
+  # Every module in the matrix declares `go >= 1.24`; 1.21 could not even load
+  # a module graph ("go.mod requires go >= 1.24").
+  GO_VERSION: '1.26'
   REGISTRY: ghcr.io
   IMAGE_PREFIX: opus-casino
 
@@ -32,24 +34,27 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: |
-            services/go/casino/go.mod
-            services/go/notification/go.mod
+            services/go/casino/go.sum
+            services/go/notification/go.sum
 
+      # golangci-lint-action@v3 installs v1, which is built with go1.24 and
+      # cannot type-check a go 1.24+ module ("file requires newer Go version
+      # go1.26"). v2.14.0 is built with go1.27. Pinned, not `latest`.
       - name: Install golangci-lint
-        uses: golangci/golangci-lint-action@v3
+        uses: golangci/golangci-lint-action@v9
         with:
-          version: latest
+          version: v2.14.0
           working-directory: services/go
 
       - name: Lint Casino Service
         run: |
           cd services/go/casino
-          golangci-lint run ./...
+          golangci-lint run --output.text.path=stdout
 
       - name: Lint Notification Service
         run: |
           cd services/go/notification
-          golangci-lint run ./...
+          golangci-lint run --output.text.path=stdout
 
   test:
     name: Test Go Services
@@ -88,19 +93,22 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: |
-            services/go/casino/go.mod
-            services/go/notification/go.mod
+            services/go/casino/go.sum
+            services/go/notification/go.sum
 
+      # libs/proto/gen is gitignored, so a clean checkout has no stubs and
+      # every service importing github.com/opus-casino/proto/gen/go/* cannot
+      # compile. The previous step ran protoc by hand with source_relative
+      # paths, which wrote the packages somewhere the go.mod replace directive
+      # does not look; use the project's own pinned buf + make target instead.
       - name: Generate Proto files
         run: |
-          cd libs/proto
-          # Install protoc-gen-go
-          go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
-          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
-          # Generate Go code from proto files
-          protoc --go_out=. --go_opt=paths=source_relative \
-                 --go-grpc_out=. --go-grpc_opt=paths=source_relative \
-                 */v1/*.proto
+          BUF_VERSION=1.73.0
+          curl -fsSL -o /tmp/buf.tar.gz \
+            "https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/buf-Linux-x86_64.tar.gz"
+          sudo tar -xzf /tmp/buf.tar.gz -C /tmp
+          sudo install -m 0755 /tmp/buf/bin/buf /usr/local/bin/buf
+          make -C libs/proto gen-go
 
       - name: Test Casino Service
         run: |
@@ -119,18 +127,20 @@ jobs:
           REDIS_ADDR: localhost:6379
 
       - name: Upload Casino Coverage
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
         with:
           files: services/go/casino/coverage.out
           flags: casino
           name: casino-coverage
+          fail_ci_if_error: false
 
       - name: Upload Notification Coverage
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
         with:
           files: services/go/notification/coverage.out
           flags: notification
           name: notification-coverage
+          fail_ci_if_error: false
 
   build:
     name: Build and Push Docker Images
@@ -225,7 +235,7 @@ jobs:
         run: |
           kubectl wait --for=condition=available deployment/casino -n platform-dev --timeout=120s
           kubectl wait --for=condition=available deployment/notification -n platform-dev --timeout=120s
-          
+
           # Health check
           curl -f https://dev-api.opus.casino/health
           curl -f https://dev-api.opus.casino/ready
