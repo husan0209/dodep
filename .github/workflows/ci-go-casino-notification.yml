@@ -15,7 +15,8 @@ on:
       - 'libs/proto/**'
 
 env:
-  GO_VERSION: '1.21'
+  # services/go/{casino,notification}/go.mod declare `go 1.24.0`.
+  GO_VERSION: '1.24'
   REGISTRY: ghcr.io
   IMAGE_PREFIX: opus-casino
 
@@ -36,9 +37,11 @@ jobs:
             services/go/notification/go.mod
 
       - name: Install golangci-lint
-        uses: golangci/golangci-lint-action@v3
+        uses: golangci/golangci-lint-action@v7
         with:
-          version: latest
+          # Pinned to the same version the other Go workflows use; v3 of this
+          # action only knows golangci-lint v1 and `latest` drifts between majors.
+          version: v2.1.0
           working-directory: services/go
 
       - name: Lint Casino Service
@@ -91,16 +94,11 @@ jobs:
             services/go/casino/go.mod
             services/go/notification/go.mod
 
-      - name: Generate Proto files
-        run: |
-          cd libs/proto
-          # Install protoc-gen-go
-          go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
-          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
-          # Generate Go code from proto files
-          protoc --go_out=. --go_opt=paths=source_relative \
-                 --go-grpc_out=. --go-grpc_opt=paths=source_relative \
-                 */v1/*.proto
+      # NOTE: there is deliberately no proto generation step. The generated Go
+      # stubs are committed at libs/proto/gen/go - that is the path
+      # `replace github.com/opus-casino/proto => ../../../libs/proto` resolves
+      # to - and the removed step called `protoc`, which is not installed on
+      # the runner image and wrote into the wrong directory anyway.
 
       - name: Test Casino Service
         run: |
