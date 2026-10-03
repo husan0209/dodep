@@ -34,9 +34,12 @@ describe("api client configuration", () => {
 describe("network diagnostics", () => {
   test("converts fetch connection failure to structured ApiClientError", async () => {
     const client = createApiClient("http://localhost:8080");
-    const fetchMock = jest
-      .spyOn(global, "fetch")
-      .mockRejectedValue(new TypeError("fetch failed"));
+    // jest.spyOn(global, "fetch") throws on modern Node/jsdom, where fetch is
+    // installed as a non-configurable accessor on the global object. Swap the
+    // binding directly and put the original back afterwards.
+    const originalFetch = global.fetch;
+    const fetchMock = jest.fn().mockRejectedValue(new TypeError("fetch failed"));
+    global.fetch = fetchMock as unknown as typeof global.fetch;
 
     let error: unknown;
     try {
@@ -44,7 +47,7 @@ describe("network diagnostics", () => {
     } catch (caught) {
       error = caught;
     } finally {
-      fetchMock.mockRestore();
+      global.fetch = originalFetch;
     }
 
     expect(error).toBeInstanceOf(ApiClientError);

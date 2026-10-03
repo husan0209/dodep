@@ -1,10 +1,10 @@
 'use client'
 
-import { useEffect } from 'react'
+import { Suspense, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuthStore } from '@/stores/auth-store'
 
-export default function GoogleCallbackPage() {
+function GoogleCallbackInner() {
   const router = useRouter()
   const params = useSearchParams()
   const { setTokens, fetchUser } = useAuthStore()
@@ -38,5 +38,17 @@ export default function GoogleCallbackPage() {
         <p className="mt-2 text-gray-400">Google authorization complete, redirecting to sportsbook.</p>
       </div>
     </div>
+  )
+}
+
+// useSearchParams() opts the render into client-side rendering, so Next.js
+// refuses to prerender this route unless the consumer sits under a Suspense
+// boundary. Without it `next build` fails with:
+//   "useSearchParams() should be wrapped in a suspense boundary"
+export default function GoogleCallbackPage() {
+  return (
+    <Suspense fallback={null}>
+      <GoogleCallbackInner />
+    </Suspense>
   )
 }
