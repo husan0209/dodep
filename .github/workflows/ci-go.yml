@@ -61,9 +61,11 @@ jobs:
 
       - name: Run golangci-lint
         working-directory: services/go/${{ matrix.service }}
-        # `colored-line-number` replaced the deprecated `github-actions` output format
-        # in golangci-lint v2 (it warns and keeps going, but is no longer supported).
-        run: golangci-lint run --out-format=colored-line-number
+        # NOTE: no --out-format flag. golangci-lint v2 removed `--out-format`
+        # (`--out-format=colored-line-number` fails with "Error: unknown flag:
+        # --out-format"); the console output format is chosen with
+        # `--output.text.*` in v2.
+        run: golangci-lint run
 
   # ==========================================================================
   # Test

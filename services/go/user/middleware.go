@@ -30,6 +30,7 @@ import (
 const (
 	// authTokenIssuer mirrors tokenIssuer in services/go/auth/internal/crypto.
 	// A correctly signed token from any other issuer is still rejected.
+	// #nosec G101 -- this is a token issuer identifier, not a credential.
 	authTokenIssuer = "opus-casino-auth"
 
 	// tokenTypeAccess selects access tokens. The auth service signs access and

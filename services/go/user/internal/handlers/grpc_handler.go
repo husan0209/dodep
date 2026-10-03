@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"fmt"
+	"math"
 	"strconv"
 
 	"go.uber.org/zap"
@@ -226,6 +227,23 @@ func (h *UserGRPCHandler) GetActivity(ctx context.Context, req *pb.GetActivityRe
 	}, nil
 }
 
+// clampToInt32 converts a platform-sized int to int32 without wrapping.
+//
+// The domain models these values as `int` (64-bit on most targets) while protobuf
+// encodes them as int32. Limits are validated on the way in, but a mapper must not be
+// able to emit a wrapped, negative number if a row ever arrives out of range - that
+// would turn "session limit of 4294967296 minutes" into a negative value on the wire.
+// gosec G115 flagged each of these conversions as an integer overflow.
+func clampToInt32(v int) int32 {
+	if v > math.MaxInt32 {
+		return math.MaxInt32
+	}
+	if v < math.MinInt32 {
+		return math.MinInt32
+	}
+	return int32(v)
+}
+
 func toProtoUser(user *domain.User) *pb.User {
 	return &pb.User{
 		Id:        &commonv1.UserId{Value: fmt.Sprintf("%d", user.ID)},
@@ -234,7 +252,7 @@ func toProtoUser(user *domain.User) *pb.User {
 		Country:   user.CountryCode,
 		Currency:  user.CurrencyCode,
 		Status:    pb.UserStatus(pb.UserStatus_value[string(user.Status)]),
-		KycLevel:  pb.KycLevel(user.KYCLevel),
+		KycLevel:  pb.KycLevel(clampToInt32(int(user.KYCLevel))),
 		CreatedAt: timestamppb.New(user.CreatedAt),
 		UpdatedAt: timestamppb.New(user.UpdatedAt),
 	}
@@ -250,7 +268,7 @@ func toProtoPreferences(pref *domain.UserPreferences) *pb.UserPreferences {
 		SmsNotifications:            pref.SMSNotifications,
 		PushNotifications:           pref.PushNotifications,
 		RealityCheck:                pref.RealityCheck,
-		RealityCheckIntervalMinutes: int32(pref.RealityCheckIntervalMinutes),
+		RealityCheckIntervalMinutes: clampToInt32(pref.RealityCheckIntervalMinutes),
 		AutoPlay:                    pref.AutoPlay,
 		SoundPreference:             pref.SoundPreference,
 		UpdatedAt:                   timestamppb.New(pref.UpdatedAt),
@@ -264,7 +282,7 @@ func toProtoLimits(limits *domain.UserLimits) *pb.UserLimits {
 	}
 	if limits.SessionTimeLimit != nil {
 		result.SessionTimeLimit = &pb.TimeLimit{
-			Minutes:  int32(limits.SessionTimeLimit.Minutes),
+			Minutes:  clampToInt32(limits.SessionTimeLimit.Minutes),
 			IsActive: limits.SessionTimeLimit.IsActive,
 		}
 	}

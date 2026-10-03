@@ -158,6 +158,10 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
+        # NOTE: this ran at the repository root while the build below runs in apps/web, so
+        # the app's own dependencies were never installed and the build died with
+        # "sh: 1: next: not found".
+        working-directory: apps/web
         run: npm ci
 
       - name: Build application
@@ -193,6 +197,7 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
+        working-directory: apps/web
         run: npm ci
 
       - name: Install Playwright

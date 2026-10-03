@@ -44,7 +44,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0.0",
-    "pytest-asyncio>=0.23.4",
+    "pytest-asyncio>=0.23.5",
     "pytest-cov>=4.1.0",
     "ruff>=0.1.0",
     "black>=24.1.0",
@@ -61,6 +61,21 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+# `X`, `X_scaled`, `X_train` and `X_test` are the conventional scikit-learn names for the
+# feature matrix and its splits. Lowercasing them would fight the vocabulary every ML
+# tutorial and library doc uses, so the naming rules (N803 argument name, N806 variable in
+# function) are relaxed for the model modules and their tests only. Everything else keeps
+# the full ruleset.
+"internal/models/fraud_detector.py" = ["N803", "N806"]
+"src/models/fraud_model.py" = ["N803", "N806"]
+"tests/test_models.py" = ["N806"]
+# The long lines in these two modules are ClickHouse SQL held in triple-quoted strings.
+# Python's line-length rule cannot reflow SQL, and `# noqa` cannot be attached to a line
+# inside a string literal, so E501 is relaxed for them.
+"src/features/extraction.py" = ["E501"]
+"src/data/clickhouse.py" = ["E501"]
 
 [tool.black]
 line-length = 100
