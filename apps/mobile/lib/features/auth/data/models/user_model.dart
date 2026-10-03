@@ -74,7 +74,6 @@ class UserModel extends User {
   }
 
   /// Convert to User entity
-  @override
   User toEntity() => User(
         id: _id,
         email: _email,

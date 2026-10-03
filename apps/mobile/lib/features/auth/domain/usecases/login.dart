@@ -1,5 +1,6 @@
 import 'package:dartz/dartz.dart';
 import 'package:equatable/equatable.dart';
+import 'package:injectable/injectable.dart';
 
 import '../../../../core/error/failures.dart';
 import '../entities/user.dart';
@@ -20,6 +21,7 @@ class LoginParams extends Equatable {
 }
 
 /// Login use case
+@injectable
 class Login {
   final AuthRepository _repository;
 

@@ -1,6 +1,5 @@
 import 'dart:convert';
 
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:injectable/injectable.dart';
 
@@ -9,16 +8,14 @@ import '../models/user_model.dart';
 import 'auth_local_datasource.dart';
 
 /// Implementation of AuthLocalDataSource
+///
+/// Tokens and the cached user are persisted in the injected Hive box
+/// (the `secure_storage` box registered by `RegisterModule`).
 @LazySingleton(as: AuthLocalDataSource)
 class AuthLocalDataSourceImpl implements AuthLocalDataSource {
-  final FlutterSecureStorage _secureStorage;
   final Box _box;
 
-  AuthLocalDataSourceImpl({
-    required FlutterSecureStorage secureStorage,
-    required Box box,
-  })  : _secureStorage = secureStorage,
-        _box = box;
+  AuthLocalDataSourceImpl({required Box box}) : _box = box;
 
   static const String _accessTokenKey = 'access_token';
   static const String _refreshTokenKey = 'refresh_token';
