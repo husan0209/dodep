@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/signal"
 	"strings"
@@ -44,8 +45,16 @@ func main() {
 	cfg := config.Load()
 
 	// 2. Initialize logger
-	log, _ := zap.NewProduction()
-	defer log.Sync()
+	log, err := zap.NewProduction()
+	if err != nil {
+		// Falling through with a nil logger would turn a config problem into a
+		// nil-pointer panic on the first log call.
+		fmt.Fprintf(os.Stderr, "failed to initialise logger: %v\n", err)
+		os.Exit(1)
+	}
+	// Sync is best-effort: it fails with EINVAL on Linux whenever stderr is a
+	// terminal or /dev/null, which says nothing about buffered records.
+	defer func() { _ = log.Sync() }()
 
 	// 3. Initialize database (GORM + pgx driver, per CONVENTIONS)
 	db, err := gorm.Open(postgres.Open(cfg.DatabaseURL), &gorm.Config{})

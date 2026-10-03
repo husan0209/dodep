@@ -1,0 +1,233 @@
+# Grafana Alerting Rules — Affiliate Service
+# Standalone ConfigMap (consumed the same way as grafana-alerting-rules),
+# does NOT edit alerting/alerting-rules.yaml (shared file, parallel work).
+#
+# Datasource note: affiliate-service exposes no /metrics endpoint yet
+# (infra/helm/charts/affiliate/values.yaml -> serviceMonitor.enabled=false).
+# Therefore HTTP-level rules are intentionally omitted here: they would be
+# permanently false/empty, i.e. false-negative alerts. What IS alertable today
+# without service metrics:
+#   1. pod/liveness layer   -> VictoriaMetrics (kube-state-metrics, real series)
+#   2. money-correctness    -> ClickHouse business tables (real ingested events)
+#
+# Rules 5-9 are the ones that actually protect partner money. They replace the
+# PromQL assumptions I refused to invent in affiliate-rollout.yaml.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-alerting-rules-affiliate
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/component: alerting
+    app.kubernetes.io/domain: affiliate
+data:
+  affiliate-alerting-rules.yaml: |
+    groups:
+      # =============================================================================
+      # Affiliate — availability (kube-state-metrics, no service metrics needed)
+      # =============================================================================
+      - name: AffiliateAvailability
+        interval: 1m
+        rules:
+          - uid: affiliate-no-ready-pods
+            title: Affiliate Service Has No Ready Pods
+            condition: C
+            data:
+              - refId: A
+                datasourceUid: VictoriaMetrics
+                model:
+                  expr: sum(kube_pod_status_ready{namespace="platform", pod=~"affiliate-.*", condition="true"})
+              - refId: C
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: A
+                  reducer: last
+                  comparator: lt
+                  threshold: 1
+            for: 3m
+            annotations:
+              summary: "No ready affiliate pod — tracking and cabinet are down"
+              description: "affiliate has 0 ready replicas in platform. Runbook AFF-RB-04 / RB-006."
+            labels:
+              severity: critical
+              runbook: "docs/infra/runbooks/affiliate-service.md#aff-rb-04-click-tracking-down-r-code-5xx"
+
+          - uid: affiliate-crash-looping
+            title: Affiliate Service CrashLooping
+            condition: C
+            data:
+              - refId: A
+                datasourceUid: VictoriaMetrics
+                model:
+                  expr: sum(increase(kube_pod_container_status_restarts_total{namespace="platform", container="affiliate", pod=~"affiliate-.*"}[15m]))
+              - refId: C
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: A
+                  reducer: last
+                  comparator: gt
+                  threshold: 0
+            for: 5m
+            annotations:
+              summary: "Affiliate pod restarting repeatedly"
+              description: "The in-process outbox/hold-release worker restarts with the pod; releases may stall."
+            labels:
+              severity: warning
+              runbook: "docs/infra/runbooks/affiliate-service.md#aff-rb-01-hold-release-stuck-accrued-ne-perekhodyat-v-available"
+
+      # =============================================================================
+      # Affiliate — money correctness (ClickHouse, appended events only)
+      # =============================================================================
+      - name: AffiliateMoney
+        interval: 5m
+        rules:
+          # THE alert that protects partner income: releases stopped while
+          # accruals continue. Empty result => healthy (Grafana: use math).
+          - uid: affiliate-hold-release-stalled
+            title: Affiliate Hold-Release Stalled (Partners Earned but Cannot Withdraw)
+            condition: C
+            data:
+              - refId: A
+                datasourceUid: ClickHouse
+                model:
+                  format: table
+                  rawSql: |
+                    SELECT (max(released_at) < now() - INTERVAL 48 HOUR) AS stalled
+                    FROM affiliate_commission_releases
+              - refId: C
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: A
+                  reducer: last
+                  comparator: gt
+                  threshold: 0
+            for: 15m
+            annotations:
+              summary: "No commission released for 48h while service is up"
+              description: "accrued -> available transition stopped. Check HOLD_RELEASE_INTERVAL and outbox worker."
+            labels:
+              severity: critical
+              runbook: "docs/infra/runbooks/affiliate-service.md#aff-rb-01-hold-release-stuck-accrued-ne-perekhodyat-v-available"
+
+          - uid: affiliate-outbox-stuck
+            title: Affiliate Outbox Has Stale Unpublished Events
+            condition: C
+            data:
+              - refId: A
+                datasourceUid: VictoriaMetrics
+                model:
+                  expr: sum(increase(kube_pod_container_status_restarts_total{namespace="platform", container="affiliate"}[10m])) or vector(0)
+              - refId: C
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: A
+                  reducer: last
+                  comparator: lt
+                  threshold: 0
+            for: 15m
+            annotations:
+              summary: "Placeholder guard — replace with outbox depth metric once /metrics lands"
+              description: "Real outbox depth is not observable yet (no /metrics endpoint); see runbook AFF-RB-01 SQL for manual check."
+            labels:
+              severity: info
+              runbook: "docs/infra/runbooks/affiliate-service.md#aff-rb-01-hold-release-stuck-accrued-ne-perekhodyat-v-available"
+
+          - uid: affiliate-payout-aging
+            title: Affiliate Payouts Waiting In Review > 48h
+            condition: C
+            data:
+              - refId: A
+                datasourceUid: ClickHouse
+                model:
+                  format: table
+                  rawSql: |
+                    SELECT count() FROM affiliate_payouts
+                    WHERE status IN ('requested', 'reviewing')
+                      AND requested_at < now() - INTERVAL 48 HOUR
+              - refId: C
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: A
+                  reducer: last
+                  comparator: gt
+                  threshold: 0
+            for: 30m
+            annotations:
+              summary: "Payout queue ageing — partners waiting on finance/risk"
+              description: "Payouts in requested/reviewing older than 48h. Do not bypass KYC/fraud gates."
+            labels:
+              severity: warning
+              runbook: "docs/infra/runbooks/affiliate-service.md#aff-rb-02-payout-queue-aging-zayavki-visyat-v-requested"
+
+          - uid: affiliate-large-manual-adjustment
+            title: Large Manual Commission Adjustment Detected
+            condition: C
+            data:
+              - refId: A
+                datasourceUid: ClickHouse
+                model:
+                  format: table
+                  rawSql: |
+                    SELECT max(amount) FROM affiliate_adjustments_audit
+                    WHERE created_at >= now() - INTERVAL 1 HOUR
+              - refId: C
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: A
+                  reducer: last
+                  comparator: gt
+                  threshold: 10000
+            for: 0s
+            annotations:
+              summary: "Manual adjustment above 10,000 — verify it was authorised"
+              description: "Admin correction touched partner money without the standard accrual path. Requires super_admin/adjust audit."
+            labels:
+              severity: warning
+              runbook: "docs/infra/runbooks/affiliate-service.md"
+
+          - uid: affiliate-fraud-flag-spike
+            title: Affiliate Fraud Flags Created In Bulk
+            condition: C
+            data:
+              - refId: A
+                datasourceUid: ClickHouse
+                model:
+                  format: table
+                  rawSql: |
+                    SELECT count() FROM affiliate_fraud_signals
+                    WHERE detected_at >= now() - INTERVAL 15 MINUTE
+              - refId: C
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: A
+                  reducer: last
+                  comparator: gt
+                  threshold: 100
+            for: 0s
+            annotations:
+              summary: "Fraud flags spiking — possible self-referral ring or bot traffic"
+              description: ">100 flags in 15 minutes. Ties to payout gating in tasks/задача.md anti-fraud rules."
+            labels:
+              severity: critical
+              runbook: "docs/infra/runbooks/affiliate-service.md"
+
+# =============================================================================
+# KNOWN LIMITATIONS (do not remove without verification)
+# =============================================================================
+# 1. affiliate-outbox-stuck is intentionally severity=info and currently a
+#    no-op guard. Real outbox depth needs one Prometheus metric exported by the
+#    service (e.g. affiliate_outbox_unpublished_total). Until then use the SQL
+#    in runbook AFF-RB-01. Delete this rule when the real metric exists rather
+#    than trusting it.
+# 2. No HTTP success-rate / latency rule for affiliate: no /metrics endpoint, so
+#    such rules would never fire. Add together with the service metrics work.
+# 3. affiliate-hold-release-stalled uses a global max(released_at). If the whole
+#    program is idle (no accruals), it can alert spuriously — pair with the
+#    accrual query in 005_affiliate_lifecycle.sql before paging.

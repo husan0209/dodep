@@ -12,6 +12,11 @@ tower.workspace = true
 tower-http.workspace = true
 tonic.workspace = true
 prost.workspace = true
+# Required by the generated code: libs/proto/betting/v1/betting.proto uses
+# google.protobuf.Timestamp, and prost emits an absolute `::prost_types::` path
+# for it. tonic does not re-export prost_types, so this has to be a direct
+# dependency of the crate that includes the generated module.
+prost-types = "0.12"
 serde.workspace = true
 serde_json.workspace = true
 sqlx.workspace = true

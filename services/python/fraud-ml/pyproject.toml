@@ -10,7 +10,11 @@ dependencies = [
     "pyarrow>=15.0.0",
     
     # ML
-    "xgboost>=2.0.3",
+    # Capped at 2.x on purpose. onnxmltools is the only thing that can convert an
+    # XGBClassifier to ONNX (skl2onnx has no XGBoost converter of its own) and
+    # its newest release, 1.16.0, has no shape calculator for xgboost 3.x, so
+    # xgboost 3 makes every export_onnx() call raise MissingShapeCalculator.
+    "xgboost>=2.0.3,<3.0",
     "scikit-learn>=1.4.0",
     "imbalanced-learn>=0.12.0",
     
@@ -18,6 +22,9 @@ dependencies = [
     "onnx>=1.15.0",
     "onnxruntime>=1.17.0",
     "skl2onnx>=1.17.0",
+    # Supplies the XGBoost shape calculator and converter that skl2onnx needs.
+    # Without it, export_onnx() cannot convert an XGBClassifier at all.
+    "onnxmltools>=1.16.0",
     
     # Database
     "clickhouse-connect>=0.7.1",
@@ -61,6 +68,22 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+# N803/N806 flag `X` and `X_scaled`. That is the scikit-learn/pandas convention
+# for a design matrix and renaming it to `x` would make this code read worse than
+# the lint rule helps; it is also what every tutorial and API doc for these
+# libraries uses. Suppressed per file rather than globally, so a genuine
+# mis-cased name elsewhere is still reported.
+"internal/models/fraud_detector.py" = ["N803", "N806"]
+"src/models/fraud_model.py" = ["N803", "N806"]
+"tests/test_models.py" = ["N806"]
+# Long lines here are ClickHouse SQL text. Wrapping them would either change the
+# query or need implicit string concatenation inside a triple-quoted block, so
+# the individual lines carry `# noqa: E501` instead.
+"internal/repository/clickhouse_repository.py" = ["E501"]
+"src/data/clickhouse.py" = ["E501"]
+"src/features/extraction.py" = ["E501"]
 
 [tool.black]
 line-length = 100

@@ -376,9 +376,9 @@ func paginatedResponse(data any, total int64, page int, pageSize int) fiber.Map 
 	return fiber.Map{
 		"data": data,
 		"pagination": fiber.Map{
-			"page":       page,
-			"page_size":  pageSize,
-			"total":      total,
+			"page":        page,
+			"page_size":   pageSize,
+			"total":       total,
 			"total_pages": totalPages,
 		},
 	}
