@@ -53,6 +53,25 @@ func HashPassword(password string) (string, error) {
 	return encoded, nil
 }
 
+// argonKeyLen bounds a decoded hash length before it is converted to the
+// uint32 that argon2.IDKey expects. Argon2id keys are 16..64 bytes; anything
+// outside that range is a corrupt or hostile stored hash, so it is clamped
+// rather than allowed to wrap.
+func argonKeyLen(n int) uint32 {
+	const (
+		minKeyLen = 16
+		maxKeyLen = 64
+	)
+
+	if n < minKeyLen {
+		return minKeyLen
+	}
+	if n > maxKeyLen {
+		return maxKeyLen
+	}
+	return uint32(n)
+}
+
 // VerifyPassword verifies a password against its Argon2id hash
 func VerifyPassword(password, encodedHash string) (bool, error) {
 	parts := strings.Split(encodedHash, "$")
@@ -86,7 +105,10 @@ func VerifyPassword(password, encodedHash string) (bool, error) {
 		iterations,
 		memory,
 		uint8(parallelism),
-		uint32(len(hash)),
+		// The key length is read back from the stored hash, so it must be
+		// bounded before the narrowing conversion: an oversized value would
+		// otherwise wrap and allocate a far smaller key than requested.
+		argonKeyLen(len(hash)),
 	)
 
 	// Constant-time comparison

@@ -441,6 +441,9 @@ func startMetricsServer(ctx context.Context, cfg *config.Config) error {
 	server := &http.Server{
 		Addr:    ":9104",
 		Handler: mux,
+		// Without this a client that opens a connection and never sends
+		// headers can pin a goroutine indefinitely (Slowloris).
+		ReadHeaderTimeout: 10 * time.Second,
 	}
 
 	log.Info().Str("addr", ":9104").Msg("Starting metrics server")
