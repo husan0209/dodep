@@ -320,7 +320,9 @@ func (m *MockUserClient) GetUserStatus(ctx context.Context, userID int64) (strin
 
 // GetUserInfo returns user info
 func (m *MockUserClient) GetUserInfo(ctx context.Context, userID int64) (*client.UserInfo, error) {
-	level, _ := m.kycLevels[userID]
+	// A user the test never registered defaults to KYC level 0, matching the
+	// zero value returned by the map lookup.
+	level := m.kycLevels[userID]
 	return &client.UserInfo{
 		UserID:   userID,
 		KYCLevel: level,

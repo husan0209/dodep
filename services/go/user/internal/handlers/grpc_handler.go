@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"fmt"
+	"math"
 	"strconv"
 
 	"go.uber.org/zap"
@@ -21,6 +22,21 @@ import (
 func parseUID(s string) int64 {
 	v, _ := strconv.ParseInt(s, 10, 64)
 	return v
+}
+
+// clampToInt32 narrows a platform-sized int to the int32 the protobuf API uses.
+// The values come from user preferences stored in the database, so an
+// out-of-range row must saturate rather than silently wrap into a negative
+// number that the client would read as a valid setting.
+func clampToInt32(v int) int32 {
+	switch {
+	case v > math.MaxInt32:
+		return math.MaxInt32
+	case v < math.MinInt32:
+		return math.MinInt32
+	default:
+		return int32(v)
+	}
 }
 
 // ptr returns a pointer to the given int64 value (for optional PageResponse.TotalCount).
@@ -194,7 +210,7 @@ func toProtoUser(user *domain.User) *pb.User {
 		Country:     user.CountryCode,
 		Currency:    user.CurrencyCode,
 		Status:      pb.UserStatus(pb.UserStatus_value[string(user.Status)]),
-		KycLevel:    pb.KycLevel(user.KYCLevel),
+		KycLevel:    pb.KycLevel(clampToInt32(int(user.KYCLevel))),
 		CreatedAt:   timestamppb.New(user.CreatedAt),
 		UpdatedAt:   timestamppb.New(user.UpdatedAt),
 	}
@@ -210,7 +226,7 @@ func toProtoPreferences(pref *domain.UserPreferences) *pb.UserPreferences {
 		SmsNotifications:            pref.SMSNotifications,
 		PushNotifications:           pref.PushNotifications,
 		RealityCheck:                pref.RealityCheck,
-		RealityCheckIntervalMinutes: int32(pref.RealityCheckIntervalMinutes),
+		RealityCheckIntervalMinutes: clampToInt32(pref.RealityCheckIntervalMinutes),
 		AutoPlay:                    pref.AutoPlay,
 		SoundPreference:             pref.SoundPreference,
 		UpdatedAt:                   timestamppb.New(pref.UpdatedAt),
@@ -224,7 +240,7 @@ func toProtoLimits(limits *domain.UserLimits) *pb.UserLimits {
 	}
 	if limits.SessionTimeLimit != nil {
 		result.SessionTimeLimit = &pb.TimeLimit{
-			Minutes:  int32(limits.SessionTimeLimit.Minutes),
+			Minutes:  clampToInt32(limits.SessionTimeLimit.Minutes),
 			IsActive: limits.SessionTimeLimit.IsActive,
 		}
 	}

@@ -169,19 +169,18 @@ func ErrorProviderUnavailable(provider string, reason error) error {
 
 // HTTPStatus returns the appropriate HTTP status code for an error
 func HTTPStatus(err error) int {
-	code := GetErrorCode(err)
-	switch {
-	case code == ErrCodePaymentNotFound || code == ErrCodeWithdrawalNotFound:
+	switch GetErrorCode(err) {
+	case ErrCodePaymentNotFound, ErrCodeWithdrawalNotFound:
 		return 404
-	case code == ErrCodeKYCRequired:
+	case ErrCodeKYCRequired:
 		return 403
-	case code == ErrCodeInsufficientBalance || code == ErrCodeDailyLimitExceeded:
+	case ErrCodeInsufficientBalance, ErrCodeDailyLimitExceeded:
 		return 422
-	case code == ErrCodeWebhookSignatureInvalid:
+	case ErrCodeWebhookSignatureInvalid:
 		return 401
-	case code == ErrCodeProviderUnavailable:
+	case ErrCodeProviderUnavailable:
 		return 502
-	case code == ErrCodeInvalidCryptoAddress || code == ErrCodeInvalidAmount:
+	case ErrCodeInvalidCryptoAddress, ErrCodeInvalidAmount:
 		return 400
 	default:
 		return 500

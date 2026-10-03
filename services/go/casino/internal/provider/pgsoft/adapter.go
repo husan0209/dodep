@@ -100,7 +100,11 @@ func (a *Adapter) BuildLaunchURL(ctx context.Context, req provider.LaunchRequest
 	if err != nil {
 		return "", fmt.Errorf("pgsoft: launch url http: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			a.log.Warn("Failed to close response body", zap.Error(err))
+		}
+	}()
 
 	respBody, _ := io.ReadAll(resp.Body)
 
@@ -138,7 +142,11 @@ func (a *Adapter) GetGames(ctx context.Context) ([]provider.ProviderGame, error)
 	if err != nil {
 		return nil, fmt.Errorf("pgsoft: games http: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			a.log.Warn("Failed to close response body", zap.Error(err))
+		}
+	}()
 
 	respBody, _ := io.ReadAll(resp.Body)
 

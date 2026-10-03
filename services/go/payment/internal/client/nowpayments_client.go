@@ -263,7 +263,9 @@ func (c *NOWPaymentsClient) doRequest(ctx context.Context, method, path string, 
 		}
 
 		respBodyBytes, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			c.logger.Warn("Failed to close response body", zap.Error(closeErr))
+		}
 		if err != nil {
 			lastErr = fmt.Errorf("read response: %w", err)
 			continue

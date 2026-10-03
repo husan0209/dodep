@@ -79,6 +79,14 @@ func VerifyPassword(password, encodedHash string) (bool, error) {
 		return false, fmt.Errorf("failed to decode hash: %w", err)
 	}
 
+	// Only hashes produced by HashPassword are accepted. Argon2id's output length
+	// is fixed at argonKeyLength, so any other length means a malformed or
+	// foreign hash, and using the stored length directly would let a crafted
+	// database value drive the allocation.
+	if len(hash) != argonKeyLength {
+		return false, fmt.Errorf("invalid hash: expected %d byte output, got %d", argonKeyLength, len(hash))
+	}
+
 	// Compute hash with same parameters
 	otherHash := argon2.IDKey(
 		[]byte(password),
@@ -86,7 +94,7 @@ func VerifyPassword(password, encodedHash string) (bool, error) {
 		iterations,
 		memory,
 		uint8(parallelism),
-		uint32(len(hash)),
+		argonKeyLength,
 	)
 
 	// Constant-time comparison

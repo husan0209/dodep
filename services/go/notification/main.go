@@ -31,7 +31,11 @@ func main() {
 
 	// Initialize logger
 	zapLogger, _ := zap.NewProduction()
-	defer zapLogger.Sync()
+	defer func() {
+		// Sync flushes buffered log entries. On stdout/stderr it legitimately
+		// fails on Windows and in containers, so the error is not actionable.
+		_ = zapLogger.Sync()
+	}()
 
 	// Initialize database connection
 	dbPool, err := pgxpool.New(context.Background(), cfg.DatabaseURL)
@@ -46,7 +50,11 @@ func main() {
 		Password: cfg.RedisPassword,
 		DB:       cfg.RedisDB,
 	})
-	defer rdb.Close()
+	defer func() {
+		if err := rdb.Close(); err != nil {
+			zapLogger.Error("Failed to close Redis client", zap.Error(err))
+		}
+	}()
 
 	// Initialize repository
 	notifRepo := repository.NewNotificationRepository(dbPool, rdb)

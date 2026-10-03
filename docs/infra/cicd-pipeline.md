@@ -44,17 +44,23 @@ Production CI/CD pipeline для гемблинг-платформы с canary d
 ```
 .github/
 ├── workflows/
-│   ├── ci.yaml                    # Main CI orchestrator
 │   ├── ci-rust.yml                # Rust сервисы (Betting Engine, Wallet, WebSocket)
-│   ├── ci-go.yml                  # Go сервисы (Auth, User, Payment, etc.)
+│   ├── ci-go.yml                  # Go сервисы (Auth, User, Payment, Bonus, Casino, Notification, KYC)
+│   ├── ci-go-bonus.yml            # Bonus Service — отдельный расширенный набор (k6, Helm)
+│   ├── ci-go-casino-notification.yml
 │   ├── ci-python.yml              # Python сервисы (Fraud ML, Analytics)
+│   ├── ci-python-fraud-ml.yml     # Fraud ML с golden dataset
 │   ├── ci-frontend.yml            # Next.js Web Platform
+│   ├── ci-nextjs-web.yml          # Next.js Web Platform (lint/typecheck/test/build)
 │   ├── ci-flutter-mobile.yml      # Flutter Mobile App
 │   ├── ci-admin-panel.yml         # React Admin Panel
+│   ├── ci-terraform.yml           # Terraform validate/plan/apply
+│   ├── architecture-guards.yml    # Инварианты гемблинг-платформы (деньги, логи, секреты)
 │   ├── cd-production.yml          # Production release с canary
 │   ├── cd-promotion.yml           # Environment promotion (dev→staging→prod)
-│   ├── security-scan.yml          # Security scanning (Trivy, Semgrep)
-│   └── terraform-plan.yml         # Terraform plan/apply
+│   ├── cd.yaml                    # ArgoCD sync
+│   ├── security-scan.yml          # Security scanning (Trivy, Semgrep, CodeQL, secrets, IaC)
+│   └── security-audit.yml         # OWASP ZAP / Nmap / dependency audit
 │
 ├── actions/
 │   ├── docker-build-push/         # Composite: Build, scan, push Docker
