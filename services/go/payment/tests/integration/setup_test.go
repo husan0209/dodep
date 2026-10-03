@@ -320,7 +320,10 @@ func (m *MockUserClient) GetUserStatus(ctx context.Context, userID int64) (strin
 
 // GetUserInfo returns user info
 func (m *MockUserClient) GetUserInfo(ctx context.Context, userID int64) (*client.UserInfo, error) {
-	level, _ := m.kycLevels[userID]
+	level, ok := m.kycLevels[userID]
+	if !ok {
+		level = 0
+	}
 	return &client.UserInfo{
 		UserID:   userID,
 		KYCLevel: level,

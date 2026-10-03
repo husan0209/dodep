@@ -118,7 +118,7 @@ func (s *WebhookService) ProcessDepositWebhook(ctx context.Context, req ProcessW
 	}
 
 	// Mark as processed
-	s.idempotencyRepo.Set(ctx, idempotencyKey, []byte("processed"), 86400)
+	s.markIdempotencyKeyProcessed(ctx, idempotencyKey)
 
 	// Log audit
 	var outcomeAmount *decimal.Decimal
@@ -184,7 +184,7 @@ func (s *WebhookService) ProcessWithdrawalWebhook(ctx context.Context, req Proce
 	}
 
 	// Mark as processed
-	s.idempotencyRepo.Set(ctx, idempotencyKey, []byte("processed"), 86400)
+	s.markIdempotencyKeyProcessed(ctx, idempotencyKey)
 
 	// Log audit
 	s.logAudit(ctx, withdrawal.UserID, "withdrawal", withdrawal.ID, withdrawal.WithdrawalID, string(withdrawal.Status), string(newStatus), nil)
@@ -221,7 +221,10 @@ func (s *WebhookService) handleDepositFinished(ctx context.Context, payment *dom
 
 	// Update actual amount if different
 	if !payload.OutcomeAmount.IsZero() && !payload.OutcomeAmount.Equal(payment.RequestedAmount) {
-		s.paymentRepo.UpdateActualAmount(ctx, payment.ID, payload.OutcomeAmount)
+		if err := s.paymentRepo.UpdateActualAmount(ctx, payment.ID, payload.OutcomeAmount); err != nil {
+			log.Error().Err(err).Msg("Failed to update actual amount")
+			return err
+		}
 	}
 
 	log.Info().
@@ -330,6 +333,17 @@ func (s *WebhookService) mapWithdrawalStatus(status string) domain.WithdrawalSta
 		return s
 	}
 	return domain.WithdrawalStatusProcessing
+}
+
+// markIdempotencyKeyProcessed stores the 24h "already handled" marker for a
+// webhook. Failing to persist it does not fail the webhook: NOWPayments retries
+// on a non-2xx response, and re-processing an already-applied status update is
+// the safer outcome than dropping the settlement.
+func (s *WebhookService) markIdempotencyKeyProcessed(ctx context.Context, key string) {
+	if err := s.idempotencyRepo.Set(ctx, key, []byte("processed"), 86400); err != nil {
+		log.Warn().Err(err).Str("key", key).
+			Msg("Failed to mark webhook idempotency key as processed")
+	}
 }
 
 // logAudit logs an audit entry

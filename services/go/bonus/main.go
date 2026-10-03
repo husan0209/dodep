@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"net"
 	"os"
 	"os/signal"
@@ -119,8 +118,10 @@ func main() {
 		if !ok {
 			return c.Status(401).JSON(fiber.Map{"error": "unauthorized"})
 		}
-		var userID int64
-		fmt.Sscanf(userIDStr, "%d", &userID)
+		userID, err := strconv.ParseInt(userIDStr, 10, 64)
+		if err != nil {
+			return c.Status(401).JSON(fiber.Map{"error": "unauthorized"})
+		}
 
 		limit, _ := strconv.Atoi(c.Query("limit", "20"))
 		offset, _ := strconv.Atoi(c.Query("offset", "0"))
@@ -136,8 +137,10 @@ func main() {
 		if !ok {
 			return c.Status(401).JSON(fiber.Map{"error": "unauthorized"})
 		}
-		var userID int64
-		fmt.Sscanf(userIDStr, "%d", &userID)
+		userID, err := strconv.ParseInt(userIDStr, 10, 64)
+		if err != nil {
+			return c.Status(401).JSON(fiber.Map{"error": "unauthorized"})
+		}
 
 		bonus, err := bonusSvc.GetActiveBonus(c.Context(), userID)
 		if err != nil {

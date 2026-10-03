@@ -38,7 +38,7 @@ func main() {
 	rdb := redis.NewClient(&redis.Options{
 		Addr: cfg.RedisAddr, Password: cfg.RedisPassword, DB: cfg.RedisDB,
 	})
-	defer rdb.Close()
+	defer func() { _ = rdb.Close() }()
 
 	userRepo := repository.NewUserRepository(dbPool)
 	userService := service.NewUserService(userRepo, log)

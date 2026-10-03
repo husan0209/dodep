@@ -38,8 +38,15 @@ jobs:
       - name: Install golangci-lint
         uses: golangci/golangci-lint-action@v3
         with:
-          version: latest
-          working-directory: services/go
+          version: v1.64.8
+          # services/go is not a Go module - it only holds the per-service module
+          # directories. Letting the action run the linter there fails before any
+          # of our steps execute with
+          #   [linters_context] typechecking error: pattern ./...: directory
+          #   prefix . does not contain main module or its selected dependencies
+          # so install the binary only (`--version` is a no-op run) and lint each
+          # service from its own module below.
+          args: --version
 
       - name: Lint Casino Service
         run: |

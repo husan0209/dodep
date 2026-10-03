@@ -55,7 +55,7 @@ func main() {
 		Password: cfg.RedisPassword,
 		DB:       cfg.RedisDB,
 	})
-	defer rdb.Close()
+	defer func() { _ = rdb.Close() }()
 
 	// ── Repository ────────────────────────────────────────────────────────
 	casinoRepo := repository.NewCasinoRepository(db, rdb)

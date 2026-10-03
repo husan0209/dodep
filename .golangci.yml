@@ -1,0 +1,37 @@
+# Shared golangci-lint configuration for the Go services.
+#
+# Every service is its own module and each `golangci-lint run` executes from
+# services/go/<service>. golangci-lint walks up from the working directory when
+# looking for this file, so the single copy at the repository root applies to all
+# of them. Previously there was no configuration at all, so the defaults
+# applied - including a per-linter truncation that reported only three of the
+# identical findings.
+
+version: "2"
+
+run:
+  timeout: 10m
+
+linters:
+  settings:
+    errcheck:
+      # Releasing a resource we are throwing away anyway. Their errors carry no
+      # actionable signal and `defer resp.Body.Close()` is the idiomatic form, so
+      # requiring them to be checked produces hundreds of `_ =` noise lines.
+      # Repository and service calls that return errors are NOT excluded and
+      # must still be handled - see the findings fixed in the same commits.
+      exclude-functions:
+        - (io.Closer).Close
+        - (io.ReadCloser).Close
+        - (io.WriteCloser).Close
+        - (*os.File).Close
+        - (*go.uber.org/zap.Logger).Sync
+        - (*github.com/redis/go-redis/v9.Client).Close
+        - (*github.com/gofiber/fiber/v2.App).Shutdown
+
+issues:
+  # Report every finding. With the defaults golangci-lint stops after 50 issues
+  # per linter and 3 identical ones, so a red build understated how much was
+  # actually broken.
+  max-issues-per-linter: 0
+  max-same-issues: 0
