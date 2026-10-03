@@ -27,10 +27,7 @@ impl SubscriptionManager {
     }
 
     pub fn subscribe(&self, topic: Topic, sender: ClientSender) {
-        self.subscriptions
-            .entry(topic)
-            .or_default()
-            .push(sender);
+        self.subscriptions.entry(topic).or_default().push(sender);
     }
 
     pub fn unsubscribe(&self, topic: &Topic, sender: &ClientSender) {
@@ -74,14 +71,14 @@ impl SubscriptionManager {
     }
 
     pub fn subscriber_count(&self, topic: &Topic) -> usize {
-        self.subscriptions
-            .get(topic)
-            .map(|s| s.len())
-            .unwrap_or(0)
+        self.subscriptions.get(topic).map(|s| s.len()).unwrap_or(0)
     }
 
     pub fn total_subscriptions(&self) -> usize {
-        self.subscriptions.iter().map(|entry| entry.value().len()).sum()
+        self.subscriptions
+            .iter()
+            .map(|entry| entry.value().len())
+            .sum()
     }
 }
 

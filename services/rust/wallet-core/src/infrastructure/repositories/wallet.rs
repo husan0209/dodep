@@ -5,7 +5,7 @@ use rust_decimal::Decimal;
 use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
-use crate::domain::{Wallet, WalletType, WalletError};
+use crate::domain::{Wallet, WalletError, WalletType};
 
 /// Wallet repository
 pub struct WalletRepository {
@@ -16,7 +16,7 @@ impl WalletRepository {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
-    
+
     /// Get wallet by user and type
     pub async fn get_by_user_and_type(
         &self,
@@ -41,10 +41,10 @@ impl WalletRepository {
         .fetch_optional(&self.pool)
         .await
         .map_err(|e| WalletError::DatabaseError(e.to_string()))?;
-        
+
         Ok(wallet)
     }
-    
+
     /// Get wallet by user and type within a transaction (with row lock)
     pub async fn get_by_user_and_type_internal(
         &self,
@@ -71,10 +71,10 @@ impl WalletRepository {
         .fetch_optional(&mut **tx)
         .await
         .map_err(|e| WalletError::DatabaseError(e.to_string()))?;
-        
+
         Ok(wallet)
     }
-    
+
     /// Update wallet balance with optimistic locking
     pub async fn update_balances(
         &self,
@@ -105,11 +105,11 @@ impl WalletRepository {
         .fetch_optional(&self.pool)
         .await
         .map_err(|e| WalletError::DatabaseError(e.to_string()))?;
-        
+
         if result.is_none() {
             return Err(WalletError::ConcurrencyConflict);
         }
-        
+
         Ok(())
     }
 }

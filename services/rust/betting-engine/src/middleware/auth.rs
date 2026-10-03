@@ -104,7 +104,11 @@ pub async fn require_auth<B>(
 }
 
 pub fn require_admin(user: &AuthUser) -> Result<(), StatusCode> {
-    if user.roles.iter().any(|r| r == "admin" || r == "super_admin") {
+    if user
+        .roles
+        .iter()
+        .any(|r| r == "admin" || r == "super_admin")
+    {
         Ok(())
     } else {
         Err(StatusCode::FORBIDDEN)
