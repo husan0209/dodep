@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -585,6 +586,10 @@ func (s *CasinoService) EndGameSession(ctx context.Context, req *EndGameSessionR
 		zap.String("session_id", req.SessionID),
 		zap.String("game_id", session.GameID))
 
+	// Saturate rather than wrap: len() is an int and the protobuf field is an
+	// int32, so a pathological session would otherwise report a negative count.
+	roundsPlayed := int32(min(len(rounds), math.MaxInt32))
+
 	return &EndGameSessionResult{
 		Success: true,
 		Summary: &GameSessionSummary{
@@ -594,7 +599,7 @@ func (s *CasinoService) EndGameSession(ctx context.Context, req *EndGameSessionR
 			TotalBet:      totalBet,
 			TotalWin:      totalWin,
 			NetResult:     netResult,
-			RoundsPlayed:  int32(len(rounds)),
+			RoundsPlayed:  roundsPlayed,
 			StartedAt:     session.StartedAt,
 			EndedAt:       endedAt,
 			DurationSecs:  int64(endedAt.Sub(session.StartedAt).Seconds()),

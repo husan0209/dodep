@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"fmt"
+	"math"
 	"strconv"
 
 	"go.uber.org/zap"
@@ -194,9 +195,23 @@ func toProtoUser(user *domain.User) *pb.User {
 		Country:     user.CountryCode,
 		Currency:    user.CurrencyCode,
 		Status:      pb.UserStatus(pb.UserStatus_value[string(user.Status)]),
-		KycLevel:    pb.KycLevel(user.KYCLevel),
+		KycLevel:    pb.KycLevel(clampToInt32(int(user.KYCLevel))),
 		CreatedAt:   timestamppb.New(user.CreatedAt),
 		UpdatedAt:   timestamppb.New(user.UpdatedAt),
+	}
+}
+
+// clampToInt32 narrows a domain int to the int32 used by the protobuf
+// contract. Saturating instead of wrapping keeps an out-of-range domain value
+// from turning into a negative limit on the client side.
+func clampToInt32(v int) int32 {
+	switch {
+	case v > math.MaxInt32:
+		return math.MaxInt32
+	case v < math.MinInt32:
+		return math.MinInt32
+	default:
+		return int32(v)
 	}
 }
 
@@ -210,7 +225,7 @@ func toProtoPreferences(pref *domain.UserPreferences) *pb.UserPreferences {
 		SmsNotifications:            pref.SMSNotifications,
 		PushNotifications:           pref.PushNotifications,
 		RealityCheck:                pref.RealityCheck,
-		RealityCheckIntervalMinutes: int32(pref.RealityCheckIntervalMinutes),
+		RealityCheckIntervalMinutes: clampToInt32(pref.RealityCheckIntervalMinutes),
 		AutoPlay:                    pref.AutoPlay,
 		SoundPreference:             pref.SoundPreference,
 		UpdatedAt:                   timestamppb.New(pref.UpdatedAt),
@@ -224,7 +239,7 @@ func toProtoLimits(limits *domain.UserLimits) *pb.UserLimits {
 	}
 	if limits.SessionTimeLimit != nil {
 		result.SessionTimeLimit = &pb.TimeLimit{
-			Minutes:  int32(limits.SessionTimeLimit.Minutes),
+			Minutes:  clampToInt32(limits.SessionTimeLimit.Minutes),
 			IsActive: limits.SessionTimeLimit.IsActive,
 		}
 	}

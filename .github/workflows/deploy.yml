@@ -12,7 +12,9 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  RUST_VERSION: '1.75'
+  # Floor imposed by the committed lockfile; see the comment in ci.yaml
+  # for the 1.75 / 1.78 / 1.85 evidence. Do not lower without re-checking.
+  RUST_VERSION: '1.85'
   GO_VERSION: '1.21'
   PYTHON_VERSION: '3.11'
   NODE_VERSION: '20'
@@ -37,7 +39,8 @@ jobs:
           cache: 'npm'
 
       - name: Setup Rust
-        uses: dtolnay/rust-action@stable
+        # dtolnay/rust-action does not resolve ("repository not found").
+        uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ env.RUST_VERSION }}
           components: clippy, rustfmt
@@ -181,10 +184,17 @@ jobs:
     timeout-minutes: 5
     needs: [deploy-web, deploy-backend, deploy-admin]
     if: always()
+    # A notification must never fail the build. Without the guard below the
+    # step errors out with "Specify secrets.SLACK_WEBHOOK_URL" on every pull
+    # request in a repository where the optional webhook is not configured, so
+    # a missing notification is reported as a red check. The webhook is exposed
+    # through env because a step condition cannot read the secrets context.
+    env:
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
     
     steps:
       - name: Notify Slack
-        if: always()
+        if: always() && env.SLACK_WEBHOOK_URL != ''
         uses: 8398a7/action-slack@v3
         with:
           status: ${{ job.status }}
@@ -193,8 +203,6 @@ jobs:
             Web: ${{ needs.deploy-web.result }}
             Backend: ${{ needs.deploy-backend.result }}
             Admin: ${{ needs.deploy-admin.result }}
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
 
       - name: Notify Success
         if: success()

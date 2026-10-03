@@ -8,8 +8,20 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  RUST_VERSION: "1.75"
-  GO_VERSION: "1.21"
+  # Floor imposed by the committed lockfile, verified against
+  # services/rust/Cargo.lock:
+  #   1.75 -> lock file version `4` was found, but this version of Cargo does
+  #           not understand this lock file   (lockfile v4 needs >= 1.78)
+  #   1.78 -> feature `edition2024` is required, pulled in by cpufeatures
+  #           0.3.0 via aes 0.9.0   (edition 2024 needs >= 1.85)
+  #   1.85 -> resolves the whole workspace
+  # Do not lower this without re-running that check.
+  RUST_VERSION: "1.85"
+  # Must satisfy the highest `go` directive among the Go services. Several of
+  # them are on 1.25/1.26 (their CVE-fixed pgx and grpc releases require it),
+  # and without an explicit toolchain every build silently depends on the
+  # GOTOOLCHAIN auto-download.
+  GO_VERSION: "1.26.8"
   PYTHON_VERSION: "3.11"
   NODE_VERSION: "20"
 
@@ -18,6 +30,8 @@ jobs:
   rust-build:
     runs-on: ubuntu-latest
     strategy:
+      # One broken crate must not hide the verdicts of the others.
+      fail-fast: false
       matrix:
         service: [betting-engine, wallet-core, websocket-gateway]
     defaults:
@@ -27,7 +41,9 @@ jobs:
     - uses: actions/checkout@v4
     
     - name: Install Rust
-      uses: dtolnay/rust-action@stable
+      # dtolnay/rust-action does not resolve ("repository not found"), which
+      # failed every rust-build leg before a single line was compiled.
+      uses: dtolnay/rust-toolchain@stable
       with:
         toolchain: ${{ env.RUST_VERSION }}
         components: rustfmt, clippy
@@ -62,6 +78,8 @@ jobs:
   go-build:
     runs-on: ubuntu-latest
     strategy:
+      # One broken service must not hide the verdicts of the others.
+      fail-fast: false
       matrix:
         service: [auth, user, payment, bonus, casino, notification, kyc]
     defaults:
@@ -82,6 +100,21 @@ jobs:
           ~/.cache/go-build
           ~/go/pkg/mod
         key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+    
+    # libs/proto/gen is gitignored, so a clean checkout has no generated Go
+    # stubs and every service importing github.com/opus-casino/proto/gen/go/*
+    # fails to build with "no required module provides package ...".
+    - name: Install buf (pinned)
+      run: |
+        BUF_VERSION=1.73.0
+        curl -fsSL -o /tmp/buf.tar.gz \
+          "https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/buf-Linux-x86_64.tar.gz"
+        sudo tar -xzf /tmp/buf.tar.gz -C /tmp
+        sudo install -m 0755 /tmp/buf/bin/buf /usr/local/bin/buf
+    
+    - name: Generate Go stubs
+      # Absolute path: this job runs inside services/go/<service>.
+      run: make -C "${{ github.workspace }}/libs/proto" gen-go
     
     - name: Download dependencies
       run: go mod download
@@ -105,6 +138,8 @@ jobs:
   python-build:
     runs-on: ubuntu-latest
     strategy:
+      # One broken service must not hide the verdicts of the others.
+      fail-fast: false
       matrix:
         service: [fraud-ml, analytics]
     defaults:
@@ -146,6 +181,8 @@ jobs:
   frontend-build:
     runs-on: ubuntu-latest
     strategy:
+      # One broken app must not hide the verdicts of the others.
+      fail-fast: false
       matrix:
         app: [web, admin]
     defaults:
@@ -175,7 +212,12 @@ jobs:
       run: npm run build
     
     - name: Test
-      run: npm run test -- --run
+      # No runner flag is appended here: the two apps use different runners
+      # (web = jest, admin = vitest) and the CI-only flags they need are
+      # encoded in each package.json "test" script instead. Passing "--run"
+      # worked for vitest but made jest abort with
+      # 'Unrecognized option "run"'.
+      run: npm run test
 
   # Security scanning
   security-scan:

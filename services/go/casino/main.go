@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -41,7 +42,7 @@ func main() {
 	if cfg.Env == "development" {
 		log, _ = zap.NewDevelopment()
 	}
-	defer log.Sync()
+	defer func() { _ = log.Sync() }()
 
 	// ── Database (GORM + pgx) ──────────────────────────────────────────────
 	db, err := gorm.Open(postgres.Open(cfg.DatabaseURL), &gorm.Config{})
@@ -55,7 +56,11 @@ func main() {
 		Password: cfg.RedisPassword,
 		DB:       cfg.RedisDB,
 	})
-	defer rdb.Close()
+	defer func() {
+		if err := rdb.Close(); err != nil {
+			log.Error("Failed to close Redis client", zap.Error(err))
+		}
+	}()
 
 	// ── Repository ────────────────────────────────────────────────────────
 	casinoRepo := repository.NewCasinoRepository(db, rdb)
@@ -159,7 +164,17 @@ func main() {
 	go func() {
 		mux := http.NewServeMux()
 		mux.Handle("/metrics", promhttp.Handler())
-		if err := http.ListenAndServe(":9186", mux); err != nil {
+		// Explicit timeouts: http.ListenAndServe applies none, which leaves the
+		// endpoint open to Slowloris-style connection exhaustion.
+		metricsSrv := &http.Server{
+			Addr:              ":9186",
+			Handler:           mux,
+			ReadHeaderTimeout: 10 * time.Second,
+			ReadTimeout:       30 * time.Second,
+			WriteTimeout:      30 * time.Second,
+			IdleTimeout:       60 * time.Second,
+		}
+		if err := metricsSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Error("Casino: metrics server error", zap.Error(err))
 		}
 	}()

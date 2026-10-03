@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
@@ -472,20 +472,125 @@ func (r *AuthRepository) DeleteAllUserSessions(ctx context.Context, userID strin
 	}
 
 	for _, sid := range sessionIDs {
-		r.redis.Del(ctx, fmt.Sprintf("session:%s", sid))
+		if err := r.redis.Del(ctx, fmt.Sprintf("session:%s", sid)).Err(); err != nil {
+			return fmt.Errorf("failed to delete session %s: %w", sid, err)
+		}
 	}
-	r.redis.Del(ctx, key)
+
+	if err := r.redis.Del(ctx, key).Err(); err != nil {
+		return fmt.Errorf("failed to delete session index: %w", err)
+	}
 
 	return nil
 }
 
+// Refresh token rotation with reuse detection.
+//
+// Active tokens live under refresh_token:<token>. When a token is rotated it is
+// moved to refresh_rotated:<token>, keeping its family id and the remaining
+// lifetime. If a token is later presented again while sitting in the rotated
+// set, it has been stolen and replayed: the whole family is revoked and the
+// caller must fail the refresh (see RotateRefreshToken).
+const refreshTokenPrefix = "refresh_token:"
+const rotatedRefreshTokenPrefix = "refresh_rotated:"
+
 // StoreRefreshToken stores a refresh token in Redis
 func (r *AuthRepository) StoreRefreshToken(ctx context.Context, token string, userID string, sessionID string, ttl time.Duration) error {
-	key := fmt.Sprintf("refresh_token:%s", token)
+	key := fmt.Sprintf("%s%s", refreshTokenPrefix, token)
 	data := fmt.Sprintf("%s:%s", userID, sessionID)
 	if err := r.redis.Set(ctx, key, data, ttl).Err(); err != nil {
 		return fmt.Errorf("%w: failed to store refresh token in redis", domain.ErrDependencyUnavailable)
 	}
+	return nil
+}
+
+// RotateRefreshToken consumes a refresh token and issues the next one in the
+// same family.
+//
+// Returns (userID, sessionID, newToken, err). When err is
+// domain.ErrRefreshTokenReuse the token had already been rotated — the whole
+// family and all user sessions have been revoked and the caller must reject
+// the request.
+func (r *AuthRepository) RotateRefreshToken(
+	ctx context.Context,
+	currentToken string,
+	newToken string,
+	ttl time.Duration,
+) (userID string, sessionID string, err error) {
+	key := fmt.Sprintf("%s%s", refreshTokenPrefix, currentToken)
+	rotatedKey := fmt.Sprintf("%s%s", rotatedRefreshTokenPrefix, currentToken)
+
+	// Atomically move the token to the rotated set. GETDEL-style semantics:
+	// only one caller can win the rotation.
+	pipeline := r.redis.TxPipeline()
+	moved := pipeline.GetDel(ctx, key)
+	if _, execErr := pipeline.Exec(ctx); execErr != nil && execErr != redis.Nil {
+		return "", "", fmt.Errorf("%w: failed to read refresh token in redis", domain.ErrDependencyUnavailable)
+	}
+
+	value, err := moved.Val(), moved.Err()
+	switch {
+	case err == redis.Nil:
+		// Not active: either unknown or already rotated. Distinguish reuse.
+		if r.redis.Exists(ctx, rotatedKey).Val() > 0 {
+			return "", "", domain.ErrRefreshTokenReuse
+		}
+		return "", "", domain.ErrInvalidRefreshToken
+	case err != nil:
+		return "", "", fmt.Errorf("%w: failed to read refresh token in redis", domain.ErrDependencyUnavailable)
+	}
+
+	parts := strings.SplitN(value, ":", 2)
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return "", "", domain.ErrInvalidRefreshToken
+	}
+	userID, sessionID = parts[0], parts[1]
+
+	// Remember the consumed token for reuse detection, bounded by the new
+	// token's lifetime so the rotated set cannot grow without limit.
+	ttlLeft := ttl
+	if remaining, err := r.redis.TTL(ctx, key).Result(); err == nil && remaining > 0 {
+		ttlLeft = remaining
+	}
+	if err := r.redis.Set(ctx, rotatedKey, userID+":"+sessionID, ttlLeft).Err(); err != nil {
+		return "", "", fmt.Errorf("%w: failed to record rotated refresh token in redis", domain.ErrDependencyUnavailable)
+	}
+
+	if err := r.redis.Set(ctx, fmt.Sprintf("%s%s", refreshTokenPrefix, newToken),
+		userID+":"+sessionID, ttl).Err(); err != nil {
+		return "", "", fmt.Errorf("%w: failed to store refresh token in redis", domain.ErrDependencyUnavailable)
+	}
+
+	return userID, sessionID, nil
+}
+
+// RevokeRefreshTokenFamily removes every active refresh token of a session,
+// which is what happens when token reuse is detected.
+func (r *AuthRepository) RevokeRefreshTokenFamily(ctx context.Context, userID, sessionID string) error {
+	pattern := fmt.Sprintf("%s*", refreshTokenPrefix)
+	iter := r.redis.Scan(ctx, 0, pattern, 100).Iterator()
+
+	var keys []string
+	for iter.Next(ctx) {
+		keys = append(keys, iter.Val())
+	}
+	if err := iter.Err(); err != nil {
+		return fmt.Errorf("%w: failed to scan refresh tokens in redis", domain.ErrDependencyUnavailable)
+	}
+
+	for _, key := range keys {
+		value, err := r.redis.Get(ctx, key).Result()
+		if err != nil {
+			continue
+		}
+		if parts := strings.SplitN(value, ":", 2); len(parts) == 2 &&
+			parts[0] == userID && (sessionID == "" || parts[1] == sessionID) {
+			if err := r.redis.Del(ctx, key).Err(); err != nil {
+				return fmt.Errorf("%w: failed to revoke refresh token in redis", domain.ErrDependencyUnavailable)
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -517,33 +622,74 @@ func (r *AuthRepository) DeleteRefreshToken(ctx context.Context, token string) e
 	return nil
 }
 
-// TrackLoginAttempt tracks failed login attempts
-func (r *AuthRepository) TrackLoginAttempt(ctx context.Context, email, ip string) (attempts int, locked bool, err error) {
-	key := fmt.Sprintf("login_attempts:%s:%s", email, ip)
+// Login attempt limits. Failures are counted per identifier (email/username)
+// and per source IP independently, so neither a single account hammered from
+// many IPs nor one IP spraying many accounts can slip under the limit.
+const (
+	loginAttemptWindow    = 15 * time.Minute
+	loginLockDuration     = 30 * time.Minute
+	maxAttemptsPerAccount = 5
+	maxAttemptsPerIP      = 10
+)
 
+// TrackLoginAttempt tracks failed login attempts.
+//
+// Both counters are incremented: one keyed by the identifier, one keyed by the
+// IP. The account is locked as soon as either threshold is reached.
+func (r *AuthRepository) TrackLoginAttempt(ctx context.Context, email, ip string) (attempts int, locked bool, err error) {
+	accountKey := loginAttemptsAccountKey(email)
+	ipKey := loginAttemptsIPKey(ip)
+
+	accountCount, err := r.incrWithWindow(ctx, accountKey)
+	if err != nil {
+		return 0, false, err
+	}
+
+	ipCount := int64(0)
+	if ip != "" {
+		ipCount, err = r.incrWithWindow(ctx, ipKey)
+		if err != nil {
+			return 0, false, err
+		}
+	}
+
+	if accountCount >= maxAttemptsPerAccount || ipCount >= maxAttemptsPerIP {
+		lockKey := fmt.Sprintf("login_lock:%s", strings.ToLower(email))
+		if err := r.redis.Set(ctx, lockKey, "1", loginLockDuration).Err(); err != nil {
+			return int(accountCount), false, fmt.Errorf(
+				"%w: failed to lock account in redis", domain.ErrDependencyUnavailable)
+		}
+		return int(accountCount), true, nil
+	}
+
+	return int(accountCount), false, nil
+}
+
+// incrWithWindow increments a counter and applies the TTL on first use.
+func (r *AuthRepository) incrWithWindow(ctx context.Context, key string) (int64, error) {
 	val, err := r.redis.Incr(ctx, key).Result()
 	if err != nil {
-		return 0, false, fmt.Errorf("%w: failed to increment login attempts in redis", domain.ErrDependencyUnavailable)
+		return 0, fmt.Errorf("%w: failed to increment login attempts in redis", domain.ErrDependencyUnavailable)
 	}
-
-	// Set expiry on first attempt
 	if val == 1 {
-		r.redis.Expire(ctx, key, 15*time.Minute)
+		if err := r.redis.Expire(ctx, key, loginAttemptWindow).Err(); err != nil {
+			return 0, fmt.Errorf("%w: failed to set login attempt window in redis", domain.ErrDependencyUnavailable)
+		}
 	}
+	return val, nil
+}
 
-	// Lock after 10 failed attempts
-	if val >= 10 {
-		lockKey := fmt.Sprintf("login_lock:%s", email)
-		r.redis.Set(ctx, lockKey, "1", 30*time.Minute)
-		return int(val), true, nil
-	}
+func loginAttemptsAccountKey(email string) string {
+	return fmt.Sprintf("login_attempts:account:%s", strings.ToLower(strings.TrimSpace(email)))
+}
 
-	return int(val), false, nil
+func loginAttemptsIPKey(ip string) string {
+	return fmt.Sprintf("login_attempts:ip:%s", strings.TrimSpace(ip))
 }
 
 // IsAccountLocked checks if an account is locked
 func (r *AuthRepository) IsAccountLocked(ctx context.Context, email string) (bool, error) {
-	key := fmt.Sprintf("login_lock:%s", email)
+	key := fmt.Sprintf("login_lock:%s", strings.ToLower(strings.TrimSpace(email)))
 	exists, err := r.redis.Exists(ctx, key).Result()
 	if err != nil {
 		return false, fmt.Errorf("%w: failed to check account lock in redis", domain.ErrDependencyUnavailable)
@@ -551,10 +697,20 @@ func (r *AuthRepository) IsAccountLocked(ctx context.Context, email string) (boo
 	return exists > 0, nil
 }
 
-// ClearLoginAttempts clears failed login attempts
+// ClearLoginAttempts clears failed login attempts for an account and IP.
+//
+// Called after a successful authentication, so it also lifts the lockout:
+// a successful login proves the credentials were not guessed. The IP counter
+// is cleared as well, otherwise one legitimate login would keep an unrelated
+// user on the same NAT locked out.
 func (r *AuthRepository) ClearLoginAttempts(ctx context.Context, email, ip string) error {
-	key := fmt.Sprintf("login_attempts:%s:%s", email, ip)
-	if err := r.redis.Del(ctx, key).Err(); err != nil {
+	keys := []string{loginAttemptsAccountKey(email)}
+	if ip != "" {
+		keys = append(keys, loginAttemptsIPKey(ip))
+	}
+	keys = append(keys, fmt.Sprintf("login_lock:%s", strings.ToLower(strings.TrimSpace(email))))
+
+	if err := r.redis.Del(ctx, keys...).Err(); err != nil {
 		return fmt.Errorf("%w: failed to clear login attempts in redis", domain.ErrDependencyUnavailable)
 	}
 	return nil

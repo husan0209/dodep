@@ -69,21 +69,6 @@ func respondError(c *fiber.Ctx, status int, message string) error {
 	})
 }
 
-// respondPaginated sends a paginated response
-func respondPaginated(c *fiber.Ctx, items interface{}, nextCursor string, hasMore bool) error {
-	return c.Status(200).JSON(PaginatedResponse{
-		Data: items,
-		Pagination: Pagination{
-			NextCursor: nextCursor,
-			HasMore:    hasMore,
-		},
-		Meta: Meta{
-			RequestID: getRequestID(c),
-			Timestamp: time.Now().UTC().Format(time.RFC3339),
-		},
-	})
-}
-
 // getRequestID extracts request ID from context or generates a new one
 func getRequestID(c *fiber.Ctx) string {
 	if rid, ok := c.Locals("requestid").(string); ok && rid != "" {

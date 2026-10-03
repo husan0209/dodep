@@ -69,12 +69,25 @@ jobs:
       - name: "G3: No hardcoded secrets or private keys"
         run: |
           echo "Проверка G3: отсутствие захардкоженных приватных ключей..."
-          if grep -rn "BEGIN RSA PRIVATE KEY" . 2>/dev/null | grep -v ".git"; then
-            echo "❌ Обнаружен приватный ключ в репозитории!"
-            exit 1
-          fi
-          if grep -rn "BEGIN OPENSSH PRIVATE KEY" . 2>/dev/null | grep -v ".git"; then
-            echo "❌ Обнаружен SSH приватный ключ в репозитории!"
+          # git grep: tracked files only. The previous `grep -rn ... .` scanned
+          # node_modules (slow enough to look like a hang) and matched this very
+          # workflow file, so the guard failed on itself.
+          #
+          # Excluded on purpose:
+          #   this file                - contains the search strings themselves
+          #   agent skill docs (*.md)  - sanitised CLI examples, not real keys
+          # Real keys still fail the build: they land in source/config/env, which
+          # is exactly what remains in scope.
+          #
+          # Negative-tested by tools/testing/guards/g3-negative-test.sh.
+          HITS="$(git grep -n -I -e 'BEGIN RSA PRIVATE KEY' -e 'BEGIN OPENSSH PRIVATE KEY' \
+                    -- . \
+                    ':!.github/workflows/architecture-guards.yml' \
+                    ':!*.md' \
+                    ':!docs/**' 2>/dev/null || true)"
+          if [ -n "$HITS" ]; then
+            echo "❌ Обнаружен приватный ключ в репозитории:"
+            echo "$HITS"
             exit 1
           fi
           echo "✅ G3 пройден: приватные ключи не обнаружены."
