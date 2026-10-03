@@ -2,7 +2,7 @@ import { Metadata } from 'next'
 
 export const metadata: Metadata = {
   title: 'Контакты | DOD',
-  description: 'Страница обратной связи DOD.'
+  description: 'Страница обратной связи DOD.',
 }
 
 export default function ContactPage() {

@@ -31,7 +31,9 @@ export function SportsEvent({ event }: SportsEventProps) {
   }
 
   const handleAddBet = (selection: 'home' | 'draw' | 'away', odds: number, marketId: number) => {
-    const outcomeId = Number(`${event.id}${marketId}${selection === 'home' ? 1 : selection === 'draw' ? 2 : 3}`)
+    const outcomeId = Number(
+      `${event.id}${marketId}${selection === 'home' ? 1 : selection === 'draw' ? 2 : 3}`
+    )
     if (isSelected(outcomeId)) {
       removeSelection(outcomeId)
       return
@@ -49,7 +51,8 @@ export function SportsEvent({ event }: SportsEventProps) {
       eventId: Number(event.id),
       marketId,
       outcomeId,
-      outcomeName: selection === 'home' ? event.homeTeam : selection === 'draw' ? 'Ничья' : event.awayTeam,
+      outcomeName:
+        selection === 'home' ? event.homeTeam : selection === 'draw' ? 'Ничья' : event.awayTeam,
       odds,
       eventName: `${event.homeTeam} vs ${event.awayTeam}`,
       marketName: selection === 'home' ? 'П1' : selection === 'draw' ? 'X' : 'П2',
@@ -78,7 +81,10 @@ export function SportsEvent({ event }: SportsEventProps) {
             <span className="text-[10px] text-gray-500 truncate">{event.league}</span>
           </div>
           <span className="text-[10px] text-gray-500 shrink-0 ml-2">
-            {new Date(event.startTime).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
+            {new Date(event.startTime).toLocaleTimeString('ru-RU', {
+              hour: '2-digit',
+              minute: '2-digit',
+            })}
           </span>
         </div>
 
@@ -88,13 +94,17 @@ export function SportsEvent({ event }: SportsEventProps) {
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
               {event.isLive && event.homeScore !== undefined && (
-                <span className="text-xs font-bold text-yellow-400 shrink-0 w-6 text-right">{event.homeScore}</span>
+                <span className="text-xs font-bold text-yellow-400 shrink-0 w-6 text-right">
+                  {event.homeScore}
+                </span>
               )}
               <p className="text-xs font-medium text-gray-200 truncate">{event.homeTeam}</p>
             </div>
             <div className="flex items-center gap-2 mt-1">
               {event.isLive && event.awayScore !== undefined && (
-                <span className="text-xs font-bold text-yellow-400 shrink-0 w-6 text-right">{event.awayScore}</span>
+                <span className="text-xs font-bold text-yellow-400 shrink-0 w-6 text-right">
+                  {event.awayScore}
+                </span>
               )}
               <p className="text-xs font-medium text-gray-200 truncate">{event.awayTeam}</p>
             </div>

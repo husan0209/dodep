@@ -26,24 +26,24 @@ export default function RegisterPage() {
   }
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const value = e.target.value;
-    const name = e.target.name;
-    
+    const value = e.target.value
+    const name = e.target.name
+
     if (name === 'email') {
       setFormData({
         ...formData,
         [name]: value.replace(/\s/g, ''),
-      });
+      })
     } else if (name === 'username') {
       setFormData({
         ...formData,
         [name]: value.trim(),
-      });
+      })
     } else {
       setFormData({
         ...formData,
         [name]: value,
-      });
+      })
     }
   }
 
@@ -72,11 +72,20 @@ export default function RegisterPage() {
         countryCode: formData.countryCode,
         currencyCode: formData.currencyCode,
       })
-      await register(cleanEmail, formData.password, formData.username.trim(), formData.countryCode, formData.currencyCode)
-      
+      await register(
+        cleanEmail,
+        formData.password,
+        formData.username.trim(),
+        formData.countryCode,
+        formData.currencyCode
+      )
+
       router.replace('/sportsbook')
     } catch (err: any) {
-      if (err?.error?.code === 'USER_ALREADY_EXISTS' || err?.error?.code === 'AUTH_USER_ALREADY_EXISTS') {
+      if (
+        err?.error?.code === 'USER_ALREADY_EXISTS' ||
+        err?.error?.code === 'AUTH_USER_ALREADY_EXISTS'
+      ) {
         setError('Пользователь с таким email уже существует. Войдите или используйте другой email.')
       } else if (err?.error?.message) {
         setError(err.error.message)
@@ -92,7 +101,7 @@ export default function RegisterPage() {
     <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
       <div className="absolute top-1/3 right-1/4 w-[500px] h-[500px] bg-blue-600/10 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute bottom-1/4 left-1/4 w-[400px] h-[400px] bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
-      
+
       <div className="w-full max-w-xl relative z-10 card !p-8 md:!p-10">
         <div>
           <h2 className="mt-2 text-center text-4xl font-bold font-display text-white">
@@ -118,7 +127,10 @@ export default function RegisterPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div className="md:col-span-2">
-              <label htmlFor="username" className="block text-sm font-semibold text-gray-300 mb-1 pl-1">
+              <label
+                htmlFor="username"
+                className="block text-sm font-semibold text-gray-300 mb-1 pl-1"
+              >
                 Имя пользователя
               </label>
               <input
@@ -136,7 +148,10 @@ export default function RegisterPage() {
             </div>
 
             <div className="md:col-span-2">
-              <label htmlFor="email" className="block text-sm font-semibold text-gray-300 mb-1 pl-1">
+              <label
+                htmlFor="email"
+                className="block text-sm font-semibold text-gray-300 mb-1 pl-1"
+              >
                 Email
               </label>
               <input
@@ -154,7 +169,10 @@ export default function RegisterPage() {
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-semibold text-gray-300 mb-1 pl-1">
+              <label
+                htmlFor="password"
+                className="block text-sm font-semibold text-gray-300 mb-1 pl-1"
+              >
                 Пароль
               </label>
               <input
@@ -172,7 +190,10 @@ export default function RegisterPage() {
             </div>
 
             <div>
-              <label htmlFor="confirmPassword" className="block text-sm font-semibold text-gray-300 mb-1 pl-1">
+              <label
+                htmlFor="confirmPassword"
+                className="block text-sm font-semibold text-gray-300 mb-1 pl-1"
+              >
                 Подтвердите пароль
               </label>
               <input
@@ -190,7 +211,10 @@ export default function RegisterPage() {
             </div>
 
             <div>
-              <label htmlFor="countryCode" className="block text-sm font-semibold text-gray-300 mb-1 pl-1">
+              <label
+                htmlFor="countryCode"
+                className="block text-sm font-semibold text-gray-300 mb-1 pl-1"
+              >
                 Страна
               </label>
               <select
@@ -211,7 +235,10 @@ export default function RegisterPage() {
             </div>
 
             <div>
-              <label htmlFor="currencyCode" className="block text-sm font-semibold text-gray-300 mb-1 pl-1">
+              <label
+                htmlFor="currencyCode"
+                className="block text-sm font-semibold text-gray-300 mb-1 pl-1"
+              >
                 Валюта
               </label>
               <select
@@ -242,11 +269,17 @@ export default function RegisterPage() {
             />
             <label htmlFor="terms" className="ml-3 block text-sm font-medium text-gray-400">
               Я согласен с{' '}
-              <Link href="/terms" className="text-blue-400 hover:text-white transition-colors underline underline-offset-2">
+              <Link
+                href="/terms"
+                className="text-blue-400 hover:text-white transition-colors underline underline-offset-2"
+              >
                 условиями использования
               </Link>{' '}
               и{' '}
-              <Link href="/privacy" className="text-blue-400 hover:text-white transition-colors underline underline-offset-2">
+              <Link
+                href="/privacy"
+                className="text-blue-400 hover:text-white transition-colors underline underline-offset-2"
+              >
                 политикой конфиденциальности
               </Link>
             </label>

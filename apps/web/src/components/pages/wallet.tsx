@@ -8,9 +8,33 @@ import { TransactionHistory } from '@components/wallet/transaction-history'
 import { trackEvent } from '@lib/telemetry'
 
 const mockTransactions = [
-  { id: '1', type: 'deposit' as const, amount: 1000, currency: 'RUB', status: 'completed' as const, method: 'Card', createdAt: '2024-03-24T10:00:00Z' },
-  { id: '2', type: 'withdraw' as const, amount: 500, currency: 'RUB', status: 'pending' as const, method: 'Bank Transfer', createdAt: '2024-03-23T15:30:00Z' },
-  { id: '3', type: 'bet' as const, amount: -100, currency: 'RUB', status: 'completed' as const, method: 'Bet', createdAt: '2024-03-23T12:00:00Z' },
+  {
+    id: '1',
+    type: 'deposit' as const,
+    amount: 1000,
+    currency: 'RUB',
+    status: 'completed' as const,
+    method: 'Card',
+    createdAt: '2024-03-24T10:00:00Z',
+  },
+  {
+    id: '2',
+    type: 'withdraw' as const,
+    amount: 500,
+    currency: 'RUB',
+    status: 'pending' as const,
+    method: 'Bank Transfer',
+    createdAt: '2024-03-23T15:30:00Z',
+  },
+  {
+    id: '3',
+    type: 'bet' as const,
+    amount: -100,
+    currency: 'RUB',
+    status: 'completed' as const,
+    method: 'Bet',
+    createdAt: '2024-03-23T12:00:00Z',
+  },
 ]
 
 export function WalletPage() {
@@ -36,11 +60,13 @@ export function WalletPage() {
 
       {/* Tabs */}
       <div className="flex gap-0.5 mb-3 bg-[rgb(var(--bg-primary))] p-0.5 rounded">
-        {([
-          { id: 'deposit', label: 'Пополнить' },
-          { id: 'withdraw', label: 'Вывести' },
-          { id: 'history', label: 'История' },
-        ] as const).map((tab) => (
+        {(
+          [
+            { id: 'deposit', label: 'Пополнить' },
+            { id: 'withdraw', label: 'Вывести' },
+            { id: 'history', label: 'История' },
+          ] as const
+        ).map((tab) => (
           <button
             key={tab.id}
             onClick={() => {

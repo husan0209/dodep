@@ -33,9 +33,7 @@ export function WithdrawForm() {
       </div>
 
       <div>
-        <h3 className="text-sm font-semibold text-white mb-3">
-          Выберите способ вывода
-        </h3>
+        <h3 className="text-sm font-semibold text-white mb-3">Выберите способ вывода</h3>
         <div className="grid grid-cols-2 gap-3">
           {withdrawMethods.map((method) => (
             <button
@@ -48,18 +46,14 @@ export function WithdrawForm() {
               }`}
             >
               <span className="text-xl mb-2 block">{method.icon}</span>
-              <span className="text-xs font-medium text-gray-200">
-                {method.name}
-              </span>
+              <span className="text-xs font-medium text-gray-200">{method.name}</span>
             </button>
           ))}
         </div>
       </div>
 
       <div>
-        <label className="block text-xs text-gray-400 mb-2">
-          Сумма вывода
-        </label>
+        <label className="block text-xs text-gray-400 mb-2">Сумма вывода</label>
         <div className="relative">
           <input
             type="number"
@@ -70,18 +64,17 @@ export function WithdrawForm() {
             min={selectedMethodData?.min}
             max={selectedMethodData?.max}
           />
-          <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500">
-            ₽
-          </span>
+          <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500">₽</span>
         </div>
         {selectedMethodData && (
           <p className="text-[10px] text-gray-500 mt-1">
-            Мин: {selectedMethodData.min}₽ | Макс: {selectedMethodData.max}₽ | Время: {selectedMethodData.time}
+            Мин: {selectedMethodData.min}₽ | Макс: {selectedMethodData.max}₽ | Время:{' '}
+            {selectedMethodData.time}
           </p>
         )}
       </div>
 
-      <button 
+      <button
         onClick={handleSubmit}
         disabled={!amount || amount <= 0}
         className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"

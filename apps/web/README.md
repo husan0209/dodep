@@ -66,23 +66,27 @@ apps/web/
 ## 🛠 Tech Stack
 
 ### Core
+
 - **Framework:** Next.js 14 (App Router)
 - **Language:** TypeScript 5 (strict mode)
 - **Styling:** Tailwind CSS 3 + Radix UI primitives
 - **UI Components:** class-variance-authority, clsx, tailwind-merge
 
 ### State & Data
+
 - **State Management:** Zustand (client state)
 - **Data Fetching:** TanStack Query v5 (server state)
 - **URL State:** nuqs (type-safe search params)
 - **WebSocket:** Native WebSocket API with manager
 
 ### Forms & Validation
+
 - **Forms:** React Hook Form
 - **Validation:** Zod
 - **Resolvers:** @hookform/resolvers
 
 ### UX
+
 - **Notifications:** Sonner (toast notifications)
 - **Theme:** next-themes (dark/light)
 - **Charts:** Recharts
@@ -105,14 +109,14 @@ npm start
 
 ## 📄 Pages
 
-| Page | Route | Description |
-|------|-------|-------------|
-| Sportsbook | `/sportsbook` | Sports betting (live/pre-match) |
-| Casino | `/casino` | Casino games (slots, live, table) |
-| Wallet | `/wallet` | Wallet (deposit, withdraw, history) |
-| Profile | `/profile` | User profile, KYC |
-| Bonuses | `/bonuses` | Available bonuses |
-| Support | `/support` | Support, FAQ |
+| Page       | Route         | Description                         |
+| ---------- | ------------- | ----------------------------------- |
+| Sportsbook | `/sportsbook` | Sports betting (live/pre-match)     |
+| Casino     | `/casino`     | Casino games (slots, live, table)   |
+| Wallet     | `/wallet`     | Wallet (deposit, withdraw, history) |
+| Profile    | `/profile`    | User profile, KYC                   |
+| Bonuses    | `/bonuses`    | Available bonuses                   |
+| Support    | `/support`    | Support, FAQ                        |
 
 ## 🔌 API Integration
 
@@ -120,47 +124,47 @@ npm start
 
 ```typescript
 // Typed API modules
-import { authApi } from "@/lib/api/auth";
-import { walletApi } from "@/lib/api/wallet";
-import { betsApi } from "@/lib/api/bets";
+import { authApi } from '@/lib/api/auth'
+import { walletApi } from '@/lib/api/wallet'
+import { betsApi } from '@/lib/api/bets'
 
 // Usage with error handling
 try {
-  const user = await authApi.me();
+  const user = await authApi.me()
 } catch (error) {
-  const message = getErrorMessage(error);
+  const message = getErrorMessage(error)
 }
 ```
 
 ### TanStack Query
 
 ```typescript
-import { useQuery } from "@tanstack/react-query";
-import { queryKeys } from "@/lib/query-keys";
-import { walletApi } from "@/lib/api/wallet";
+import { useQuery } from '@tanstack/react-query'
+import { queryKeys } from '@/lib/query-keys'
+import { walletApi } from '@/lib/api/wallet'
 
 function useBalance(currency: string) {
   return useQuery({
     queryKey: queryKeys.wallet.balance(currency),
     queryFn: () => walletApi.getBalance(currency),
     staleTime: 30_000,
-  });
+  })
 }
 ```
 
 ### WebSocket
 
 ```typescript
-import { useWebSocket } from "@/lib/websocket";
+import { useWebSocket } from '@/lib/websocket'
 
 function useLiveOdds(eventId: number) {
-  const [odds, setOdds] = useState({});
-  
+  const [odds, setOdds] = useState({})
+
   useWebSocket(
     `event:${eventId}:odds`,
     (data) => setOdds(data),
     true // enabled
-  );
+  )
 }
 ```
 
@@ -213,6 +217,7 @@ NEXT_PUBLIC_APP_ENV=development
 ### Security Headers
 
 Configured in `next.config.ts`:
+
 - Strict-Transport-Security
 - X-Frame-Options: DENY
 - X-Content-Type-Options: nosniff
@@ -221,12 +226,12 @@ Configured in `next.config.ts`:
 
 ## 📊 Performance Targets
 
-| Metric | Target |
-|--------|--------|
-| LCP | < 2.5s |
-| FID | < 100ms |
-| CLS | < 0.1 |
-| TTI | < 3.5s |
+| Metric | Target  |
+| ------ | ------- |
+| LCP    | < 2.5s  |
+| FID    | < 100ms |
+| CLS    | < 0.1   |
+| TTI    | < 3.5s  |
 
 ## 🧪 Testing
 

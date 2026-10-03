@@ -13,7 +13,7 @@ interface NotificationState {
   notifications: Notification[]
   unreadCount: number
   isLoading: boolean
-  
+
   // Actions
   setNotifications: (notifications: Notification[]) => void
   addNotification: (notification: Notification) => void
@@ -35,9 +35,7 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
 
   addNotification: (notification: Notification) => {
     const newNotifications = [notification, ...get().notifications]
-    const unreadCount = notification.isRead
-      ? get().unreadCount
-      : get().unreadCount + 1
+    const unreadCount = notification.isRead ? get().unreadCount : get().unreadCount + 1
     set({ notifications: newNotifications, unreadCount })
   },
 

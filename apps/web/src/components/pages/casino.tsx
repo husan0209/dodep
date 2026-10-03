@@ -9,10 +9,11 @@ const mockGames = [
   {
     id: '1',
     name: 'Book of Dead',
-    provider: 'Play\'n GO',
+    provider: "Play'n GO",
     category: 'slots',
     imageUrl: '/images/games/book-of-dead.jpg',
-    thumbnailUrl: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='400'%3E%3Crect width='300' height='400' fill='%231a1a2e'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%23ffffff' font-size='16' font-family='sans-serif'%3EBook%20of%20Dead%3C/text%3E%3C/svg%3E",
+    thumbnailUrl:
+      "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='400'%3E%3Crect width='300' height='400' fill='%231a1a2e'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%23ffffff' font-size='16' font-family='sans-serif'%3EBook%20of%20Dead%3C/text%3E%3C/svg%3E",
     isDemoAvailable: true,
     popularityScore: 95,
     rtp: 96.21,
@@ -24,7 +25,8 @@ const mockGames = [
     provider: 'NetEnt',
     category: 'slots',
     imageUrl: '/images/games/starburst.jpg',
-    thumbnailUrl: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='400'%3E%3Crect width='300' height='400' fill='%231a1a2e'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%23ffffff' font-size='16' font-family='sans-serif'%3EStarburst%3C/text%3E%3C/svg%3E",
+    thumbnailUrl:
+      "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='400'%3E%3Crect width='300' height='400' fill='%231a1a2e'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%23ffffff' font-size='16' font-family='sans-serif'%3EStarburst%3C/text%3E%3C/svg%3E",
     isDemoAvailable: true,
     popularityScore: 90,
     rtp: 96.09,
@@ -36,7 +38,8 @@ const mockGames = [
     provider: 'Evolution',
     category: 'blackjack',
     imageUrl: '/images/games/blackjack-vip.jpg',
-    thumbnailUrl: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='400'%3E%3Crect width='300' height='400' fill='%231a1a2e'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%23ffffff' font-size='16' font-family='sans-serif'%3EBlackjack%20VIP%3C/text%3E%3C/svg%3E",
+    thumbnailUrl:
+      "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='400'%3E%3Crect width='300' height='400' fill='%231a1a2e'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%23ffffff' font-size='16' font-family='sans-serif'%3EBlackjack%20VIP%3C/text%3E%3C/svg%3E",
     isDemoAvailable: false,
     popularityScore: 85,
     rtp: 99.5,
@@ -48,7 +51,8 @@ const mockGames = [
     provider: 'NetEnt',
     category: 'roulette',
     imageUrl: '/images/games/roulette.jpg',
-    thumbnailUrl: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='400'%3E%3Crect width='300' height='400' fill='%231a1a2e'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%23ffffff' font-size='16' font-family='sans-serif'%3EEuropean%20Roulette%3C/text%3E%3C/svg%3E",
+    thumbnailUrl:
+      "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='400'%3E%3Crect width='300' height='400' fill='%231a1a2e'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%23ffffff' font-size='16' font-family='sans-serif'%3EEuropean%20Roulette%3C/text%3E%3C/svg%3E",
     isDemoAvailable: true,
     popularityScore: 80,
     rtp: 97.3,
@@ -60,7 +64,8 @@ const mockGames = [
     provider: 'Evolution',
     category: 'live',
     imageUrl: '/images/games/crazy-time.jpg',
-    thumbnailUrl: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='400'%3E%3Crect width='300' height='400' fill='%231a1a2e'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%23ffffff' font-size='16' font-family='sans-serif'%3ECrazy%20Time%3C/text%3E%3C/svg%3E",
+    thumbnailUrl:
+      "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='400'%3E%3Crect width='300' height='400' fill='%231a1a2e'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%23ffffff' font-size='16' font-family='sans-serif'%3ECrazy%20Time%3C/text%3E%3C/svg%3E",
     isDemoAvailable: false,
     popularityScore: 92,
     rtp: 95.5,
@@ -72,7 +77,8 @@ const mockGames = [
     provider: 'Pragmatic Play',
     category: 'slots',
     imageUrl: '/images/games/gates-of-olympus.jpg',
-    thumbnailUrl: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='400'%3E%3Crect width='300' height='400' fill='%231a1a2e'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%23ffffff' font-size='16' font-family='sans-serif'%3EGates%20of%20Olympus%3C/text%3E%3C/svg%3E",
+    thumbnailUrl:
+      "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='400'%3E%3Crect width='300' height='400' fill='%231a1a2e'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%23ffffff' font-size='16' font-family='sans-serif'%3EGates%20of%20Olympus%3C/text%3E%3C/svg%3E",
     isDemoAvailable: true,
     popularityScore: 88,
     rtp: 96.5,
@@ -84,7 +90,8 @@ const mockGames = [
     provider: 'Pragmatic Play',
     category: 'slots',
     imageUrl: '/images/games/sweet-bonanza.jpg',
-    thumbnailUrl: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='400'%3E%3Crect width='300' height='400' fill='%231a1a2e'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%23ffffff' font-size='16' font-family='sans-serif'%3ESweet%20Bonanza%3C/text%3E%3C/svg%3E",
+    thumbnailUrl:
+      "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='400'%3E%3Crect width='300' height='400' fill='%231a1a2e'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%23ffffff' font-size='16' font-family='sans-serif'%3ESweet%20Bonanza%3C/text%3E%3C/svg%3E",
     isDemoAvailable: true,
     popularityScore: 93,
     rtp: 96.48,
@@ -96,7 +103,8 @@ const mockGames = [
     provider: 'Evolution',
     category: 'live',
     imageUrl: '/images/games/lightning-roulette.jpg',
-    thumbnailUrl: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='400'%3E%3Crect width='300' height='400' fill='%231a1a2e'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%23ffffff' font-size='16' font-family='sans-serif'%3ELightning%20Roulette%3C/text%3E%3C/svg%3E",
+    thumbnailUrl:
+      "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='400'%3E%3Crect width='300' height='400' fill='%231a1a2e'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%23ffffff' font-size='16' font-family='sans-serif'%3ELightning%20Roulette%3C/text%3E%3C/svg%3E",
     isDemoAvailable: false,
     popularityScore: 91,
     rtp: 97.3,
@@ -118,7 +126,7 @@ const providers = [
   { id: 'evolution', name: 'Evolution' },
   { id: 'netent', name: 'NetEnt' },
   { id: 'pragmatic', name: 'Pragmatic' },
-  { id: 'playngo', name: 'Play\'n GO' },
+  { id: 'playngo', name: "Play'n GO" },
 ]
 
 export function CasinoPage() {
@@ -167,7 +175,7 @@ export function CasinoPage() {
             {mockGames.length} игр
           </span>
         </div>
-        
+
         <div className="relative">
           <input
             type="text"
@@ -182,8 +190,18 @@ export function CasinoPage() {
             }}
             className="input-field w-full sm:w-56 pl-7"
           />
-          <svg className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          <svg
+            className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-600"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+            />
           </svg>
         </div>
       </div>
@@ -193,7 +211,9 @@ export function CasinoPage() {
         <button
           onClick={() => setActiveTab('all')}
           className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
-            activeTab === 'all' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white hover:bg-white/5'
+            activeTab === 'all'
+              ? 'bg-blue-600 text-white'
+              : 'text-gray-400 hover:text-white hover:bg-white/5'
           }`}
         >
           Все игры
@@ -201,16 +221,16 @@ export function CasinoPage() {
         <button
           onClick={() => setActiveTab('favorites')}
           className={`px-3 py-1 text-xs font-medium rounded transition-colors flex items-center gap-1 ${
-            activeTab === 'favorites' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white hover:bg-white/5'
+            activeTab === 'favorites'
+              ? 'bg-blue-600 text-white'
+              : 'text-gray-400 hover:text-white hover:bg-white/5'
           }`}
         >
           <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
           </svg>
           Избранное
-          {favorites.length > 0 && (
-            <span className="badge badge-yellow">{favorites.length}</span>
-          )}
+          {favorites.length > 0 && <span className="badge badge-yellow">{favorites.length}</span>}
         </button>
       </div>
 
@@ -297,7 +317,9 @@ export function CasinoPage() {
             {activeTab === 'favorites' ? 'Нет избранных игр' : 'Ничего не найдено'}
           </h3>
           <p className="text-[10px] text-gray-600">
-            {activeTab === 'favorites' ? 'Нажмите ★ на карточке игры чтобы добавить в избранное' : 'Измените параметры поиска'}
+            {activeTab === 'favorites'
+              ? 'Нажмите ★ на карточке игры чтобы добавить в избранное'
+              : 'Измените параметры поиска'}
           </p>
         </div>
       )}
