@@ -127,17 +127,20 @@ class _SportsbookScreenState extends State<SportsbookScreen> {
                         Row(
                           children: [
                             Expanded(
-                              child: _buildOddsButton('1', event['odds']['home']),
+                              child:
+                                  _buildOddsButton('1', event['odds']['home']),
                             ),
                             if (event['odds']['draw'] != null) ...[
                               const SizedBox(width: 8),
                               Expanded(
-                                child: _buildOddsButton('X', event['odds']['draw']),
+                                child: _buildOddsButton(
+                                    'X', event['odds']['draw']),
                               ),
                               const SizedBox(width: 8),
                             ],
                             Expanded(
-                              child: _buildOddsButton('2', event['odds']['away']),
+                              child:
+                                  _buildOddsButton('2', event['odds']['away']),
                             ),
                           ],
                         ),
@@ -154,8 +157,8 @@ class _SportsbookScreenState extends State<SportsbookScreen> {
   }
 
   Widget _buildSportChip(String name, String icon) {
-    final isSelected = _selectedSport == name ||
-        (name == 'All' && _selectedSport == 'all');
+    final isSelected =
+        _selectedSport == name || (name == 'All' && _selectedSport == 'all');
     return Padding(
       padding: const EdgeInsets.only(right: 8),
       child: FilterChip(
@@ -175,7 +178,9 @@ class _SportsbookScreenState extends State<SportsbookScreen> {
       onPressed: () {
         // Add to bet slip
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Добавлено: $label с кэф. ${odds.toStringAsFixed(2)}')),
+          SnackBar(
+              content:
+                  Text('Добавлено: $label с кэф. ${odds.toStringAsFixed(2)}')),
         );
       },
       child: Column(

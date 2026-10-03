@@ -1,13 +1,12 @@
 import 'package:dartz/dartz.dart';
 import 'package:injectable/injectable.dart';
 
-import '../../../core/error/exceptions.dart';
-import '../../../core/error/failures.dart';
+import '../../../../core/error/exceptions.dart';
+import '../../../../core/error/failures.dart';
 import '../../domain/entities/user.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../datasources/auth_local_datasource.dart';
 import '../datasources/auth_remote_datasource.dart';
-import '../models/user_model.dart';
 
 /// Implementation of AuthRepository
 @LazySingleton(as: AuthRepository)
@@ -122,10 +121,12 @@ class AuthRepositoryImpl implements AuthRepository {
     try {
       final refreshToken = _localDataSource.getRefreshToken();
       if (refreshToken == null) {
-        return const Left(AuthFailure('Refresh token not found', code: 'NO_REFRESH_TOKEN'));
+        return const Left(
+            AuthFailure('Refresh token not found', code: 'NO_REFRESH_TOKEN'));
       }
 
-      final tokens = await _remoteDataSource.refreshTokens(refreshToken: refreshToken);
+      final tokens =
+          await _remoteDataSource.refreshTokens(refreshToken: refreshToken);
       await _localDataSource.saveTokens(tokens);
 
       return const Right(null);

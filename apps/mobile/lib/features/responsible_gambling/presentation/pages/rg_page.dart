@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../../core/di/injection.dart';
+import '../../../../core/di/injection.dart';
 import '../../domain/entities/rg_limits.dart';
 import '../../domain/repositories/rg_repository.dart';
 import '../bloc/rg_bloc.dart';
@@ -125,9 +125,8 @@ class _RGViewState extends State<_RGView> {
               ),
             );
           }
-          final status = state is RGLoaded
-              ? state.status
-              : (state as RGError).previous!;
+          final status =
+              state is RGLoaded ? state.status : (state as RGError).previous!;
           _prefill(status.limits);
           return _body(context, state, status);
         },
@@ -198,7 +197,8 @@ class _RGViewState extends State<_RGView> {
             padding: const EdgeInsets.only(bottom: 8),
             child: TextField(
               controller: _money[e.key],
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
               decoration: InputDecoration(
                 labelText: e.value,
                 border: const OutlineInputBorder(),
@@ -335,18 +335,20 @@ class _Banner extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: color.shade50,
+        color: Color.lerp(color, Colors.white, 0.9),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: color.shade900,
-          )),
+          Text(title,
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Color.lerp(color, Colors.black, 0.88),
+              )),
           const SizedBox(height: 4),
-          Text(body, style: TextStyle(color: color.shade900)),
+          Text(body,
+              style: TextStyle(color: Color.lerp(color, Colors.black, 0.88))),
         ],
       ),
     );

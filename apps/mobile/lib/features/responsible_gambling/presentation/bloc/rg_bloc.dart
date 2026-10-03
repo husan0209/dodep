@@ -177,8 +177,8 @@ class RGBloc extends Bloc<RGEvent, RGState> {
       return;
     }
 
-    final refreshed = (await _repository.loadStatus())
-        .getOrElse(() => current.status);
+    final refreshed =
+        (await _repository.loadStatus()).getOrElse(() => current.status);
     emit(current.copyWith(
       status: refreshed,
       saving: false,
@@ -201,8 +201,8 @@ class RGBloc extends Bloc<RGEvent, RGState> {
           previous: current.status));
       return;
     }
-    final refreshed = (await _repository.loadStatus())
-        .getOrElse(() => current.status);
+    final refreshed =
+        (await _repository.loadStatus()).getOrElse(() => current.status);
     emit(current.copyWith(
       status: refreshed,
       saving: false,
@@ -225,8 +225,8 @@ class RGBloc extends Bloc<RGEvent, RGState> {
           previous: current.status));
       return;
     }
-    final refreshed = (await _repository.loadStatus())
-        .getOrElse(() => current.status);
+    final refreshed =
+        (await _repository.loadStatus()).getOrElse(() => current.status);
     emit(current.copyWith(
       status: refreshed,
       saving: false,

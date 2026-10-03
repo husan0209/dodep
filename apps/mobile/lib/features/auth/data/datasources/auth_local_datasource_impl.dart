@@ -4,7 +4,6 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:injectable/injectable.dart';
 
-import '../../../core/error/exceptions.dart';
 import '../models/auth_tokens.dart';
 import '../models/user_model.dart';
 import 'auth_local_datasource.dart';
@@ -51,7 +50,7 @@ class AuthLocalDataSourceImpl implements AuthLocalDataSource {
   UserModel? getCachedUser() {
     final userJson = _box.get(_userKey);
     if (userJson == null) return null;
-    
+
     try {
       final Map<String, dynamic> userMap = jsonDecode(userJson);
       return UserModel.fromJson(userMap);

@@ -37,7 +37,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       'id': '4',
       'type': 'system',
       'title': 'Обновление приложения',
-      'message': 'Доступна новая версия приложения. Обновите для лучших впечатлений.',
+      'message':
+          'Доступна новая версия приложения. Обновите для лучших впечатлений.',
       'isRead': true,
       'timestamp': DateTime.now().subtract(const Duration(days: 3)),
     },
@@ -97,8 +98,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 title: Text(
                   notification['title'],
                   style: TextStyle(
-                    fontWeight:
-                        notification['isRead'] ? FontWeight.normal : FontWeight.bold,
+                    fontWeight: notification['isRead']
+                        ? FontWeight.normal
+                        : FontWeight.bold,
                   ),
                 ),
                 subtitle: Column(
@@ -109,7 +111,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     const SizedBox(height: 4),
                     Text(
                       _formatTimestamp(notification['timestamp']),
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                      style:
+                          TextStyle(fontSize: 12, color: Colors.grey.shade600),
                     ),
                   ],
                 ),

@@ -1,7 +1,7 @@
 import 'package:dartz/dartz.dart';
 import 'package:equatable/equatable.dart';
 
-import '../../../core/error/failures.dart';
+import '../../../../core/error/failures.dart';
 import '../entities/user.dart';
 import '../repositories/auth_repository.dart';
 
@@ -28,12 +28,15 @@ class Login {
   Future<Either<Failure, User>> call(LoginParams params) async {
     // Validate email
     if (!params.email.contains('@')) {
-      return const Left(ValidationFailure('Некорректный email', code: 'INVALID_EMAIL'));
+      return const Left(
+          ValidationFailure('Некорректный email', code: 'INVALID_EMAIL'));
     }
 
     // Validate password
     if (params.password.length < 6) {
-      return const Left(ValidationFailure('Пароль должен быть не менее 6 символов', code: 'PASSWORD_TOO_SHORT'));
+      return const Left(ValidationFailure(
+          'Пароль должен быть не менее 6 символов',
+          code: 'PASSWORD_TOO_SHORT'));
     }
 
     return await _repository.login(

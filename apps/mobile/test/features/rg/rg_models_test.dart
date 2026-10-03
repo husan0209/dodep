@@ -6,7 +6,7 @@ import 'package:dod_mobile/features/responsible_gambling/domain/entities/rg_limi
 void main() {
   group('RGLimitsEnvelopeModel.fromJson', () {
     test('parses service envelope with limits and pending', () {
-      final model = RGLimitsEnvelopeModel.fromJson({
+      final model = RGLimitsEnvelopeModel.fromJson(const {
         'data': {
           'limits': {
             'deposit_daily': '100.00',
@@ -47,7 +47,7 @@ void main() {
     });
 
     test('treats bare limits object (no envelope) as valid', () {
-      final model = RGLimitsEnvelopeModel.fromJson({
+      final model = RGLimitsEnvelopeModel.fromJson(const {
         'deposit_daily': '50',
         'pending': <dynamic>[],
       });
@@ -56,7 +56,7 @@ void main() {
     });
 
     test('zero amount is reported as unset', () {
-      final model = RGLimitsEnvelopeModel.fromJson({
+      final model = RGLimitsEnvelopeModel.fromJson(const {
         'limits': {'deposit_daily': '0'},
       });
       expect(model.depositDaily.amount, '0');
@@ -66,7 +66,7 @@ void main() {
 
   group('RGStatusModel.fromJson', () {
     test('parses blocked status with active exclusion', () {
-      final model = RGStatusModel.fromJson({
+      final model = RGStatusModel.fromJson(const {
         'data': {
           'gambling_allowed': false,
           'blocked_reason': 'RG_SELF_EXCLUDED',
@@ -89,7 +89,7 @@ void main() {
     });
 
     test('permanent exclusion blocks forever and is never revocable', () {
-      final model = RGStatusModel.fromJson({
+      final model = RGStatusModel.fromJson(const {
         'data': {
           'gambling_allowed': false,
           'blocked_reason': 'RG_SELF_EXCLUDED',
@@ -106,7 +106,7 @@ void main() {
     });
 
     test('expired exclusion is revocable and does not block', () {
-      final model = RGStatusModel.fromJson({
+      final model = RGStatusModel.fromJson(const {
         'data': {
           'gambling_allowed': true,
           'blocked_reason': '',
@@ -126,7 +126,8 @@ void main() {
   group('request bodies', () {
     test('SetRGLimitsBody omits blanks and null when empty', () {
       expect(const SetRGLimitsBody().toJson(), isNull);
-      expect(const SetRGLimitsBody(money: {'deposit_daily': ' '}).toJson(), isNull);
+      expect(const SetRGLimitsBody(money: {'deposit_daily': ' '}).toJson(),
+          isNull);
     });
 
     test('SetRGLimitsBody serializes service field names', () {
@@ -150,7 +151,8 @@ void main() {
   group('RGPolicy', () {
     test('offers 6m minimum for multi-operator sync plus permanent', () {
       final codes = RGPolicy.periods.map((p) => p.code).toList();
-      expect(codes, containsAllInOrder(<String>['24h', '7d', '30d', '6m', '1y']));
+      expect(
+          codes, containsAllInOrder(<String>['24h', '7d', '30d', '6m', '1y']));
       expect(codes.last, 'permanent');
     });
 

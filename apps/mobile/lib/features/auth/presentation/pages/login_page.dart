@@ -4,9 +4,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/di/injection.dart';
 import '../bloc/auth_bloc.dart';
-import '../bloc/auth_event.dart';
 import '../bloc/auth_state.dart';
-import 'widgets/login_form.dart';
+import '../widgets/login_form.dart';
 
 /// Login page
 class LoginPage extends StatelessWidget {

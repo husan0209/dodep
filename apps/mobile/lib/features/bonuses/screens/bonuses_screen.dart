@@ -65,7 +65,8 @@ class BonusesScreen extends StatelessWidget {
                       ),
                       if (bonus['isActive'])
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
                           decoration: BoxDecoration(
                             color: Colors.green.shade100,
                             borderRadius: BorderRadius.circular(4),
@@ -118,12 +119,16 @@ class BonusesScreen extends StatelessWidget {
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: bonus['isActive'] ? () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Бонус активирован')),
-                        );
-                      } : null,
-                      child: Text(bonus['isActive'] ? 'Активировать' : 'Недоступен'),
+                      onPressed: bonus['isActive']
+                          ? () {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                    content: Text('Бонус активирован')),
+                              );
+                            }
+                          : null,
+                      child: Text(
+                          bonus['isActive'] ? 'Активировать' : 'Недоступен'),
                     ),
                   ),
                 ],

@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-import 'core/config/app_config.dart';
 import 'core/di/injection.dart';
 import 'core/theme/app_theme.dart';
 import 'core/router/app_router.dart';
+import 'features/auth/data/datasources/auth_local_datasource.dart';
 import 'features/auth/presentation/bloc/auth_bloc.dart';
+import 'features/auth/presentation/bloc/auth_event.dart';
 import 'features/auth/presentation/bloc/auth_state.dart';
 
 void main() async {
@@ -23,8 +23,8 @@ void main() async {
 
   // Get auth state from local storage
   final authBloc = getIt<AuthBloc>();
-  final localDataSource = getIt();
-  
+  final localDataSource = getIt<AuthLocalDataSource>();
+
   if (localDataSource.isAuthenticated()) {
     authBloc.add(const AuthEvent.getCurrentUser());
   }

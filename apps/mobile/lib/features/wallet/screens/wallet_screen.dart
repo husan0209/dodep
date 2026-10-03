@@ -94,16 +94,17 @@ class _WalletScreenState extends State<WalletScreen>
           ..._balances.map((balance) => _buildBalanceCard(balance)),
           const SizedBox(height: 24),
           // Payment methods
-          const Text('Способ оплаты', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          const Text('Способ оплаты',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
           _buildPaymentMethod('card', '💳', 'Банковская карта'),
           _buildPaymentMethod('sbp', '📱', 'СБП'),
           _buildPaymentMethod('crypto', '₿', 'Cryptocurrency'),
           const SizedBox(height: 24),
           // Amount
-          TextField(
+          const TextField(
             keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               labelText: 'Сумма',
               suffixText: '₽',
               border: OutlineInputBorder(),
@@ -116,7 +117,7 @@ class _WalletScreenState extends State<WalletScreen>
             runSpacing: 8,
             children: [500, 1000, 2000, 5000, 10000]
                 .map((amount) => ActionChip(
-                      label: Text('+${amount}₽'),
+                      label: Text('+$amount₽'),
                       onPressed: () {},
                     ))
                 .toList(),
@@ -162,16 +163,17 @@ class _WalletScreenState extends State<WalletScreen>
           ),
           const SizedBox(height: 24),
           // Withdraw methods
-          const Text('Способ вывода', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          const Text('Способ вывода',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
           _buildPaymentMethod('card', '💳', 'Банковская карта'),
           _buildPaymentMethod('sbp', '📱', 'СБП'),
           _buildPaymentMethod('crypto', '₿', 'Cryptocurrency'),
           const SizedBox(height: 24),
           // Amount
-          TextField(
+          const TextField(
             keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               labelText: 'Сумма',
               suffixText: '₽',
               border: OutlineInputBorder(),

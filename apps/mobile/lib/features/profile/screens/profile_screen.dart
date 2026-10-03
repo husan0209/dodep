@@ -36,7 +36,8 @@ class ProfileScreen extends ConsumerWidget {
                     CircleAvatar(
                       radius: 32,
                       backgroundColor: Colors.blue.shade100,
-                      child: Icon(Icons.person, size: 32, color: Colors.blue.shade700),
+                      child: Icon(Icons.person,
+                          size: 32, color: Colors.blue.shade700),
                     ),
                     const SizedBox(width: 16),
                     Expanded(
@@ -65,7 +66,8 @@ class ProfileScreen extends ConsumerWidget {
             const SizedBox(height: 24),
 
             // KYC Status
-            const Text('KYC Статус', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            const Text('KYC Статус',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
             const SizedBox(height: 12),
             Card(
               child: Padding(
@@ -77,25 +79,29 @@ class ProfileScreen extends ConsumerWidget {
                       children: [
                         const Text('Уровень верификации'),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 4),
                           decoration: BoxDecoration(
                             color: Colors.amber.shade100,
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Text(
                             'Level 1',
-                            style: TextStyle(color: Colors.amber.shade800, fontWeight: FontWeight.bold),
+                            style: TextStyle(
+                                color: Colors.amber.shade800,
+                                fontWeight: FontWeight.bold),
                           ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 12),
-                    LinearProgressIndicator(value: 0.33),
+                    const LinearProgressIndicator(value: 0.33),
                     const SizedBox(height: 8),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('1/3 завершено', style: TextStyle(color: Colors.grey.shade600)),
+                        Text('1/3 завершено',
+                            style: TextStyle(color: Colors.grey.shade600)),
                         TextButton(
                           onPressed: () {},
                           child: const Text('Пройти'),

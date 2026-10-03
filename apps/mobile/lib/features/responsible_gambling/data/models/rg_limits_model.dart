@@ -2,7 +2,9 @@ import '../../domain/entities/rg_limits.dart';
 
 /// Unwraps the RG service envelope: {"data": {...}, "meta": {...}}.
 Map<String, dynamic> _data(Map<String, dynamic> json) =>
-    json['data'] is Map<String, dynamic> ? json['data'] as Map<String, dynamic> : json;
+    json['data'] is Map<String, dynamic>
+        ? json['data'] as Map<String, dynamic>
+        : json;
 
 String _amount(dynamic v) => v == null ? '' : v.toString();
 
@@ -36,8 +38,10 @@ class RGLimitsEnvelopeModel extends RGLimits {
 
   factory RGLimitsEnvelopeModel.fromJson(Map<String, dynamic> json) {
     final d = _data(json);
-    final l = d['limits'] is Map<String, dynamic> ? d['limits'] as Map<String, dynamic> : d;
-    int _int(dynamic v) => v is int ? v : int.tryParse('${v ?? ''}') ?? 0;
+    final l = d['limits'] is Map<String, dynamic>
+        ? d['limits'] as Map<String, dynamic>
+        : d;
+    int asInt(dynamic v) => v is int ? v : int.tryParse('${v ?? ''}') ?? 0;
 
     return RGLimitsEnvelopeModel(
       depositDaily: MoneyCap(_amount(l['deposit_daily'])),
@@ -48,9 +52,10 @@ class RGLimitsEnvelopeModel extends RGLimits {
       lossMonthly: MoneyCap(_amount(l['loss_monthly'])),
       wagerDaily: MoneyCap(_amount(l['wager_daily'])),
       wagerWeekly: MoneyCap(_amount(l['wager_weekly'])),
-      sessionMinutes: _int(l['session_minutes']),
-      realityCheckMinutes: _int(l['reality_check_minutes']),
-      pending: _list(d['pending']).map(PendingLimitChangeModel.fromJson).toList(),
+      sessionMinutes: asInt(l['session_minutes']),
+      realityCheckMinutes: asInt(l['reality_check_minutes']),
+      pending:
+          _list(d['pending']).map(PendingLimitChangeModel.fromJson).toList(),
     );
   }
 }
@@ -70,7 +75,8 @@ class PendingLimitChangeModel extends PendingLimitChange {
       limitType: '${json['limit_type'] ?? ''}',
       oldValue: _amount(json['old_value']),
       newValue: _amount(json['new_value']),
-      effectiveAt: _date(json['effective_at']) ?? DateTime.fromMillisecondsSinceEpoch(0),
+      effectiveAt:
+          _date(json['effective_at']) ?? DateTime.fromMillisecondsSinceEpoch(0),
     );
   }
 }
@@ -112,7 +118,8 @@ class RGStatusModel extends RGStatus {
       gamblingAllowed: (d['gambling_allowed'] ?? false) as bool,
       blockedReason: '${d['blocked_reason'] ?? ''}',
       limits: limits,
-      exclusion: e is Map<String, dynamic> ? RGExclusionModel.fromJson(e) : null,
+      exclusion:
+          e is Map<String, dynamic> ? RGExclusionModel.fromJson(e) : null,
     );
   }
 }

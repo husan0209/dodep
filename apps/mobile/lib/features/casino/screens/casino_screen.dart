@@ -191,8 +191,10 @@ class _CasinoScreenState extends State<CasinoScreen> {
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  Colors.primaries[game['id'].hashCode % Colors.primaries.length],
-                  Colors.primaries[(game['id'].hashCode + 3) % Colors.primaries.length],
+                  Colors
+                      .primaries[game['id'].hashCode % Colors.primaries.length],
+                  Colors.primaries[
+                      (game['id'].hashCode + 3) % Colors.primaries.length],
                 ],
               ),
             ),
@@ -251,13 +253,15 @@ class _CasinoScreenState extends State<CasinoScreen> {
                           onPressed: () {
                             // Launch game
                             ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Запуск: ${game['name']}')),
+                              SnackBar(
+                                  content: Text('Запуск: ${game['name']}')),
                             );
                           },
                           style: ElevatedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 4),
                           ),
-                          child: const Text('Играть', style: TextStyle(fontSize: 12)),
+                          child: const Text('Играть',
+                              style: TextStyle(fontSize: 12)),
                         ),
                       ),
                       const SizedBox(width: 4),
@@ -270,7 +274,8 @@ class _CasinoScreenState extends State<CasinoScreen> {
                           side: const BorderSide(color: Colors.white),
                         ),
                         child: const Text('Демо',
-                            style: TextStyle(fontSize: 12, color: Colors.white)),
+                            style:
+                                TextStyle(fontSize: 12, color: Colors.white)),
                       ),
                     ],
                   ),

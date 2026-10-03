@@ -11,5 +11,6 @@ abstract class RGRepository {
   Future<Either<Failure, RGExclusion>> selfExclude(String period);
   Future<Either<Failure, Unit>> revokeSelfExclusion();
   Future<Either<Failure, Unit>> startTimeout(String period);
-  Future<Either<Failure, bool>> canPlay({required String channel, String? amount});
+  Future<Either<Failure, bool>> canPlay(
+      {required String channel, String? amount});
 }

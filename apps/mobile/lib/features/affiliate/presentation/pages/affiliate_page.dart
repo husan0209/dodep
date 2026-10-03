@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../../core/di/injection.dart';
+import '../../../../core/di/injection.dart';
 import '../../domain/repositories/affiliate_repository.dart';
 import '../bloc/affiliate_bloc.dart';
 
@@ -106,8 +106,7 @@ class AffiliatePage extends StatelessWidget {
                         style: TextStyle(
                             fontSize: 16, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 8),
-                    if (state.payouts.isEmpty)
-                      const Text('Выплат пока нет.'),
+                    if (state.payouts.isEmpty) const Text('Выплат пока нет.'),
                     for (final payout in state.payouts)
                       ListTile(
                         leading: const Icon(Icons.payments_outlined),
@@ -172,8 +171,7 @@ class _MetricTile extends StatelessWidget {
           children: [
             Text(label, style: Theme.of(context).textTheme.bodySmall),
             const SizedBox(height: 4),
-            Text(value,
-                style: const TextStyle(fontWeight: FontWeight.bold)),
+            Text(value, style: const TextStyle(fontWeight: FontWeight.bold)),
           ],
         ),
       ),

@@ -33,8 +33,7 @@ class AffiliateDashboard extends Equatable {
     required this.commissionAmount,
   });
 
-  double get conversionRate =>
-      clicks == 0 ? 0 : registrations / clicks;
+  double get conversionRate => clicks == 0 ? 0 : registrations / clicks;
 
   @override
   List<Object?> get props => [

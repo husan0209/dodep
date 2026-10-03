@@ -53,7 +53,8 @@ class AffiliateRemoteDataSourceImpl implements AffiliateRemoteDataSource {
         final body = response.data as Map<String, dynamic>;
         final items = (body['data'] ?? body['payouts'] ?? []) as List;
         return items
-            .map((e) => AffiliatePayoutModel.fromJson(e as Map<String, dynamic>))
+            .map(
+                (e) => AffiliatePayoutModel.fromJson(e as Map<String, dynamic>))
             .toList();
       }
       throw _handleError(response);

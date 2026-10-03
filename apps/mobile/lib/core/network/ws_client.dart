@@ -25,7 +25,8 @@ class WsMessage {
       type: json['type'] as String? ?? 'unknown',
       channel: json['channel'] as String? ?? '',
       data: json['data'],
-      timestamp: DateTime.tryParse(json['timestamp'] as String? ?? '') ?? DateTime.now(),
+      timestamp: DateTime.tryParse(json['timestamp'] as String? ?? '') ??
+          DateTime.now(),
     );
   }
 
@@ -159,7 +160,9 @@ class WsClient {
     final delay = Duration(milliseconds: 1000 * (_reconnectAttempts + 1));
     _reconnectAttempts++;
 
-    Future.delayed(delay.min(const Duration(seconds: 30)), () {
+    // Duration has no `min`; clamp the backoff to the 30s ceiling manually.
+    const ceiling = Duration(seconds: 30);
+    Future.delayed(delay > ceiling ? ceiling : delay, () {
       if (_token != null) {
         connect(_token!);
       }

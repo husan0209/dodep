@@ -10,7 +10,7 @@ import 'package:dod_mobile/features/responsible_gambling/presentation/bloc/rg_bl
 
 class _MockRGRepository extends Mock implements RGRepository {}
 
-final _status = RGStatus(
+const _status = RGStatus(
   gamblingAllowed: true,
   blockedReason: '',
   limits: RGLimits(depositDaily: MoneyCap('100.00')),
@@ -27,7 +27,8 @@ void main() {
     blocTest<RGBloc, RGState>(
       'emits [loading, loaded] on successful status load',
       build: () {
-        when(() => repository.loadStatus()).thenAnswer((_) async => Right(_status));
+        when(() => repository.loadStatus())
+            .thenAnswer((_) async => const Right(_status));
         return RGBloc(repository: repository);
       },
       act: (bloc) => bloc.add(const RGLoadRequested()),
@@ -56,7 +57,8 @@ void main() {
                 sessionMinutes: any(named: 'sessionMinutes'),
                 realityCheckMinutes: any(named: 'realityCheckMinutes')))
             .thenAnswer((_) async => Right(_status.limits));
-        when(() => repository.loadStatus()).thenAnswer((_) async => Right(_status));
+        when(() => repository.loadStatus())
+            .thenAnswer((_) async => const Right(_status));
         return RGBloc(repository: repository);
       },
       seed: () => const RGLoaded(status: _status),
@@ -98,15 +100,16 @@ void main() {
       'self-exclusion refreshes status and warns withdrawals stay open',
       build: () {
         when(() => repository.selfExclude('6m')).thenAnswer(
-          (_) async => const RGExclusion(
+          (_) async => const Right(RGExclusion(
             id: 'e1',
             type: 'self',
             status: 'active',
             until: null,
             permanent: false,
-          ),
+          )),
         );
-        when(() => repository.loadStatus()).thenAnswer((_) async => Right(_status));
+        when(() => repository.loadStatus())
+            .thenAnswer((_) async => const Right(_status));
         return RGBloc(repository: repository);
       },
       seed: () => const RGLoaded(status: _status),
@@ -123,8 +126,10 @@ void main() {
     blocTest<RGBloc, RGState>(
       'timeout message states play paused, withdrawal available',
       build: () {
-        when(() => repository.startTimeout('24h')).thenAnswer((_) async => const Right(unit));
-        when(() => repository.loadStatus()).thenAnswer((_) async => Right(_status));
+        when(() => repository.startTimeout('24h'))
+            .thenAnswer((_) async => const Right(unit));
+        when(() => repository.loadStatus())
+            .thenAnswer((_) async => const Right(_status));
         return RGBloc(repository: repository);
       },
       seed: () => const RGLoaded(status: _status),

@@ -14,11 +14,16 @@ class RGPolicy {
   static const String defaultRealityCheckMinutes = '60';
 
   static const List<SelfExclusionPeriod> periods = [
-    SelfExclusionPeriod(code: '24h', label: '24 часа', duration: Duration(hours: 24)),
-    SelfExclusionPeriod(code: '7d', label: '7 дней', duration: Duration(days: 7)),
-    SelfExclusionPeriod(code: '30d', label: '30 дней', duration: Duration(days: 30)),
-    SelfExclusionPeriod(code: '6m', label: '6 месяцев', duration: Duration(days: 180)),
-    SelfExclusionPeriod(code: '1y', label: '1 год', duration: Duration(days: 365)),
+    SelfExclusionPeriod(
+        code: '24h', label: '24 часа', duration: Duration(hours: 24)),
+    SelfExclusionPeriod(
+        code: '7d', label: '7 дней', duration: Duration(days: 7)),
+    SelfExclusionPeriod(
+        code: '30d', label: '30 дней', duration: Duration(days: 30)),
+    SelfExclusionPeriod(
+        code: '6m', label: '6 месяцев', duration: Duration(days: 180)),
+    SelfExclusionPeriod(
+        code: '1y', label: '1 год', duration: Duration(days: 365)),
     SelfExclusionPeriod(code: 'permanent', label: 'Навсегда', duration: null),
   ];
 
@@ -193,5 +198,6 @@ class RGStatus extends Equatable {
       );
 
   @override
-  List<Object?> get props => [gamblingAllowed, blockedReason, limits, exclusion];
+  List<Object?> get props =>
+      [gamblingAllowed, blockedReason, limits, exclusion];
 }

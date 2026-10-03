@@ -100,7 +100,8 @@ class RGRepositoryImpl implements RGRepository {
     String? amount,
   }) async {
     try {
-      return Right(await _remote.checkAllowed(channel: channel, amount: amount));
+      return Right(
+          await _remote.checkAllowed(channel: channel, amount: amount));
     } on NetworkException {
       return const Left(NetworkFailure());
     } on ServerException catch (e) {

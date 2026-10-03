@@ -1,8 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
-import '../error/exceptions.dart';
-
 /// Logging interceptor for debugging
 class LoggingInterceptor extends Interceptor {
   @override
@@ -50,7 +48,8 @@ class RetryInterceptor extends Interceptor {
   RetryInterceptor({required this.dio, this.retries = 2});
 
   @override
-  Future<void> onError(DioException err, ErrorInterceptorHandler handler) async {
+  Future<void> onError(
+      DioException err, ErrorInterceptorHandler handler) async {
     // Only retry on network errors or 5xx server errors
     final shouldRetry = err.type == DioExceptionType.connectionError ||
         err.type == DioExceptionType.connectionTimeout ||
@@ -67,7 +66,8 @@ class RetryInterceptor extends Interceptor {
       try {
         retryCount++;
         if (kDebugMode) {
-          print('🔄 Retry attempt $retryCount/$retries for ${err.requestOptions.uri}');
+          print(
+              '🔄 Retry attempt $retryCount/$retries for ${err.requestOptions.uri}');
         }
 
         // Wait with exponential backoff

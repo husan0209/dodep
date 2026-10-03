@@ -40,7 +40,8 @@ class RGRemoteDataSourceImpl implements RGRemoteDataSource {
 
   @override
   Future<RGExclusionModel> startSelfExclusion(SelfExclusionBody body) async {
-    final res = await _post('$_base/self-exclusion', body.toJson(), expectCreated: true);
+    final res = await _post('$_base/self-exclusion', body.toJson(),
+        expectCreated: true);
     return RGExclusionModel.fromJson(res);
   }
 
@@ -69,18 +70,20 @@ class RGRemoteDataSourceImpl implements RGRemoteDataSource {
       final status = response.statusCode ?? 0;
       if (status == 200 || status == 403) {
         final body = response.data;
-        final data = body is Map<String, dynamic> && body['data'] is Map<String, dynamic>
-            ? body['data'] as Map<String, dynamic>
-            : const <String, dynamic>{};
+        final data =
+            body is Map<String, dynamic> && body['data'] is Map<String, dynamic>
+                ? body['data'] as Map<String, dynamic>
+                : const <String, dynamic>{};
         return data['allowed'] == true;
       }
       throw _handleError(response);
     } on DioException catch (e) {
       if (e.response?.statusCode == 403) {
         final body = e.response?.data;
-        final data = body is Map<String, dynamic> && body['data'] is Map<String, dynamic>
-            ? body['data'] as Map<String, dynamic>
-            : const <String, dynamic>{};
+        final data =
+            body is Map<String, dynamic> && body['data'] is Map<String, dynamic>
+                ? body['data'] as Map<String, dynamic>
+                : const <String, dynamic>{};
         return data['allowed'] == true;
       }
       throw _handleDioException(e);
@@ -98,7 +101,8 @@ class RGRemoteDataSourceImpl implements RGRemoteDataSource {
     }
   }
 
-  Future<Map<String, dynamic>> _put(String path, Map<String, dynamic> body) async {
+  Future<Map<String, dynamic>> _put(
+      String path, Map<String, dynamic> body) async {
     try {
       final res = await _dio.put<Map<String, dynamic>>(path, data: body);
       return res.data ?? const {};
@@ -129,6 +133,7 @@ class RGRemoteDataSourceImpl implements RGRemoteDataSource {
       case DioExceptionType.connectionTimeout:
       case DioExceptionType.sendTimeout:
       case DioExceptionType.receiveTimeout:
+      case DioExceptionType.transformTimeout:
         return const TimeoutException();
       case DioExceptionType.connectionError:
         return const NetworkException();
