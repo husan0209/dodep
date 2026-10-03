@@ -10,6 +10,11 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 
 # Install dependencies
 COPY pyproject.toml .
+# requirements.txt is not a runtime dependency of the install step - it is read by
+# tests/test_dependencies.py, which asserts that it and pyproject.toml declare the
+# same pins. Without it here that suite fails on FileNotFoundError before the image
+# is built, which is exactly the drift the test exists to catch.
+COPY requirements.txt .
 RUN pip install --no-cache-dir -e ".[dev]"
 
 # Copy source code.
