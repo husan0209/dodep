@@ -16,7 +16,11 @@ const fs = require('fs');
 const path = require('path');
 
 const repoRoot = path.resolve(__dirname, '..', '..', '..');
-const read = (p) => fs.readFileSync(path.join(repoRoot, p), 'utf8');
+// Normalise CRLF on read. Without this, the generated ConfigMap depends on how
+// the sources happen to be checked out (core.autocrlf), so regenerating on
+// Windows produces different output than CI on Linux and --check reports STALE
+// for no real reason.
+const read = (p) => fs.readFileSync(path.join(repoRoot, p), 'utf8').replace(/\r\n/g, '\n');
 
 const SOURCES = {
   'affiliate_ledger_reconciliation.sql':
@@ -29,9 +33,9 @@ const SOURCES = {
 const OUT = 'infra/k8s/data/postgresql/affiliate-reconciliation/affiliate-reconciliation.yaml';
 
 const block = (indent, text) => {
-  // ConfigMap stringData must be valid YAML: indent every line and quote.
+  // ConfigMap stringData must be valid YAML: indent every line.
+  // read() already normalised line endings.
   return text
-    .replace(/\r\n/g, '\n')
     .split('\n')
     .map((l) => `${' '.repeat(indent)}${l}`)
     .join('\n');
