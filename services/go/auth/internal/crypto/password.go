@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"encoding/base64"
 	"fmt"
+	"math"
 	"strings"
 
 	"golang.org/x/crypto/argon2"
@@ -53,6 +54,15 @@ func HashPassword(password string) (string, error) {
 	return encoded, nil
 }
 
+// checkedUint32 converts a non-negative int to uint32, rejecting values that
+// do not fit rather than wrapping them.
+func checkedUint32(v int) (uint32, error) {
+	if v < 0 || uint64(v) > math.MaxUint32 {
+		return 0, fmt.Errorf("value %d does not fit in uint32", v)
+	}
+	return uint32(v), nil // #nosec G115 -- range checked immediately above
+}
+
 // VerifyPassword verifies a password against its Argon2id hash
 func VerifyPassword(password, encodedHash string) (bool, error) {
 	parts := strings.Split(encodedHash, "$")
@@ -79,14 +89,27 @@ func VerifyPassword(password, encodedHash string) (bool, error) {
 		return false, fmt.Errorf("failed to decode hash: %w", err)
 	}
 
+	// argon2 takes parallelism as a uint8 and the output length as a uint32,
+	// but both values here are parsed out of the stored hash string, where
+	// nothing bounds them. A wrapped value would silently verify against
+	// different parameters than the hash was created with, so each is range
+	// checked and a malformed hash is rejected instead.
+	if parallelism == 0 || parallelism > math.MaxUint8 {
+		return false, fmt.Errorf("invalid argon2 parallelism: %d", parallelism)
+	}
+	hashLen, err := checkedUint32(len(hash))
+	if err != nil || hashLen == 0 {
+		return false, fmt.Errorf("invalid argon2 hash length: %d", len(hash))
+	}
+
 	// Compute hash with same parameters
 	otherHash := argon2.IDKey(
 		[]byte(password),
 		salt,
 		iterations,
 		memory,
-		uint8(parallelism),
-		uint32(len(hash)),
+		uint8(parallelism), // #nosec G115 -- bounded to 1..=MaxUint8 immediately above
+		hashLen,
 	)
 
 	// Constant-time comparison
