@@ -4,16 +4,23 @@
 name: Deploy
 
 on:
+  # Deploy is a delivery workflow, not a quality gate. Every deploy job below is
+  # already guarded by `if: github.ref == 'refs/heads/main'`, so on a pull_request
+  # only `build-and-test` ran - duplicating the per-stack CI workflows while
+  # failing on repo-root scripts that have no configured projects.
+  # PR verification lives in ci-go.yml / ci-rust.yml / ci-python.yml /
+  # ci-nextjs-web.yml / ci-admin-panel.yml.
   push:
-    branches: [main]
-  pull_request:
     branches: [main]
   workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
-  RUST_VERSION: '1.75'
-  GO_VERSION: '1.21'
+  # Floor imposed by the committed lockfile; see the comment in ci.yaml
+  # for the 1.75 / 1.78 / 1.85 evidence. Do not lower without re-checking.
+  RUST_VERSION: "1.85"
+  # Must satisfy the highest `go` directive in services/go/*/go.mod (>= 1.24).
+  GO_VERSION: '1.26'
   PYTHON_VERSION: '3.11'
   NODE_VERSION: '20'
 
@@ -37,7 +44,7 @@ jobs:
           cache: 'npm'
 
       - name: Setup Rust
-        uses: dtolnay/rust-action@stable
+        uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ env.RUST_VERSION }}
           components: clippy, rustfmt
@@ -181,10 +188,23 @@ jobs:
     timeout-minutes: 5
     needs: [deploy-web, deploy-backend, deploy-admin]
     if: always()
-    
+
+    # action-slack exits 1 with "Specify secrets.SLACK_WEBHOOK_URL" when the
+    # webhook is absent, which failed this job on every run - including
+    # pull_request runs, where secrets are not exposed by default at all. An
+    # unconfigured notification channel must not be able to fail a build.
+    #
+    # The secret is surfaced through env because the secrets context is not
+    # permitted in a step-level if:. The contexts allowed there are env, github,
+    # inputs, job, matrix, needs, runner, steps, strategy and vars - a guard
+    # written as "if: secrets.X != ''" makes the whole workflow invalid and
+    # GitHub then creates zero jobs for the run.
+    env:
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+
     steps:
       - name: Notify Slack
-        if: always()
+        if: always() && env.SLACK_WEBHOOK_URL != ''
         uses: 8398a7/action-slack@v3
         with:
           status: ${{ job.status }}
@@ -194,7 +214,12 @@ jobs:
             Backend: ${{ needs.deploy-backend.result }}
             Admin: ${{ needs.deploy-admin.result }}
         env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+          SLACK_WEBHOOK_URL: ${{ env.SLACK_WEBHOOK_URL }}
+
+      - name: Notify Slack skipped
+        if: always() && env.SLACK_WEBHOOK_URL == ''
+        run: |
+          echo "::notice title=Deployment notification::SLACK_WEBHOOK is not configured; skipping the Slack notification."
 
       - name: Notify Success
         if: success()
