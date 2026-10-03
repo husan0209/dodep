@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -29,6 +30,14 @@ type CasinoService struct {
 	wallet    WalletClient
 	userSvc   UserServiceClient
 	log       *zap.Logger
+}
+
+// safeInt32Len returns len as int32 with clamping (game rounds fit easily).
+func safeInt32Len[T any](s []T) int32 {
+	if len(s) > math.MaxInt32 {
+		return math.MaxInt32
+	}
+	return int32(len(s)) // #nosec G115 -- bounds checked above
 }
 
 // NewCasinoService creates a new casino service.
@@ -594,7 +603,7 @@ func (s *CasinoService) EndGameSession(ctx context.Context, req *EndGameSessionR
 			TotalBet:      totalBet,
 			TotalWin:      totalWin,
 			NetResult:     netResult,
-			RoundsPlayed:  int32(len(rounds)),
+			RoundsPlayed:  safeInt32Len(rounds),
 			StartedAt:     session.StartedAt,
 			EndedAt:       endedAt,
 			DurationSecs:  int64(endedAt.Sub(session.StartedAt).Seconds()),

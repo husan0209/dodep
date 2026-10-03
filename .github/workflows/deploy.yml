@@ -4,16 +4,22 @@
 name: Deploy
 
 on:
+  # Deploy is a delivery workflow, not a quality gate. Every deploy job below is
+  # already gated on `github.ref == 'refs/heads/main'`, so on a pull_request only
+  # `build-and-test` ran - duplicating the per-stack CI workflows while failing on
+  # the repo-root nx scripts (`npm run lint` at the root runs
+  # `nx run-many --target=lint --all`, which has no projects configured).
+  # PR verification lives in ci-go.yml / ci-rust.yml / ci-python.yml /
+  # ci-nextjs-web.yml / ci-admin-panel.yml.
   push:
-    branches: [main]
-  pull_request:
     branches: [main]
   workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
   RUST_VERSION: '1.75'
-  GO_VERSION: '1.21'
+  # Must satisfy the highest `go` directive in services/go/*/go.mod (>= 1.24).
+  GO_VERSION: '1.26'
   PYTHON_VERSION: '3.11'
   NODE_VERSION: '20'
 
@@ -37,7 +43,7 @@ jobs:
           cache: 'npm'
 
       - name: Setup Rust
-        uses: dtolnay/rust-action@stable
+        uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ env.RUST_VERSION }}
           components: clippy, rustfmt

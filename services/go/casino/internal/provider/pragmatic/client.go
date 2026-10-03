@@ -2,7 +2,7 @@ package pragmatic
 
 import (
 	"context"
-	"crypto/md5" //nolint:gosec // Pragmatic Play requires MD5 for hash parameter
+	"crypto/md5" // #nosec G501 -- Pragmatic Play requires MD5 for hash parameter (checksum, not passwords)
 	"encoding/json"
 	"fmt"
 	"io"
@@ -85,7 +85,7 @@ func (c *Client) GetGames(ctx context.Context) (*GetGamesResponse, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -138,7 +138,7 @@ func (c *Client) GetLaunchURL(ctx context.Context, opts LaunchURLOptions) (strin
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -194,7 +194,7 @@ func (c *Client) buildParams(kv map[string]string) url.Values {
 	}
 	sb.WriteString(c.cfg.SecretKey)
 
-	//nolint:gosec // Pragmatic Play specifies MD5 — cannot be changed
+	// #nosec G401 -- Pragmatic Play specifies MD5 checksum, cannot be changed
 	hash := fmt.Sprintf("%x", md5.Sum([]byte(sb.String())))
 	params.Set("hash", hash)
 

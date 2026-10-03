@@ -9,6 +9,18 @@ import (
 	"github.com/opus-casino/casino/internal/service"
 )
 
+// parseQueryInt32 parses a query param as int32, returning def on error.
+func parseQueryInt32(s string, def int32) int32 {
+	if s == "" {
+		return def
+	}
+	v, err := strconv.ParseInt(s, 10, 32)
+	if err != nil {
+		return def
+	}
+	return int32(v) // #nosec G115 -- ParseInt with bitSize 32 guarantees int32 range
+}
+
 // CasinoHTTPHandler exposes casino REST endpoints.
 type CasinoHTTPHandler struct {
 	svc *service.CasinoService
@@ -22,15 +34,15 @@ func NewCasinoHTTPHandler(svc *service.CasinoService, log *zap.Logger) *CasinoHT
 
 // GetGames GET /api/v1/casino/games
 func (h *CasinoHTTPHandler) GetGames(c *fiber.Ctx) error {
-	limit, _ := strconv.Atoi(c.Query("limit", "50"))
-	offset, _ := strconv.Atoi(c.Query("offset", "0"))
+	limit := parseQueryInt32(c.Query("limit", "50"), 50)
+	offset := parseQueryInt32(c.Query("offset", "0"), 0)
 	providerID := c.Query("provider")
 	category := c.Query("category")
 	search := c.Query("search")
 
 	opts := service.GetGamesOptions{
-		Limit:  int32(limit),
-		Offset: int32(offset),
+		Limit:  limit,
+		Offset: offset,
 	}
 	if providerID != "" {
 		opts.ProviderID = &providerID
@@ -142,13 +154,13 @@ func (h *CasinoHTTPHandler) GetHistory(c *fiber.Ctx) error {
 		return c.Status(401).JSON(fiber.Map{"error": "unauthorized"})
 	}
 
-	limit, _ := strconv.Atoi(c.Query("limit", "20"))
-	offset, _ := strconv.Atoi(c.Query("offset", "0"))
+	limit := parseQueryInt32(c.Query("limit", "20"), 20)
+	offset := parseQueryInt32(c.Query("offset", "0"), 0)
 
 	result, err := h.svc.GetGameHistory(c.Context(), service.GetGameHistoryOptions{
 		UserID: userID,
-		Limit:  int32(limit),
-		Offset: int32(offset),
+		Limit:  limit,
+		Offset: offset,
 	})
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{"error": err.Error()})

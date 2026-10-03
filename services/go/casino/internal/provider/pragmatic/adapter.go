@@ -2,7 +2,7 @@ package pragmatic
 
 import (
 	"context"
-	"crypto/md5" //nolint:gosec
+	"crypto/md5" // #nosec G501 -- Pragmatic Play requires MD5 checksum (not passwords)
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -122,11 +122,11 @@ func (a *Adapter) VerifyCallbackSignature(body []byte, headers map[string]string
 
 	var sb strings.Builder
 	for _, k := range keys {
-		sb.WriteString(fmt.Sprintf("%v", params[k]))
+		_, _ = fmt.Fprintf(&sb, "%v", params[k])
 	}
 	sb.WriteString(a.cfg.SecretKey)
 
-	//nolint:gosec
+	// #nosec G401 -- Pragmatic Play specifies MD5 checksum verification
 	expected := fmt.Sprintf("%x", md5.Sum([]byte(sb.String())))
 
 	if expected != strings.ToLower(receivedHash) {

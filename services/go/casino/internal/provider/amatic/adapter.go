@@ -2,7 +2,7 @@ package amatic
 
 import (
 	"context"
-	"crypto/md5" //nolint:gosec // Amatic specifies MD5
+	"crypto/md5" // #nosec G501 -- Amatic specifies MD5 checksum (not passwords)
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -103,7 +103,7 @@ func (a *Adapter) VerifyCallbackSignature(body []byte, _ map[string]string) bool
 	txID, _ := params["transactionId"].(string)
 
 	input := a.cfg.APIPassword + a.cfg.OperatorID + playerID + txID
-	//nolint:gosec
+	// #nosec G401 -- Amatic specifies MD5 key check per provider spec
 	expected := fmt.Sprintf("%x", md5.Sum([]byte(input)))
 
 	if !strings.EqualFold(expected, receivedKey) {
@@ -178,6 +178,6 @@ func (a *Adapter) mapMethod(m string) provider.CallbackEventType {
 
 // sign generates MD5(api_password + data).
 func (a *Adapter) sign(data string) string {
-	//nolint:gosec
+	// #nosec G401 -- Amatic specifies MD5 signing per provider spec
 	return fmt.Sprintf("%x", md5.Sum([]byte(a.cfg.APIPassword+data)))
 }

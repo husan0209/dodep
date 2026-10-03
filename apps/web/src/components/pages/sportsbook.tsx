@@ -19,7 +19,7 @@ const mockEvents = [
     liveMinute: "62'",
     homeScore: 2,
     awayScore: 1,
-    odds: { home: 2.50, draw: 3.20, away: 2.80 },
+    odds: { home: 2.5, draw: 3.2, away: 2.8 },
   },
   {
     id: '2',
@@ -29,7 +29,7 @@ const mockEvents = [
     awayTeam: 'Barcelona',
     startTime: '2024-03-24T20:00:00Z',
     isLive: false,
-    odds: { home: 2.10, draw: 3.40, away: 3.20 },
+    odds: { home: 2.1, draw: 3.4, away: 3.2 },
   },
   {
     id: '3',
@@ -52,7 +52,7 @@ const mockEvents = [
     liveMinute: 'Set 2',
     homeScore: 1,
     awayScore: 0,
-    odds: { home: 1.65, away: 2.20 },
+    odds: { home: 1.65, away: 2.2 },
   },
   {
     id: '5',
@@ -62,15 +62,30 @@ const mockEvents = [
     awayTeam: 'AC Milan',
     startTime: '2024-03-25T19:45:00Z',
     isLive: false,
-    odds: { home: 2.30, draw: 3.10, away: 3.00 },
+    odds: { home: 2.3, draw: 3.1, away: 3.0 },
   },
 ]
 
 const sports = [
   { id: 'all', name: 'Все', icon: '🏆', count: mockEvents.length },
-  { id: 'football', name: 'Футбол', icon: '⚽', count: mockEvents.filter(e => e.sport === 'football').length },
-  { id: 'basketball', name: 'Баскетбол', icon: '🏀', count: mockEvents.filter(e => e.sport === 'basketball').length },
-  { id: 'tennis', name: 'Теннис', icon: '🎾', count: mockEvents.filter(e => e.sport === 'tennis').length },
+  {
+    id: 'football',
+    name: 'Футбол',
+    icon: '⚽',
+    count: mockEvents.filter((e) => e.sport === 'football').length,
+  },
+  {
+    id: 'basketball',
+    name: 'Баскетбол',
+    icon: '🏀',
+    count: mockEvents.filter((e) => e.sport === 'basketball').length,
+  },
+  {
+    id: 'tennis',
+    name: 'Теннис',
+    icon: '🎾',
+    count: mockEvents.filter((e) => e.sport === 'tennis').length,
+  },
   { id: 'hockey', name: 'Хоккей', icon: '🏒', count: 0 },
   { id: 'esports', name: 'Киберспорт', icon: '🎮', count: 0 },
 ]
@@ -87,7 +102,7 @@ export function SportsbookPage() {
     return true
   })
 
-  const liveCount = mockEvents.filter(e => e.isLive).length
+  const liveCount = mockEvents.filter((e) => e.isLive).length
 
   useEffect(() => {
     trackEvent('page_view', { page: 'sportsbook' })
@@ -125,7 +140,9 @@ export function SportsbookPage() {
                   <span>{sport.name}</span>
                 </span>
                 {sport.count > 0 && (
-                  <span className={`text-[10px] ${selectedSport === sport.id ? 'text-blue-200' : 'text-gray-600'}`}>
+                  <span
+                    className={`text-[10px] ${selectedSport === sport.id ? 'text-blue-200' : 'text-gray-600'}`}
+                  >
                     {sport.count}
                   </span>
                 )}
@@ -152,9 +169,7 @@ export function SportsbookPage() {
               >
                 <span>{sport.icon}</span>
                 <span>{sport.name}</span>
-                {sport.count > 0 && (
-                  <span className="text-[10px] opacity-60">{sport.count}</span>
-                )}
+                {sport.count > 0 && <span className="text-[10px] opacity-60">{sport.count}</span>}
               </button>
             ))}
           </div>
@@ -170,7 +185,7 @@ export function SportsbookPage() {
                 </span>
               )}
             </div>
-            
+
             <label className="flex items-center gap-1.5 cursor-pointer">
               <div className="relative">
                 <input
@@ -197,9 +212,7 @@ export function SportsbookPage() {
                 <p className="text-[10px] text-gray-600 mt-1">Измените параметры фильтрации</p>
               </div>
             ) : (
-              filteredEvents.map((event) => (
-                <SportsEvent key={event.id} event={event} />
-              ))
+              filteredEvents.map((event) => <SportsEvent key={event.id} event={event} />)
             )}
           </div>
         </div>

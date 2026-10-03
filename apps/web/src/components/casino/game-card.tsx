@@ -58,7 +58,7 @@ export function GameCard({ game, compact = false, className }: GameCardProps) {
         'group relative rounded-2xl border border-border bg-bg-secondary overflow-hidden',
         'shadow-card transition-all duration-300 ease-out',
         'hover:border-border-light hover:shadow-card-hover hover:-translate-y-0.5',
-        className
+        className,
       )}
     >
       {/* Game image */}
@@ -75,14 +75,17 @@ export function GameCard({ game, compact = false, className }: GameCardProps) {
 
         {/* Favorite button */}
         <button
-          onClick={(e) => { e.stopPropagation(); toggleFavorite(game.id) }}
+          onClick={(e) => {
+            e.stopPropagation()
+            toggleFavorite(game.id)
+          }}
           className={cn(
             'absolute top-2.5 right-2.5 z-10 p-1.5 rounded-lg',
             'bg-black/40 backdrop-blur-md backdrop-saturate-150',
             'transition-all duration-200',
             favorite
               ? 'text-yellow-400 opacity-100'
-              : 'text-gray-300 opacity-0 group-hover:opacity-100 hover:text-yellow-400'
+              : 'text-gray-300 opacity-0 group-hover:opacity-100 hover:text-yellow-400',
           )}
         >
           {favorite ? <StarSolid className="h-4 w-4" /> : <StarOutline className="h-4 w-4" />}
@@ -94,12 +97,16 @@ export function GameCard({ game, compact = false, className }: GameCardProps) {
             <span
               className={cn(
                 'inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider',
-                badge.variant === 'gold' && 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/20',
-                badge.variant === 'violet' && 'bg-violet-500/20 text-violet-400 border border-violet-500/20',
+                badge.variant === 'gold' &&
+                  'bg-yellow-500/20 text-yellow-400 border border-yellow-500/20',
+                badge.variant === 'violet' &&
+                  'bg-violet-500/20 text-violet-400 border border-violet-500/20',
                 badge.variant === 'live' && 'bg-red-500/20 text-red-400 border border-red-500/20',
-                badge.variant === 'cyan' && 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/20',
-                badge.variant === 'emerald' && 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/20',
-                badge.animate && 'animate-pulse-fast'
+                badge.variant === 'cyan' &&
+                  'bg-cyan-500/20 text-cyan-400 border border-cyan-500/20',
+                badge.variant === 'emerald' &&
+                  'bg-emerald-500/20 text-emerald-400 border border-emerald-500/20',
+                badge.animate && 'animate-pulse-fast',
               )}
             >
               {badge.text}
@@ -145,18 +152,20 @@ export function GameCard({ game, compact = false, className }: GameCardProps) {
           </div>
         </div>
         <div className="flex items-center justify-between mt-1.5">
-          <span className="text-[11px] text-text-muted font-medium">
-            RTP {game.rtp}%
-          </span>
+          <span className="text-[11px] text-text-muted font-medium">RTP {game.rtp}%</span>
           <span
             className={cn(
               'text-[11px] font-medium px-1.5 py-0.5 rounded',
               game.volatility === 'high' && 'bg-rose-500/10 text-rose-400',
               game.volatility === 'medium' && 'bg-yellow-500/10 text-yellow-400',
-              game.volatility === 'low' && 'bg-emerald-500/10 text-emerald-400'
+              game.volatility === 'low' && 'bg-emerald-500/10 text-emerald-400',
             )}
           >
-            {game.volatility === 'high' ? 'Высокая' : game.volatility === 'medium' ? 'Средняя' : 'Низкая'}
+            {game.volatility === 'high'
+              ? 'Высокая'
+              : game.volatility === 'medium'
+                ? 'Средняя'
+                : 'Низкая'}
           </span>
         </div>
       </div>

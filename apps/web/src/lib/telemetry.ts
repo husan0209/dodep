@@ -14,6 +14,9 @@ export type TelemetryEvent =
   | 'withdraw_submitted'
   | 'auth_login_submitted'
   | 'auth_register_submitted'
+  | 'affiliate_enroll'
+  | 'affiliate_link_copy'
+  | 'affiliate_payout_request'
 
 interface StoredTelemetryEvent {
   event: TelemetryEvent
@@ -32,7 +35,7 @@ export function trackEvent(event: TelemetryEvent, payload: TelemetryPayload = {}
   }
 
   const normalizedPayload = Object.fromEntries(
-    Object.entries(payload).map(([key, value]) => [key, value ?? null])
+    Object.entries(payload).map(([key, value]) => [key, value ?? null]),
   )
 
   const entry: StoredTelemetryEvent = {
@@ -65,4 +68,3 @@ export function trackEvent(event: TelemetryEvent, payload: TelemetryPayload = {}
     console.info('[telemetry]', event, normalizedPayload)
   }
 }
-

@@ -46,6 +46,9 @@ coverage/
 *.lcov
 .nyc_output/
 
+# TypeScript incremental build state
+*.tsbuildinfo
+
 # Nx
 .nx/cache/
 .nx/workspace-data/

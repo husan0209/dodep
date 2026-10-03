@@ -15,7 +15,9 @@ on:
       - 'libs/proto/**'
 
 env:
-  GO_VERSION: '1.21'
+  # Must satisfy the `go` directive in services/go/{casino,notification}/go.mod,
+  # which is 1.25.0. On 1.21 neither job could even load a module graph.
+  GO_VERSION: '1.25'
   REGISTRY: ghcr.io
   IMAGE_PREFIX: opus-casino
 
@@ -35,21 +37,26 @@ jobs:
             services/go/casino/go.mod
             services/go/notification/go.mod
 
+      # v1 (action v3 with `version: latest`) is built with go1.24 and cannot
+      # type-check a module whose `go` directive is 1.25: it reports every
+      # protobuf-importing package as `undefined: <pkg> (typecheck)` plus
+      # "file requires newer Go version". v2.14.0 is built with go1.27.0 and
+      # type-checks the matrix; the version is pinned for reproducibility.
       - name: Install golangci-lint
-        uses: golangci/golangci-lint-action@v3
+        uses: golangci/golangci-lint-action@v9
         with:
-          version: latest
+          version: v2.14.0
           working-directory: services/go
 
       - name: Lint Casino Service
         run: |
           cd services/go/casino
-          golangci-lint run ./...
+          golangci-lint run --output.text.path=stdout
 
       - name: Lint Notification Service
         run: |
           cd services/go/notification
-          golangci-lint run ./...
+          golangci-lint run --output.text.path=stdout
 
   test:
     name: Test Go Services
@@ -91,16 +98,29 @@ jobs:
             services/go/casino/go.mod
             services/go/notification/go.mod
 
-      - name: Generate Proto files
+      # libs/proto/gen is gitignored, so a clean checkout has no Go stubs and
+      # both services fail to build with "no required module provides package
+      # github.com/opus-casino/proto/gen/go/...". `protoc` is not on
+      # ubuntu-latest, and the plugin versions must match the protobuf runtime
+      # in go.mod, so use the repo's own buf config instead of a hand-written
+      # protoc invocation. buf is not preinstalled either, hence the pin —
+      # same version as ci-go.yml, so both workflows emit identical stubs.
+      - name: Install buf (pinned)
         run: |
-          cd libs/proto
-          # Install protoc-gen-go
-          go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
-          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
-          # Generate Go code from proto files
-          protoc --go_out=. --go_opt=paths=source_relative \
-                 --go-grpc_out=. --go-grpc_opt=paths=source_relative \
-                 */v1/*.proto
+          BUF_VERSION=1.73.0
+          curl -fsSL -o /tmp/buf.tar.gz \
+            "https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/buf-Linux-x86_64.tar.gz"
+          sudo tar -xzf /tmp/buf.tar.gz -C /tmp
+          sudo install -m 0755 /tmp/buf/bin/buf /usr/local/bin/buf
+          buf --version
+
+      - name: Generate Proto files
+        run: make -C libs/proto gen-go
+
+      - name: Assert the stubs exist
+        run: |
+          test -d libs/proto/gen/go/casino/v1
+          test -d libs/proto/gen/go/notification/v1
 
       - name: Test Casino Service
         run: |
