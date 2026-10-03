@@ -1,16 +1,18 @@
 """
 ClickHouse data access with Polars integration.
 """
-import structlog
-import polars as pl
+from typing import cast
+
 import clickhouse_connect
+import polars as pl
+import structlog
 
 logger = structlog.get_logger()
 
 
 class ClickHouseClient:
     """ClickHouse client with Polars DataFrame support."""
-    
+
     def __init__(
         self,
         host: str,
@@ -36,22 +38,30 @@ class ClickHouseClient:
             port=port,
             database=database,
         )
-    
+
     def query_to_polars(self, query: str, params: dict | None = None) -> pl.DataFrame:
         """Execute query and return Polars DataFrame."""
         try:
-            result = self.client.query(query, parameters=params)
-            df = pl.from_arrow(result.to_arrow())
+            # query_arrow, not query(...).to_arrow(): clickhouse_connect's
+            # QueryResult has no to_arrow method, so the previous call raised
+            # AttributeError on every query and was swallowed by the except
+            # below, turning any ClickHouse read into "query failed".
+            result = self.client.query_arrow(query, parameters=params)
+            if isinstance(result, tuple):
+                # One table per statement; the queries here are single-statement,
+                # so more than one means the caller sent a multi-statement string.
+                result = result[0]
+            df = cast(pl.DataFrame, pl.from_arrow(result))
             logger.debug(
                 "clickhouse.query_executed",
-                rows=len(df) if df is not None else 0,
-                columns=len(df.columns) if df is not None else 0,
+                rows=df.height,
+                columns=df.width,
             )
             return df
         except Exception as e:
             logger.error("clickhouse.query_failed", error=str(e), query=query)
             raise
-    
+
     def get_daily_betting_stats(self, date: str) -> pl.DataFrame:
         """Get daily betting statistics."""
         return self.query_to_polars("""
@@ -69,7 +79,7 @@ class ClickHouseClient:
             GROUP BY date, sport, country
             ORDER BY total_stake DESC
         """, {"date": date})
-    
+
     def get_user_cohort_retention(self, cohort_month: str, months_forward: int = 6) -> pl.DataFrame:
         """Calculate retention for a registration cohort."""
         return self.query_to_polars("""
@@ -88,7 +98,7 @@ class ClickHouseClient:
             GROUP BY cohort_month, months_since
             ORDER BY months_since
         """, {"cohort": cohort_month, "months": months_forward})
-    
+
     def close(self):
         """Close ClickHouse connection."""
         self.client.close()
