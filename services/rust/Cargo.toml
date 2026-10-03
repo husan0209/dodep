@@ -31,7 +31,9 @@ sqlx = { version = "0.7", features = ["runtime-tokio", "tls-rustls", "postgres",
 fred = { version = "9.0", features = ["enable-rustls"] }
 
 # Message broker
-rdkafka = { version = "0.36", features = ["tokio"] }
+# `cmake-build` lets librdkafka build with CMake instead of the Unix
+# `./configure` + `make` path, which does not exist on Windows/MSVC agents.
+rdkafka = { version = "0.36", features = ["tokio", "cmake-build"] }
 
 # Logging & tracing
 tracing = "0.1"
