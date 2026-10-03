@@ -2,7 +2,7 @@ package pragmatic_test
 
 import (
 	"context"
-	"crypto/md5" //nolint:gosec
+	"crypto/md5" // #nosec G401 G501 -- Pragmatic Play API requires MD5 for hash params
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -200,12 +200,11 @@ func computePragmaticHash(params map[string]interface{}, secret string) string {
 
 	var sb strings.Builder
 	for _, k := range keys {
-		sb.WriteString(fmt.Sprintf("%v", params[k]))
+		_, _ = fmt.Fprintf(&sb, "%v", params[k])
 	}
 	sb.WriteString(secret)
 
-	//nolint:gosec
-	return fmt.Sprintf("%x", md5.Sum([]byte(sb.String())))
+	return fmt.Sprintf("%x", md5.Sum([]byte(sb.String()))) // #nosec G401 G501 -- Pragmatic Play API requires MD5 for hash params
 }
 
 func timeNowMillis() int64 {

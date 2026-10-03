@@ -20,17 +20,33 @@ func NewCasinoHTTPHandler(svc *service.CasinoService, log *zap.Logger) *CasinoHT
 	return &CasinoHTTPHandler{svc: svc, log: log}
 }
 
+// parsePagination parses a pagination query param with a default and clamps
+// the result to [0, max] to avoid integer overflow on narrowing conversion.
+func parsePagination(query string, def int, max int) int32 {
+	v, err := strconv.Atoi(query)
+	if err != nil {
+		v = def
+	}
+	if v < 0 {
+		v = 0
+	}
+	if v > max {
+		v = max
+	}
+	return int32(v) // #nosec G109 G115 -- clamped to 0..max
+}
+
 // GetGames GET /api/v1/casino/games
 func (h *CasinoHTTPHandler) GetGames(c *fiber.Ctx) error {
-	limit, _ := strconv.Atoi(c.Query("limit", "50"))
-	offset, _ := strconv.Atoi(c.Query("offset", "0"))
+	limit := parsePagination(c.Query("limit", "50"), 50, 1000)
+	offset := parsePagination(c.Query("offset", "0"), 0, 1000)
 	providerID := c.Query("provider")
 	category := c.Query("category")
 	search := c.Query("search")
 
 	opts := service.GetGamesOptions{
-		Limit:  int32(limit),
-		Offset: int32(offset),
+		Limit:  limit,
+		Offset: offset,
 	}
 	if providerID != "" {
 		opts.ProviderID = &providerID
@@ -142,16 +158,13 @@ func (h *CasinoHTTPHandler) GetHistory(c *fiber.Ctx) error {
 		return c.Status(401).JSON(fiber.Map{"error": "unauthorized"})
 	}
 
-	limit, _ := strconv.Atoi(c.Query("limit", "20"))
-	offset, _ := strconv.Atoi(c.Query("offset", "0"))
+	limit := parsePagination(c.Query("limit", "20"), 20, 1000)
+	offset := parsePagination(c.Query("offset", "0"), 0, 1000)
 
 	result, err := h.svc.GetGameHistory(c.Context(), service.GetGameHistoryOptions{
 		UserID: userID,
-		// #nosec G115 -- limit/offset come from query params with small
-		// defaults (20/0); Atoi on 64-bit int cannot exceed int32 here
-		// in practice, and the service clamps pagination downstream.
-		Limit:  int32(limit),
-		Offset: int32(offset),
+		Limit:  limit,
+		Offset: offset,
 	})
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{"error": err.Error()})

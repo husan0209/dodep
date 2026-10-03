@@ -124,7 +124,9 @@ func (s *WebhookService) ProcessDepositWebhook(ctx context.Context, req ProcessW
 	}
 
 	// Mark as processed
-	s.idempotencyRepo.Set(ctx, idempotencyKey, []byte("processed"), 86400)
+	if err := s.idempotencyRepo.Set(ctx, idempotencyKey, []byte("processed"), 86400); err != nil {
+		log.Error().Err(err).Str("idempotency_key", idempotencyKey).Msg("Failed to mark deposit webhook as processed")
+	}
 
 	// Log audit
 	var outcomeAmount *decimal.Decimal
@@ -194,7 +196,9 @@ func (s *WebhookService) ProcessWithdrawalWebhook(ctx context.Context, req Proce
 	}
 
 	// Mark as processed
-	s.idempotencyRepo.Set(ctx, idempotencyKey, []byte("processed"), 86400)
+	if err := s.idempotencyRepo.Set(ctx, idempotencyKey, []byte("processed"), 86400); err != nil {
+		log.Error().Err(err).Str("idempotency_key", idempotencyKey).Msg("Failed to mark withdrawal webhook as processed")
+	}
 
 	// Log audit
 	s.logAudit(ctx, withdrawal.UserID, "withdrawal", withdrawal.ID, withdrawal.WithdrawalID, string(withdrawal.Status), string(newStatus), nil)

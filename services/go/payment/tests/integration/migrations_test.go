@@ -84,7 +84,7 @@ func TestMigrations_UpAndDown(t *testing.T) {
 
 	sqlDB, err := db.DB()
 	require.NoError(t, err, "Failed to get underlying sql.DB")
-	defer sqlDB.Close()
+	defer func() { _ = sqlDB.Close() }()
 
 	t.Run("run all up migrations", func(t *testing.T) {
 		// Phase 0.9: centralized migrations in libs/migrations/postgresql
@@ -151,7 +151,7 @@ func TestMigrations_UpAndDown(t *testing.T) {
 			ORDER BY enumsortorder
 		`)
 		require.NoError(t, err)
-		defer rows.Close()
+		defer func() { _ = rows.Close() }()
 
 		var paymentStatusValues []string
 		for rows.Next() {
@@ -187,7 +187,7 @@ func TestMigrations_UpAndDown(t *testing.T) {
 			ORDER BY enumsortorder
 		`)
 		require.NoError(t, err)
-		defer rows.Close()
+		defer func() { _ = rows.Close() }()
 
 		var withdrawalStatusValues []string
 		for rows.Next() {
@@ -280,7 +280,7 @@ func TestMigrations_UpAndDown(t *testing.T) {
 			ORDER BY ordinal_position
 		`)
 		require.NoError(t, err)
-		defer rows.Close()
+		defer func() { _ = rows.Close() }()
 
 		columns := make(map[string]struct {
 			dataType    string
@@ -417,7 +417,7 @@ func TestMigrations_IdempotentDown(t *testing.T) {
 
 	sqlDB, err := db.DB()
 	require.NoError(t, err, "Failed to get underlying sql.DB")
-	defer sqlDB.Close()
+	defer func() { _ = sqlDB.Close() }()
 
 	// Phase 0.9: centralized migration
 	migrationUp := readMigration(t, "014_payments_core.sql")
@@ -468,7 +468,7 @@ func TestMigrations_CanReApply(t *testing.T) {
 
 	sqlDB, err := db.DB()
 	require.NoError(t, err, "Failed to get underlying sql.DB")
-	defer sqlDB.Close()
+	defer func() { _ = sqlDB.Close() }()
 
 	// Phase 0.9: centralized single-file migration cycle
 	migrationUp := readMigration(t, "014_payments_core.sql")

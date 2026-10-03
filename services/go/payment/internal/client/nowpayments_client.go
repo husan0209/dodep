@@ -333,7 +333,7 @@ func (c *NOWPaymentsClient) doRequestAttempts(ctx context.Context, method, path 
 		}
 
 		respBodyBytes, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if err != nil {
 			lastErr = fmt.Errorf("read response: %w", err)
 			continue
