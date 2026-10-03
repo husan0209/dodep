@@ -6,7 +6,15 @@ description = "Real-time WebSocket gateway for Opus Casino platform"
 
 [dependencies]
 # Async runtime
-tokio = { version = "1.35", features = ["full", "rt-multi-thread", "io-uring"] }
+# "io-uring" is deliberately not requested. tokio gates it behind
+# `#[cfg(tokio_unstable)]`, so enabling it makes the crate fail to compile with
+#
+#     error: The `io-uring` feature requires `--cfg tokio_unstable`.
+#
+# Nothing in this crate uses it (no io_uring/IoUring reference in src/), and
+# "full" does not imply it. "rt-multi-thread" is likewise redundant: it is part
+# of "full".
+tokio = { version = "1.35", features = ["full"] }
 
 # Web framework
 axum = { version = "0.7", features = ["macros", "ws"] }

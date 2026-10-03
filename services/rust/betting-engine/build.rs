@@ -5,9 +5,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build_client(true)
         .compile(
             &[
-                "../../../libs/proto/types.proto",
-                "../../../libs/proto/betting.proto",
-                "../../../libs/proto/wallet.proto",
+                "../../../libs/proto/betting/v1/betting.proto",
+                "../../../libs/proto/wallet/v1/wallet.proto",
             ],
             &["../../../libs/proto"],
         )?;

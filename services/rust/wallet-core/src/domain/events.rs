@@ -5,7 +5,7 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use super::{WalletType, TransactionType, TransactionStatus};
+use super::{TransactionStatus, TransactionType, WalletType};
 
 /// Wallet domain events
 #[derive(Debug, Clone, Serialize, Deserialize)]

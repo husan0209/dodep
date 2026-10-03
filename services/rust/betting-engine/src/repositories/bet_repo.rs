@@ -1,6 +1,6 @@
+use rust_decimal::Decimal;
 use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
-use rust_decimal::Decimal;
 
 use crate::domain::bet::*;
 use crate::domain::selection::{Selection, SelectionRow};
@@ -19,10 +19,7 @@ impl BetRepository {
         &self.pool
     }
 
-    pub async fn create_bet(
-        &self,
-        params: CreateBetParams,
-    ) -> Result<Bet, sqlx::Error> {
+    pub async fn create_bet(&self, params: CreateBetParams) -> Result<Bet, sqlx::Error> {
         let mut tx = self.pool.begin().await?;
 
         let maybe_row = sqlx::query_as!(
@@ -177,13 +174,11 @@ impl BetRepository {
         cursor: Option<i64>,
         status: Option<BetStatus>,
     ) -> Result<(Vec<Bet>, i64), sqlx::Error> {
-        let total: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM bets WHERE user_id = $1",
-        )
-        .bind(user_id.0)
-        .fetch_one(&self.pool)
-        .await?
-        .unwrap_or(0);
+        let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM bets WHERE user_id = $1")
+            .bind(user_id.0)
+            .fetch_one(&self.pool)
+            .await?
+            .unwrap_or(0);
 
         let rows = if let Some(status_filter) = status {
             sqlx::query_as!(
