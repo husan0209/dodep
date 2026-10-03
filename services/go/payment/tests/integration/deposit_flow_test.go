@@ -13,11 +13,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace/noop"
 )
 
 // noopTracer keeps integration tests free of a global tracer provider.
 func noopTracer() trace.Tracer {
-	return trace.NewNoopTracerProvider().Tracer("payment-integration-test")
+	return noop.NewTracerProvider().Tracer("payment-integration-test")
 }
 
 // TestDepositFlow_Complete tests the complete deposit flow

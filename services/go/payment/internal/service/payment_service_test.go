@@ -12,6 +12,7 @@ import (
 	"github.com/opus-casino/payment/internal/repository"
 	"github.com/shopspring/decimal"
 	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace/noop"
 )
 
 // MockPaymentRepository is a mock implementation of PaymentRepository
@@ -321,7 +322,7 @@ func newTestPaymentService(
 // noopTracer keeps unit tests independent of the global tracer provider while
 // still exercising the tracing-injected code paths.
 func noopTracer() trace.Tracer {
-	return trace.NewNoopTracerProvider().Tracer("payment-service-test")
+	return noop.NewTracerProvider().Tracer("payment-service-test")
 }
 
 func TestPaymentService_InitiateDeposit_Success(t *testing.T) {

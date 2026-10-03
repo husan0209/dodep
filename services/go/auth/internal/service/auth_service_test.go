@@ -44,6 +44,8 @@ type mockAuthRepository struct {
 	storeTempToken    func(context.Context, string, string, time.Duration) error
 	getTempToken      func(context.Context, string) (string, error)
 	deleteTempToken   func(context.Context, string) error
+	getResetToken     func(context.Context, string) (string, error)
+	deleteResetToken  func(context.Context, string) error
 }
 
 func (m *mockAuthRepository) GetUserByEmail(ctx context.Context, email string) (*domain.User, error) {
@@ -210,6 +212,24 @@ func (m *mockAuthRepository) GetTempToken(ctx context.Context, token string) (st
 func (m *mockAuthRepository) DeleteTempToken(ctx context.Context, token string) error {
 	if m.deleteTempToken != nil {
 		return m.deleteTempToken(ctx, token)
+	}
+	return nil
+}
+
+func (m *mockAuthRepository) StoreResetToken(ctx context.Context, token string, userID string, ttl time.Duration) error {
+	return nil
+}
+
+func (m *mockAuthRepository) GetResetToken(ctx context.Context, token string) (string, error) {
+	if m.getResetToken != nil {
+		return m.getResetToken(ctx, token)
+	}
+	return "", nil
+}
+
+func (m *mockAuthRepository) DeleteResetToken(ctx context.Context, token string) error {
+	if m.deleteResetToken != nil {
+		return m.deleteResetToken(ctx, token)
 	}
 	return nil
 }
@@ -442,4 +462,86 @@ func TestGoogleOAuth_Callback_Success(t *testing.T) {
 	require.Equal(t, "google-user-1", result.UserID)
 	require.NotNil(t, result.Tokens)
 	require.NotEmpty(t, result.Tokens.AccessToken)
+}
+
+func TestResetPassword_Success(t *testing.T) {
+	var gotUserID, gotHash string
+	var sessionsRevoked bool
+	var tokenDeleted bool
+
+	repo := &mockAuthRepository{
+		getResetToken: func(_ context.Context, token string) (string, error) {
+			require.Equal(t, "reset-token-1", token)
+			return "user-1", nil
+		},
+		updatePassword: func(_ context.Context, userID, passwordHash string) error {
+			gotUserID, gotHash = userID, passwordHash
+			return nil
+		},
+		deleteResetToken: func(_ context.Context, token string) error {
+			tokenDeleted = token == "reset-token-1"
+			return nil
+		},
+		deleteAllSessions: func(_ context.Context, userID string) error {
+			sessionsRevoked = userID == "user-1"
+			return nil
+		},
+	}
+
+	svc := newTestService(repo)
+
+	require.NoError(t, svc.ResetPassword(context.Background(), "reset-token-1", "new-password-1"))
+	require.Equal(t, "user-1", gotUserID)
+	require.NotEmpty(t, gotHash, "a new Argon2id hash must be stored")
+	require.NotEqual(t, "new-password-1", gotHash, "the plaintext must never be stored")
+	require.True(t, tokenDeleted, "the reset token is single-use")
+	require.True(t, sessionsRevoked, "a password reset must revoke existing sessions")
+}
+
+func TestResetPassword_UnknownToken(t *testing.T) {
+	repo := &mockAuthRepository{
+		getResetToken: func(_ context.Context, _ string) (string, error) {
+			return "", nil // unknown or already consumed
+		},
+		updatePassword: func(_ context.Context, _, _ string) error {
+			t.Fatal("password must not be updated for an unknown token")
+			return nil
+		},
+	}
+
+	svc := newTestService(repo)
+
+	err := svc.ResetPassword(context.Background(), "bogus-token", "new-password-1")
+	require.ErrorIs(t, err, domain.ErrInvalidToken)
+}
+
+func TestResetPassword_ValidatesInput(t *testing.T) {
+	repo := &mockAuthRepository{
+		getResetToken: func(_ context.Context, _ string) (string, error) {
+			t.Fatal("an invalid request must not reach the token store")
+			return "", nil
+		},
+	}
+
+	svc := newTestService(repo)
+
+	require.ErrorIs(t, svc.ResetPassword(context.Background(), "", "new-password-1"), domain.ErrValidation)
+	require.ErrorIs(t, svc.ResetPassword(context.Background(), "reset-token-1", "short"), domain.ErrValidation)
+}
+
+func TestResetPassword_RequestDoesNotLeakExistence(t *testing.T) {
+	repo := &mockAuthRepository{
+		getUserByEmail: func(_ context.Context, _ string) (*domain.User, error) {
+			return nil, nil // unknown email
+		},
+		getUserByID: func(_ context.Context, _ string) (*domain.User, error) {
+			t.Fatal("an unknown email must not trigger a user lookup by ID")
+			return nil, nil
+		},
+	}
+
+	svc := newTestService(repo)
+
+	// Same answer whether or not the account exists.
+	require.NoError(t, svc.ResetPasswordRequest(context.Background(), "nobody@example.com", "127.0.0.1"))
 }

@@ -80,12 +80,12 @@ func parseLevel(level string) (zapcore.Level, error) {
 
 // WithRequestID adds request ID to the logger context
 func (l *Logger) WithRequestID(requestID string) *Logger {
-	return &Logger{Logger: l.Logger.With(zap.String("request_id", requestID))}
+	return &Logger{l.With(zap.String("request_id", requestID))}
 }
 
 // WithTraceID adds trace ID to the logger context (OpenTelemetry)
 func (l *Logger) WithTraceID(traceID string) *Logger {
-	return &Logger{Logger: l.Logger.With(zap.String("trace_id", traceID))}
+	return &Logger{l.With(zap.String("trace_id", traceID))}
 }
 
 // WithContext adds request ID and trace ID from context

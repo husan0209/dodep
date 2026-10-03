@@ -3,15 +3,77 @@ package service
 import (
 	"context"
 	"testing"
+	"time"
 
 	"go.uber.org/zap"
 
 	"github.com/opus-casino/notification/internal/repository"
 )
 
+// fakeRepository is an in-memory NotificationRepository for unit tests.
+type fakeRepository struct{}
+
+func (f *fakeRepository) CreateNotification(ctx context.Context, notif *repository.Notification) error {
+	return nil
+}
+
+func (f *fakeRepository) GetNotification(ctx context.Context, id string) (*repository.Notification, error) {
+	return &repository.Notification{ID: id}, nil
+}
+
+func (f *fakeRepository) GetUserNotifications(ctx context.Context, userID uint64, typeFilter *string, isRead *bool, dateFrom, dateTo *time.Time, limit, offset int32) ([]repository.Notification, int64, error) {
+	return []repository.Notification{}, 0, nil
+}
+
+func (f *fakeRepository) GetUnreadCount(ctx context.Context, userID uint64) (int32, error) {
+	return 0, nil
+}
+
+func (f *fakeRepository) MarkAsRead(ctx context.Context, id string, userID uint64) error {
+	return nil
+}
+
+func (f *fakeRepository) MarkAllAsRead(ctx context.Context, userID uint64, typeFilter *string) (int32, error) {
+	return 0, nil
+}
+
+func (f *fakeRepository) DeleteNotification(ctx context.Context, id string, userID uint64) error {
+	return nil
+}
+
+func (f *fakeRepository) UpdateNotificationStatus(ctx context.Context, id string, status string, errorMessage string) error {
+	return nil
+}
+
+func (f *fakeRepository) GetNotificationSettings(ctx context.Context, userID uint64) (*repository.NotificationSettings, error) {
+	return &repository.NotificationSettings{
+		UserID:       userID,
+		EmailEnabled: true,
+		SMSEnabled:   true,
+		PushEnabled:  true,
+		InAppEnabled: true,
+		UpdatedAt:    time.Now(),
+	}, nil
+}
+
+func (f *fakeRepository) UpdateNotificationSettings(ctx context.Context, settings *repository.NotificationSettings) error {
+	return nil
+}
+
+func (f *fakeRepository) IncrementUnreadCount(ctx context.Context, userID uint64) error {
+	return nil
+}
+
+func (f *fakeRepository) DecrementUnreadCount(ctx context.Context, userID uint64) error {
+	return nil
+}
+
+func (f *fakeRepository) SetUnreadCount(ctx context.Context, userID uint64, count int32) error {
+	return nil
+}
+
 func TestProcessEvent_SupportedEventAliases(t *testing.T) {
-	repo := repository.NewNotificationRepository(nil, nil)
-	svc := NewNotificationService(repo, zap.NewNop())
+	svc := NewNotificationService(&fakeRepository{}, zap.NewNop())
 
 	testCases := []struct {
 		name      string

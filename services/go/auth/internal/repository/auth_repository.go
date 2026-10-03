@@ -590,3 +590,34 @@ func (r *AuthRepository) DeleteTempToken(ctx context.Context, token string) erro
 	}
 	return nil
 }
+
+// StoreResetToken stores a single-use password-reset token mapped to the user.
+func (r *AuthRepository) StoreResetToken(ctx context.Context, token string, userID string, ttl time.Duration) error {
+	key := fmt.Sprintf("reset_token:%s", token)
+	if err := r.redis.Set(ctx, key, userID, ttl).Err(); err != nil {
+		return fmt.Errorf("%w: failed to store reset token in redis", domain.ErrDependencyUnavailable)
+	}
+	return nil
+}
+
+// GetResetToken returns the user ID a reset token belongs to, or "" if unknown.
+func (r *AuthRepository) GetResetToken(ctx context.Context, token string) (string, error) {
+	key := fmt.Sprintf("reset_token:%s", token)
+	val, err := r.redis.Get(ctx, key).Result()
+	if err == redis.Nil {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("%w: failed to get reset token from redis", domain.ErrDependencyUnavailable)
+	}
+	return val, nil
+}
+
+// DeleteResetToken deletes a password-reset token so it cannot be replayed.
+func (r *AuthRepository) DeleteResetToken(ctx context.Context, token string) error {
+	key := fmt.Sprintf("reset_token:%s", token)
+	if err := r.redis.Del(ctx, key).Err(); err != nil {
+		return fmt.Errorf("%w: failed to delete reset token in redis", domain.ErrDependencyUnavailable)
+	}
+	return nil
+}
