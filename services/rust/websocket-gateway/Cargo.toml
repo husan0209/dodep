@@ -5,11 +5,12 @@ edition = "2021"
 description = "Real-time WebSocket gateway for Opus Casino platform"
 
 [dependencies]
-# Async runtime
-# No "io-uring": that feature is nightly-only and fails to build on stable with
-#   error: The `io-uring` feature requires `--cfg tokio_unstable`
-# which made this crate uncompilable by CI. "full" already includes
-# "rt-multi-thread", so listing it separately was redundant too.
+# Async runtime.
+# "io-uring" was requested here but tokio gates it behind `--cfg tokio_unstable`,
+# which no workflow sets, so the crate failed to compile with
+#   error: The `io-uring` feature requires `--cfg tokio_unstable`.
+# Nothing in this service uses tokio's io-uring driver (it speaks axum,
+# tokio-tungstenite and tonic), and "full" already implies "rt-multi-thread".
 tokio = { version = "1.35", features = ["full"] }
 
 # Web framework
