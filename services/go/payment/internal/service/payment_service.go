@@ -9,6 +9,7 @@ import (
 	"github.com/opus-casino/payment/internal/client"
 	"github.com/opus-casino/payment/internal/domain"
 	"github.com/opus-casino/payment/internal/event"
+	"github.com/opus-casino/payment/internal/observability"
 	"github.com/opus-casino/payment/internal/repository"
 	"github.com/rs/zerolog/log"
 	"github.com/shopspring/decimal"
@@ -68,19 +69,21 @@ type InitiateDepositRequest struct {
 
 // InitiateDepositResponse represents a deposit response
 type InitiateDepositResponse struct {
-	PaymentUUID   string
-	PaymentID     string
-	PayAddress    string
-	PayAmount     decimal.Decimal
-	PayCurrency   string
-	FiatAmount    decimal.Decimal
-	ExpiresAt     time.Time
+	PaymentUUID string
+	PaymentID   string
+	PayAddress  string
+	PayAmount   decimal.Decimal
+	PayCurrency string
+	FiatAmount  decimal.Decimal
+	ExpiresAt   time.Time
 }
 
 // InitiateDeposit creates a new deposit payment
 func (s *PaymentService) InitiateDeposit(ctx context.Context, req InitiateDepositRequest) (*InitiateDepositResponse, error) {
-	// Check idempotency
+	// A replayed idempotency key is not a new deposit: it must not increment
+	// the counters, otherwise retries inflate the volume dashboards.
 	if existingPayment, err := s.paymentRepo.GetByIDempotencyKey(ctx, req.IdempotencyKey); err != nil {
+		observability.RecordError("idempotency_lookup_failed", observability.OperationDeposit)
 		return nil, fmt.Errorf("check idempotency: %w", err)
 	} else if existingPayment != nil {
 		log.Info().
@@ -91,18 +94,22 @@ func (s *PaymentService) InitiateDeposit(ctx context.Context, req InitiateDeposi
 	}
 
 	// Validate KYC level and limits
-	if err := s.validateDepositLimits(ctx, req.UserID, req.Amount); err != nil {
+	kycLevel, err := s.validateDepositLimits(ctx, req.UserID, req.Amount)
+	if err != nil {
+		observability.RecordError(metricErrorType(err), observability.OperationDeposit)
 		return nil, err
 	}
 
 	// Validate currency
 	if !req.Currency.IsDepositSupported() {
+		observability.RecordError("currency_not_supported", observability.OperationDeposit)
 		return nil, domain.ErrorCurrencyNotSupported(string(req.Currency))
 	}
 
 	// Get exchange rate
 	fiatAmount, err := s.getFiatAmount(ctx, req.Amount, req.Currency)
 	if err != nil {
+		observability.RecordError("provider_error", observability.OperationDeposit)
 		return nil, fmt.Errorf("get exchange rate: %w", err)
 	}
 
@@ -115,6 +122,7 @@ func (s *PaymentService) InitiateDeposit(ctx context.Context, req InitiateDeposi
 		OrderID:        uuid.New().String(),
 	})
 	if err != nil {
+		observability.RecordError("provider_error", observability.OperationDeposit)
 		return nil, domain.ErrorProviderUnavailable("NOWPayments", err)
 	}
 
@@ -137,8 +145,19 @@ func (s *PaymentService) InitiateDeposit(ctx context.Context, req InitiateDeposi
 	}
 
 	if err := s.paymentRepo.Create(ctx, payment); err != nil {
+		// The provider already issued a pay address, so this deposit exists in
+		// the player's wallet view but has no row here. Surfacing it as a
+		// deposit failure keeps the counter honest about what we accepted.
+		observability.RecordError("persistence_failed", observability.OperationDeposit)
 		return nil, fmt.Errorf("create payment: %w", err)
 	}
+
+	observability.RecordDeposit(
+		observability.DepositStatusPending,
+		string(req.Currency),
+		kycLevel,
+		fiatAmount,
+	)
 
 	log.Info().
 		Int64("user_id", req.UserID).
@@ -187,12 +206,14 @@ func (s *PaymentService) ListPayments(ctx context.Context, req ListPaymentsReque
 	return s.paymentRepo.ListByUserID(ctx, req.UserID, filter)
 }
 
-// validateDepositLimits validates KYC level and daily limits
-func (s *PaymentService) validateDepositLimits(ctx context.Context, userID int64, amount decimal.Decimal) error {
+// validateDepositLimits validates KYC level and daily limits.
+// It returns the KYC level so callers can label metrics with it instead of
+// making a second gRPC round trip to User Service.
+func (s *PaymentService) validateDepositLimits(ctx context.Context, userID int64, amount decimal.Decimal) (int, error) {
 	// Get KYC level
 	kycLevel, err := s.user.GetKYCLevel(ctx, userID)
 	if err != nil {
-		return fmt.Errorf("get KYC level: %w", err)
+		return observability.KYCLevelUnknown, fmt.Errorf("get KYC level: %w", err)
 	}
 
 	// Get daily limit for KYC level
@@ -201,15 +222,43 @@ func (s *PaymentService) validateDepositLimits(ctx context.Context, userID int64
 	// Get today's cumulative deposits
 	used, err := s.dailyLimitsRepo.Get(ctx, userID, "deposit")
 	if err != nil {
-		return fmt.Errorf("get daily deposits: %w", err)
+		return kycLevel, fmt.Errorf("get daily deposits: %w", err)
 	}
 
 	// Check if exceeds limit
 	if used.Add(amount).GreaterThan(decimal.NewFromFloat(limit)) {
-		return domain.ErrorDailyLimitExceeded(limit, used.InexactFloat64(), amount.InexactFloat64())
+		return kycLevel, domain.ErrorDailyLimitExceeded(limit, used.InexactFloat64(), amount.InexactFloat64())
 	}
 
-	return nil
+	return kycLevel, nil
+}
+
+// metricErrorType maps a domain error onto the bounded error_type label used by
+// payment_errors_total. Returning a constant for unknown errors is deliberate:
+// the label must never carry user input or raw provider text, otherwise
+// cardinality is unbounded and the metric becomes a memory leak (a malicious
+// provider error string would create a new time series per request).
+func metricErrorType(err error) string {
+	switch domain.GetErrorCode(err) {
+	case domain.ErrCodeDailyLimitExceeded:
+		return "limit_exceeded"
+	case domain.ErrCodeKYCRequired:
+		return "kyc_required"
+	case domain.ErrCodeInsufficientBalance:
+		return "insufficient_balance"
+	case domain.ErrCodeCurrencyNotSupported:
+		return "currency_not_supported"
+	case domain.ErrCodeProviderUnavailable:
+		return "provider_error"
+	case domain.ErrCodeWebhookSignatureInvalid:
+		return "webhook_invalid"
+	case domain.ErrCodeInvalidCryptoAddress:
+		return "invalid_address"
+	case domain.ErrCodeInvalidAmount:
+		return "invalid_amount"
+	default:
+		return "internal_error"
+	}
 }
 
 // getDepositLimit returns the daily deposit limit for a KYC level

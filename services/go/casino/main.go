@@ -41,7 +41,7 @@ func main() {
 	if cfg.Env == "development" {
 		log, _ = zap.NewDevelopment()
 	}
-	defer log.Sync()
+	defer func() { _ = log.Sync() }()
 
 	// ── Database (GORM + pgx) ──────────────────────────────────────────────
 	db, err := gorm.Open(postgres.Open(cfg.DatabaseURL), &gorm.Config{})
@@ -55,7 +55,7 @@ func main() {
 		Password: cfg.RedisPassword,
 		DB:       cfg.RedisDB,
 	})
-	defer rdb.Close()
+	defer func() { _ = rdb.Close() }()
 
 	// ── Repository ────────────────────────────────────────────────────────
 	casinoRepo := repository.NewCasinoRepository(db, rdb)
@@ -159,7 +159,8 @@ func main() {
 	go func() {
 		mux := http.NewServeMux()
 		mux.Handle("/metrics", promhttp.Handler())
-		if err := http.ListenAndServe(":9186", mux); err != nil {
+		srv := &http.Server{Addr: ":9186", Handler: mux, ReadHeaderTimeout: 10 * time.Second}
+		if err := srv.ListenAndServe(); err != nil {
 			log.Error("Casino: metrics server error", zap.Error(err))
 		}
 	}()

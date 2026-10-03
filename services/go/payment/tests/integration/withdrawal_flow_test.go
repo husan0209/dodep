@@ -57,7 +57,8 @@ func TestWithdrawalFlow_Complete(t *testing.T) {
 		walletClient,
 		userClient,
 		nil, // producer
-		nil, // tracer
+		noopTracer(),
+		"", // ipnCallbackURL
 	)
 	_ = withdrawalService
 

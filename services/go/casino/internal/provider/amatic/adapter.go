@@ -2,7 +2,7 @@ package amatic
 
 import (
 	"context"
-	"crypto/md5" //nolint:gosec // Amatic specifies MD5
+	"crypto/md5" // #nosec G401 G501 -- Amatic API requires MD5 for hash params
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -103,8 +103,7 @@ func (a *Adapter) VerifyCallbackSignature(body []byte, _ map[string]string) bool
 	txID, _ := params["transactionId"].(string)
 
 	input := a.cfg.APIPassword + a.cfg.OperatorID + playerID + txID
-	//nolint:gosec
-	expected := fmt.Sprintf("%x", md5.Sum([]byte(input)))
+	expected := fmt.Sprintf("%x", md5.Sum([]byte(input))) // #nosec G401 G501 -- Amatic API requires MD5 for hash params
 
 	if !strings.EqualFold(expected, receivedKey) {
 		a.log.Warn("Amatic: key mismatch")
@@ -178,6 +177,5 @@ func (a *Adapter) mapMethod(m string) provider.CallbackEventType {
 
 // sign generates MD5(api_password + data).
 func (a *Adapter) sign(data string) string {
-	//nolint:gosec
-	return fmt.Sprintf("%x", md5.Sum([]byte(a.cfg.APIPassword+data)))
+	return fmt.Sprintf("%x", md5.Sum([]byte(a.cfg.APIPassword+data))) // #nosec G401 G501 -- Amatic API requires MD5 for hash params
 }

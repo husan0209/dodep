@@ -594,7 +594,7 @@ func (s *CasinoService) EndGameSession(ctx context.Context, req *EndGameSessionR
 			TotalBet:      totalBet,
 			TotalWin:      totalWin,
 			NetResult:     netResult,
-			RoundsPlayed:  int32(len(rounds)),
+			RoundsPlayed:  int32(len(rounds)), // #nosec G115 -- rounds from paginated DB query bounded by page size
 			StartedAt:     session.StartedAt,
 			EndedAt:       endedAt,
 			DurationSecs:  int64(endedAt.Sub(session.StartedAt).Seconds()),

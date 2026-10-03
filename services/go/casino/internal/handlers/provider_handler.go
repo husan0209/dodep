@@ -67,9 +67,9 @@ func (h *ProviderHandler) handleCallback(providerName string) fiber.Handler {
 
 		// Collect headers for signature verification
 		headers := make(map[string]string)
-		c.Request().Header.VisitAll(func(key, val []byte) {
+		for key, val := range c.Request().Header.All() {
 			headers[string(key)] = string(val)
-		})
+		}
 
 		body := c.Body()
 

@@ -78,7 +78,7 @@ func run() error {
 		if err != nil {
 			return fmt.Errorf("init tracing: %w", err)
 		}
-		defer shutdownTracing(context.Background())
+		defer func() { _ = shutdownTracing(context.Background()) }()
 	}
 
 	// 4. Initialize database
@@ -89,7 +89,7 @@ func run() error {
 	defer func() {
 		sqlDB, _ := db.DB()
 		if sqlDB != nil {
-			sqlDB.Close()
+			_ = sqlDB.Close()
 		}
 	}()
 
@@ -100,14 +100,14 @@ func run() error {
 		DB:       cfg.Redis.DB,
 		PoolSize: cfg.Redis.PoolSize,
 	})
-	defer rdb.Close()
+	defer func() { _ = rdb.Close() }()
 
 	// 5.5. Initialize Zap logger for dependencies
 	zapLogger, _ := zap.NewProduction()
 	if cfg.Environment == "development" {
 		zapLogger, _ = zap.NewDevelopment()
 	}
-	defer zapLogger.Sync()
+	defer func() { _ = zapLogger.Sync() }()
 
 	// 6. Initialize event producer
 	producer, err := event.NewProducer(event.ProducerConfig{
@@ -117,7 +117,7 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("create producer: %w", err)
 	}
-	defer producer.Close()
+	defer func() { _ = producer.Close() }()
 
 	// 7. Build layers
 	repos := buildRepositories(db, rdb)
@@ -441,6 +441,9 @@ func startMetricsServer(ctx context.Context, cfg *config.Config) error {
 	server := &http.Server{
 		Addr:    ":9104",
 		Handler: mux,
+		// Without this a client that opens a connection and never sends
+		// headers can pin a goroutine indefinitely (Slowloris).
+		ReadHeaderTimeout: 10 * time.Second,
 	}
 
 	log.Info().Str("addr", ":9104").Msg("Starting metrics server")

@@ -41,25 +41,6 @@ func (m *MockAuditLogRepository) ListByReference(ctx context.Context, refType, r
 	return &repository.ListResult[repository.AuditLog]{}, nil
 }
 
-// Helper function to create a test webhook service
-func newTestWebhookService(
-	paymentRepo repository.PaymentRepository,
-	withdrawalRepo repository.WithdrawalRepository,
-	idempotencyRepo repository.IdempotencyRepository,
-	auditLogRepo repository.AuditLogRepository,
-) *WebhookService {
-	return NewWebhookService(
-		paymentRepo,
-		withdrawalRepo,
-		idempotencyRepo,
-		auditLogRepo,
-		nil, // nowpayments
-		nil, // wallet
-		nil, // producer
-		nil, // tracer
-	)
-}
-
 func TestWebhookService_ProcessDepositWebhook_Success(t *testing.T) {
 	ctx := context.Background()
 	

@@ -8,6 +8,7 @@ import (
 	"github.com/opus-casino/payment/internal/client"
 	"github.com/opus-casino/payment/internal/domain"
 	"github.com/opus-casino/payment/internal/event"
+	"github.com/opus-casino/payment/internal/observability"
 	"github.com/opus-casino/payment/internal/repository"
 	"github.com/rs/zerolog/log"
 	"github.com/shopspring/decimal"
@@ -68,12 +69,14 @@ func (s *WebhookService) ProcessDepositWebhook(ctx context.Context, req ProcessW
 	// Verify signature
 	if !s.nowpayments.VerifyWebhookSignature(req.Payload, req.Signature) {
 		log.Warn().Msg("Invalid webhook signature")
+		observability.RecordError("webhook_invalid", observability.OperationWebhook)
 		return nil, domain.NewDetailedError(domain.ErrWebhookSignatureInvalid, domain.ErrCodeWebhookSignatureInvalid)
 	}
 
 	// Parse payload
 	var payload client.WebhookPayload
 	if err := json.Unmarshal(req.Payload, &payload); err != nil {
+		observability.RecordError("webhook_malformed", observability.OperationWebhook)
 		return nil, fmt.Errorf("parse webhook payload: %w", err)
 	}
 
@@ -85,6 +88,8 @@ func (s *WebhookService) ProcessDepositWebhook(ctx context.Context, req ProcessW
 	// Check idempotency
 	idempotencyKey := "webhook:deposit:" + payload.PaymentID
 	if processed, found, _ := s.idempotencyRepo.Get(ctx, idempotencyKey); found && processed != nil {
+		// Provider retries are routine. Not counting them keeps the completion
+		// counter equal to the number of deposits that actually settled.
 		log.Info().Str("payment_id", payload.PaymentID).Msg("Webhook already processed")
 		return &ProcessWebhookResult{Processed: true, Type: "deposit", ID: payload.PaymentID, Status: payload.PaymentStatus}, nil
 	}
@@ -92,6 +97,7 @@ func (s *WebhookService) ProcessDepositWebhook(ctx context.Context, req ProcessW
 	// Get payment
 	payment, err := s.paymentRepo.GetByPaymentID(ctx, payload.PaymentID)
 	if err != nil {
+		observability.RecordError("payment_lookup_failed", observability.OperationWebhook)
 		return nil, fmt.Errorf("get payment: %w", err)
 	}
 
@@ -118,7 +124,9 @@ func (s *WebhookService) ProcessDepositWebhook(ctx context.Context, req ProcessW
 	}
 
 	// Mark as processed
-	s.idempotencyRepo.Set(ctx, idempotencyKey, []byte("processed"), 86400)
+	if err := s.idempotencyRepo.Set(ctx, idempotencyKey, []byte("processed"), 86400); err != nil {
+		log.Error().Err(err).Str("idempotency_key", idempotencyKey).Msg("Failed to mark deposit webhook as processed")
+	}
 
 	// Log audit
 	var outcomeAmount *decimal.Decimal
@@ -141,12 +149,14 @@ func (s *WebhookService) ProcessWithdrawalWebhook(ctx context.Context, req Proce
 	// Verify signature
 	if !s.nowpayments.VerifyWebhookSignature(req.Payload, req.Signature) {
 		log.Warn().Msg("Invalid webhook signature")
+		observability.RecordError("webhook_invalid", observability.OperationWebhook)
 		return nil, domain.NewDetailedError(domain.ErrWebhookSignatureInvalid, domain.ErrCodeWebhookSignatureInvalid)
 	}
 
 	// Parse payload
 	var payload client.WebhookPayload
 	if err := json.Unmarshal(req.Payload, &payload); err != nil {
+		observability.RecordError("webhook_malformed", observability.OperationWebhook)
 		return nil, fmt.Errorf("parse webhook payload: %w", err)
 	}
 
@@ -158,6 +168,7 @@ func (s *WebhookService) ProcessWithdrawalWebhook(ctx context.Context, req Proce
 	// Check idempotency
 	idempotencyKey := "webhook:withdrawal:" + payload.PaymentID
 	if processed, found, _ := s.idempotencyRepo.Get(ctx, idempotencyKey); found && processed != nil {
+		// Provider retries must not double-count a completed payout.
 		log.Info().Str("withdrawal_id", payload.PaymentID).Msg("Webhook already processed")
 		return &ProcessWebhookResult{Processed: true, Type: "withdrawal", ID: payload.PaymentID, Status: payload.PaymentStatus}, nil
 	}
@@ -165,6 +176,7 @@ func (s *WebhookService) ProcessWithdrawalWebhook(ctx context.Context, req Proce
 	// Get withdrawal
 	withdrawal, err := s.withdrawalRepo.GetByWithdrawalID(ctx, payload.PaymentID)
 	if err != nil {
+		observability.RecordError("withdrawal_lookup_failed", observability.OperationWebhook)
 		return nil, fmt.Errorf("get withdrawal: %w", err)
 	}
 
@@ -184,7 +196,9 @@ func (s *WebhookService) ProcessWithdrawalWebhook(ctx context.Context, req Proce
 	}
 
 	// Mark as processed
-	s.idempotencyRepo.Set(ctx, idempotencyKey, []byte("processed"), 86400)
+	if err := s.idempotencyRepo.Set(ctx, idempotencyKey, []byte("processed"), 86400); err != nil {
+		log.Error().Err(err).Str("idempotency_key", idempotencyKey).Msg("Failed to mark withdrawal webhook as processed")
+	}
 
 	// Log audit
 	s.logAudit(ctx, withdrawal.UserID, "withdrawal", withdrawal.ID, withdrawal.WithdrawalID, string(withdrawal.Status), string(newStatus), nil)
@@ -210,19 +224,36 @@ func (s *WebhookService) handleDepositFinished(ctx context.Context, payment *dom
 	})
 	if err != nil {
 		log.Error().Err(err).Str("payment_id", payment.PaymentID).Msg("Failed to credit wallet")
+		// The crypto arrived but the balance was not credited. This is the
+		// worst payment failure mode: the player paid and sees no money. It
+		// gets its own label so it can page separately from provider errors.
+		observability.RecordError("deposit_credit_failed", observability.OperationWebhook)
 		return fmt.Errorf("credit wallet: %w", err)
 	}
 
 	// Update payment status
 	if err := s.paymentRepo.UpdateStatus(ctx, payment.ID, payment.Status, domain.PaymentStatusFinished); err != nil {
 		log.Error().Err(err).Msg("Failed to update payment status")
+		// Wallet already credited but the row still says pending: the deposit
+		// settled in money but not in state. A retry will not re-credit
+		// (wallet-side idempotency key), so this self-heals on the next
+		// webhook delivery, but it must be visible meanwhile.
+		observability.RecordError("deposit_status_not_persisted", observability.OperationWebhook)
 		return err
 	}
 
 	// Update actual amount if different
 	if !payload.OutcomeAmount.IsZero() && !payload.OutcomeAmount.Equal(payment.RequestedAmount) {
-		s.paymentRepo.UpdateActualAmount(ctx, payment.ID, payload.OutcomeAmount)
+		if err := s.paymentRepo.UpdateActualAmount(ctx, payment.ID, payload.OutcomeAmount); err != nil {
+			observability.RecordError("deposit_amount_not_persisted", observability.OperationWebhook)
+		}
 	}
+
+	observability.RecordDepositTransition(
+		observability.DepositStatusCompleted,
+		payment.CryptoCurrency,
+		observability.KYCLevelUnknown,
+	)
 
 	log.Info().
 		Int64("user_id", payment.UserID).
@@ -236,8 +267,19 @@ func (s *WebhookService) handleDepositFinished(ctx context.Context, payment *dom
 // handleDepositFailed handles a failed deposit
 func (s *WebhookService) handleDepositFailed(ctx context.Context, payment *domain.Payment, status domain.PaymentStatus) error {
 	if err := s.paymentRepo.UpdateStatus(ctx, payment.ID, payment.Status, status); err != nil {
+		observability.RecordError("deposit_status_not_persisted", observability.OperationWebhook)
 		return err
 	}
+
+	metricStatus := observability.DepositStatusFailed
+	if status == domain.PaymentStatusExpired {
+		metricStatus = observability.DepositStatusExpired
+	}
+	observability.RecordDepositTransition(
+		metricStatus,
+		payment.CryptoCurrency,
+		observability.KYCLevelUnknown,
+	)
 
 	log.Info().
 		Int64("user_id", payment.UserID).
@@ -260,13 +302,24 @@ func (s *WebhookService) handleWithdrawalFinished(ctx context.Context, withdrawa
 	})
 	if err != nil {
 		log.Error().Err(err).Str("withdrawal_id", withdrawal.WithdrawalID).Msg("Failed to finalize debit")
+		// Crypto left the platform but the debit was never finalized, so the
+		// balance stays locked instead of being spent. The player is neither
+		// charged nor credited — needs a human to reconcile.
+		observability.RecordError("withdrawal_debit_not_finalized", observability.OperationWebhook)
 		return fmt.Errorf("finalize debit: %w", err)
 	}
 
 	// Update withdrawal status
 	if err := s.withdrawalRepo.UpdateStatus(ctx, withdrawal.ID, withdrawal.Status, domain.WithdrawalStatusFinished); err != nil {
+		observability.RecordError("withdrawal_status_not_persisted", observability.OperationWebhook)
 		return err
 	}
+
+	observability.RecordWithdrawalTransition(
+		observability.WithdrawalStatusCompleted,
+		withdrawal.CryptoCurrency,
+		observability.KYCLevelUnknown,
+	)
 
 	log.Info().
 		Int64("user_id", withdrawal.UserID).
@@ -282,12 +335,22 @@ func (s *WebhookService) handleWithdrawalFailed(ctx context.Context, withdrawal 
 	// Unlock funds
 	if err := s.wallet.UnlockFunds(ctx, withdrawal.WithdrawalID, "withdrawal_unlock:"+withdrawal.WithdrawalID); err != nil {
 		log.Error().Err(err).Str("withdrawal_id", withdrawal.WithdrawalID).Msg("Failed to unlock funds")
+		// The payout failed and the balance is still locked, so the player
+		// cannot bet funds they never lost. Must be resolved manually.
+		observability.RecordError("withdrawal_unlock_failed", observability.OperationWebhook)
 	}
 
 	// Update withdrawal status
 	if err := s.withdrawalRepo.UpdateStatus(ctx, withdrawal.ID, withdrawal.Status, domain.WithdrawalStatusFailed); err != nil {
+		observability.RecordError("withdrawal_status_not_persisted", observability.OperationWebhook)
 		return err
 	}
+
+	observability.RecordWithdrawalTransition(
+		observability.WithdrawalStatusFailed,
+		withdrawal.CryptoCurrency,
+		observability.KYCLevelUnknown,
+	)
 
 	log.Info().
 		Int64("user_id", withdrawal.UserID).
@@ -300,15 +363,15 @@ func (s *WebhookService) handleWithdrawalFailed(ctx context.Context, withdrawal 
 // mapPaymentStatus maps NOWPayments status to domain status
 func (s *WebhookService) mapPaymentStatus(status string) domain.PaymentStatus {
 	statusMap := map[string]domain.PaymentStatus{
-		"waiting":       domain.PaymentStatusWaiting,
-		"confirming":    domain.PaymentStatusConfirming,
-		"confirmed":     domain.PaymentStatusConfirmed,
-		"sending":       domain.PaymentStatusSending,
+		"waiting":        domain.PaymentStatusWaiting,
+		"confirming":     domain.PaymentStatusConfirming,
+		"confirmed":      domain.PaymentStatusConfirmed,
+		"sending":        domain.PaymentStatusSending,
 		"partially_paid": domain.PaymentStatusPartiallyPaid,
-		"finished":      domain.PaymentStatusFinished,
-		"failed":        domain.PaymentStatusFailed,
-		"expired":       domain.PaymentStatusExpired,
-		"refunded":      domain.PaymentStatusRefunded,
+		"finished":       domain.PaymentStatusFinished,
+		"failed":         domain.PaymentStatusFailed,
+		"expired":        domain.PaymentStatusExpired,
+		"refunded":       domain.PaymentStatusRefunded,
 	}
 	if s, ok := statusMap[status]; ok {
 		return s

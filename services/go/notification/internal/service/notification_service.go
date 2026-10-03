@@ -12,6 +12,11 @@ import (
 	"github.com/opus-casino/notification/internal/repository"
 )
 
+// errUserIDMissing is returned by every event processor when the incoming event
+// carries no usable user_id. It is a sentinel so callers can classify the
+// failure with errors.Is instead of matching on the message.
+var errUserIDMissing = errors.New("user_id not found in event data")
+
 // NotificationService handles notification business logic
 type NotificationService struct {
 	repo *repository.NotificationRepository
@@ -470,7 +475,7 @@ func (s *NotificationService) sendInApp(ctx context.Context, notif *repository.N
 func (s *NotificationService) processBetSettled(ctx context.Context, data map[string]string) error {
 	userID := getUint64FromData(data, "user_id")
 	if userID == 0 {
-		return errors.New("user_id not found in event data")
+		return errUserIDMissing
 	}
 
 	// Send in-app notification about bet result
@@ -491,7 +496,7 @@ func (s *NotificationService) processBetSettled(ctx context.Context, data map[st
 func (s *NotificationService) processDepositConfirmed(ctx context.Context, data map[string]string) error {
 	userID := getUint64FromData(data, "user_id")
 	if userID == 0 {
-		return errors.New("user_id not found in event data")
+		return errUserIDMissing
 	}
 
 	req := &SendNotificationRequest{
@@ -511,7 +516,7 @@ func (s *NotificationService) processDepositConfirmed(ctx context.Context, data 
 func (s *NotificationService) processWithdrawalProcessed(ctx context.Context, data map[string]string) error {
 	userID := getUint64FromData(data, "user_id")
 	if userID == 0 {
-		return errors.New("user_id not found in event data")
+		return errUserIDMissing
 	}
 
 	req := &SendNotificationRequest{
@@ -531,7 +536,7 @@ func (s *NotificationService) processWithdrawalProcessed(ctx context.Context, da
 func (s *NotificationService) processBonusActivated(ctx context.Context, data map[string]string) error {
 	userID := getUint64FromData(data, "user_id")
 	if userID == 0 {
-		return errors.New("user_id not found in event data")
+		return errUserIDMissing
 	}
 
 	req := &SendNotificationRequest{
@@ -551,7 +556,7 @@ func (s *NotificationService) processBonusActivated(ctx context.Context, data ma
 func (s *NotificationService) processKYCStatusChanged(ctx context.Context, data map[string]string) error {
 	userID := getUint64FromData(data, "user_id")
 	if userID == 0 {
-		return errors.New("user_id not found in event data")
+		return errUserIDMissing
 	}
 
 	req := &SendNotificationRequest{

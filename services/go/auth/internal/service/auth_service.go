@@ -230,8 +230,9 @@ func (s *AuthService) exchangeGoogleToken(ctx context.Context, code, codeVerifie
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
-
+	// The body must be closed on every path, including the error ones:
+	// a body that cannot be closed leaks the connection.
+	defer func() { _ = resp.Body.Close() }()
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("google token exchange failed: %s", string(body))
@@ -257,8 +258,9 @@ func (s *AuthService) validateGoogleIDToken(ctx context.Context, idToken, expect
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
-
+	// The body must be closed on every path, including the error ones:
+	// a body that cannot be closed leaks the connection.
+	defer func() { _ = resp.Body.Close() }()
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("google tokeninfo failed: %s", string(body))
@@ -436,7 +438,11 @@ func (s *AuthService) Login(ctx context.Context, req *domain.LoginRequest) (*dom
 	}
 	if user == nil {
 		// Track failed attempt (but don't reveal user doesn't exist)
-		s.repo.TrackLoginAttempt(ctx, identifier, req.IPAddress)
+		// The failure is logged, never surfaced: turning it into a different
+		// error would make this path an account-existence oracle.
+		if _, _, err := s.repo.TrackLoginAttempt(ctx, identifier, req.IPAddress); err != nil {
+			s.log.Error("Failed to track login attempt", zap.Error(err))
+		}
 		return nil, domain.ErrInvalidCredentials
 	}
 
@@ -466,9 +472,13 @@ func (s *AuthService) Login(ctx context.Context, req *domain.LoginRequest) (*dom
 				return nil, fmt.Errorf("%w: failed to generate temp token", domain.ErrInternal)
 			}
 
-			s.repo.StoreTempToken(ctx, tempToken, user.ID, 5*time.Minute)
+			// A temp token that was never stored cannot be redeemed, so the
+		// 2FA flow would strand the caller after a correct password.
+		if err := s.repo.StoreTempToken(ctx, tempToken, user.ID, 5*time.Minute); err != nil {
+			return nil, fmt.Errorf("%w: failed to store 2FA temp token", domain.ErrInternal)
+		}
 
-			return &domain.AuthResult{
+		return &domain.AuthResult{
 				UserID:      user.ID,
 				Requires2FA: true,
 				TempToken:   tempToken,
@@ -487,10 +497,14 @@ func (s *AuthService) Login(ctx context.Context, req *domain.LoginRequest) (*dom
 	}
 
 	// Clear failed login attempts
-	s.repo.ClearLoginAttempts(ctx, identifier, req.IPAddress)
+	if err := s.repo.ClearLoginAttempts(ctx, identifier, req.IPAddress); err != nil {
+		s.log.Error("Failed to clear login attempts", zap.Error(err))
+	}
 
 	// Update last login
-	s.repo.UpdateLastLogin(ctx, user.ID)
+	if err := s.repo.UpdateLastLogin(ctx, user.ID); err != nil {
+		s.log.Error("Failed to update last login", zap.Error(err))
+	}
 
 	// Create session
 	session, tokens, err := s.createSession(ctx, user, req.DeviceID, req.IPAddress)
@@ -516,7 +530,9 @@ func (s *AuthService) LoginWith2FA(ctx context.Context, tempToken, totpCode stri
 	}
 
 	// Delete temp token (one-time use)
-	s.repo.DeleteTempToken(ctx, tempToken)
+	if err := s.repo.DeleteTempToken(ctx, tempToken); err != nil {
+		s.log.Error("Failed to delete 2FA temp token", zap.Error(err))
+	}
 
 	// Get user
 	user, err := s.repo.GetUserByID(ctx, userID)
@@ -535,10 +551,14 @@ func (s *AuthService) LoginWith2FA(ctx context.Context, tempToken, totpCode stri
 	}
 
 	// Clear failed login attempts
-	s.repo.ClearLoginAttempts(ctx, user.Email, "")
+	if err := s.repo.ClearLoginAttempts(ctx, user.Email, ""); err != nil {
+		s.log.Error("Failed to clear login attempts", zap.Error(err))
+	}
 
 	// Update last login
-	s.repo.UpdateLastLogin(ctx, user.ID)
+	if err := s.repo.UpdateLastLogin(ctx, user.ID); err != nil {
+		s.log.Error("Failed to update last login", zap.Error(err))
+	}
 
 	// Create session
 	session, tokens, err := s.createSession(ctx, user, "", "")
@@ -578,7 +598,9 @@ func (s *AuthService) RefreshTokens(ctx context.Context, refreshToken, deviceID 
 	}
 
 	// Delete old refresh token (rotation)
-	s.repo.DeleteRefreshToken(ctx, refreshToken)
+	if err := s.repo.DeleteRefreshToken(ctx, refreshToken); err != nil {
+		s.log.Error("Failed to rotate refresh token", zap.Error(err))
+	}
 
 	// Get session
 	session, err := s.repo.GetSession(ctx, sessionID)
@@ -608,9 +630,13 @@ func (s *AuthService) RefreshTokens(ctx context.Context, refreshToken, deviceID 
 		return nil, fmt.Errorf("%w: failed to store refresh token", domain.ErrInternal)
 	}
 
-	// Update session activity
+	// Update session activity. Logged, not returned: the token rotation has
+	// already happened by this point, so failing the request here would leave
+	// the caller with no usable access token.
 	session.LastActivity = time.Now()
-	s.repo.CreateSession(ctx, session)
+	if err := s.repo.CreateSession(ctx, session); err != nil {
+		s.log.Error("Failed to update session activity", zap.Error(err))
+	}
 
 	return &domain.TokenPair{
 		AccessToken:      accessToken,
@@ -633,8 +659,11 @@ func (s *AuthService) Logout(ctx context.Context, userID string, sessionID strin
 		return domain.ErrForbidden
 	}
 
-	// Delete session
-	s.repo.DeleteSession(ctx, sessionID, userID)
+	// Delete session. The error is returned: reporting success while the
+	// session is still usable is a silent no-op.
+	if err := s.repo.DeleteSession(ctx, sessionID, userID); err != nil {
+		return fmt.Errorf("%w: failed to delete session", domain.ErrInternal)
+	}
 
 	s.log.Info("User logged out", zap.String("user_id", userID), zap.String("session_id", sessionID))
 
@@ -699,7 +728,9 @@ func (s *AuthService) Enable2FA(ctx context.Context, userID string) (secret, qrU
 
 	// Store secret temporarily (not enabled until verified)
 	user.TwoFASecret = &secret
-	s.repo.UpdateUser(ctx, user)
+	if err := s.repo.UpdateUser(ctx, user); err != nil {
+		return "", "", "", fmt.Errorf("%w: failed to store 2FA secret", domain.ErrInternal)
+	}
 
 	return secret, qrURI, backupCodes, nil
 }
@@ -727,7 +758,9 @@ func (s *AuthService) Verify2FA(ctx context.Context, userID string, totpCode str
 
 	// Enable 2FA
 	user.TwoFAEnabled = true
-	s.repo.UpdateUser(ctx, user)
+	if err := s.repo.UpdateUser(ctx, user); err != nil {
+		return fmt.Errorf("%w: failed to enable 2FA", domain.ErrInternal)
+	}
 
 	s.log.Info("2FA enabled", zap.String("user_id", userID))
 
@@ -758,7 +791,9 @@ func (s *AuthService) Disable2FA(ctx context.Context, userID string, totpCode st
 	// Disable 2FA
 	user.TwoFAEnabled = false
 	user.TwoFASecret = nil
-	s.repo.UpdateUser(ctx, user)
+	if err := s.repo.UpdateUser(ctx, user); err != nil {
+		return fmt.Errorf("%w: failed to disable 2FA", domain.ErrInternal)
+	}
 
 	s.log.Info("2FA disabled", zap.String("user_id", userID))
 
@@ -787,16 +822,24 @@ func (s *AuthService) ChangePassword(ctx context.Context, userID string, current
 		return fmt.Errorf("failed to hash new password: %w", err)
 	}
 
-	// Update password
-	s.repo.UpdatePassword(ctx, userID, newHash)
+	// Update password. Returned: answering success with a password that was
+	// never stored would strand the user on the old one.
+	if err := s.repo.UpdatePassword(ctx, userID, newHash); err != nil {
+		return fmt.Errorf("%w: failed to update password", domain.ErrInternal)
+	}
 
 	// Revoke all sessions (force re-login)
-	s.repo.DeleteAllUserSessions(ctx, userID)
+	if err := s.repo.DeleteAllUserSessions(ctx, userID); err != nil {
+		s.log.Error("Failed to revoke sessions after password change", zap.Error(err))
+	}
 
 	s.log.Info("Password changed", zap.String("user_id", userID))
 
 	return nil
 }
+
+// resetTokenTTL is how long a password-reset token stays redeemable.
+const resetTokenTTL = 60 * time.Minute
 
 // ResetPasswordRequest initiates password reset flow
 func (s *AuthService) ResetPasswordRequest(ctx context.Context, email, ip string) error {
@@ -806,18 +849,67 @@ func (s *AuthService) ResetPasswordRequest(ctx context.Context, email, ip string
 		return nil
 	}
 
-	// In production: send email with reset token
-	// For now: just log
-	s.log.Info("Password reset requested", zap.String("email", email), zap.String("ip", ip))
+	token, err := crypto.GenerateTempToken()
+	if err != nil {
+		s.log.Error("Failed to generate password reset token", zap.Error(err))
+		return nil
+	}
+
+	if err := s.repo.StoreTempToken(ctx, token, user.ID, resetTokenTTL); err != nil {
+		// The caller still learns nothing: a stored token we cannot email is
+		// equivalent to no token at all.
+		s.log.Error("Failed to store password reset token", zap.Error(err))
+		return nil
+	}
+
+	// In production: email the token to the address on the account.
+	// Until the mailer is wired, the token is logged so the flow stays usable.
+	s.log.Info("Password reset requested",
+		zap.String("user_id", user.ID),
+		zap.String("ip", ip),
+		zap.String("reset_token", token))
 
 	return nil
 }
 
 // ResetPassword completes password reset with token
 func (s *AuthService) ResetPassword(ctx context.Context, token, newPassword string) error {
-	// In production: validate reset token from Redis/DB
-	// For now: placeholder
-	return fmt.Errorf("password reset not implemented")
+	if strings.TrimSpace(token) == "" {
+		return fmt.Errorf("%w: reset token is required", domain.ErrValidation)
+	}
+	if len(newPassword) < 8 {
+		return fmt.Errorf("%w: password must be at least 8 characters", domain.ErrValidation)
+	}
+
+	userID, err := s.repo.GetTempToken(ctx, token)
+	if err != nil {
+		return fmt.Errorf("%w: failed to validate reset token", domain.ErrInternal)
+	}
+	if userID == "" {
+		// Unknown, expired or already redeemed token.
+		return domain.ErrInvalidToken
+	}
+
+	hash, err := crypto.HashPassword(newPassword)
+	if err != nil {
+		return fmt.Errorf("%w: failed to hash new password", domain.ErrInternal)
+	}
+
+	if err := s.repo.UpdatePassword(ctx, userID, hash); err != nil {
+		return fmt.Errorf("%w: failed to update password", domain.ErrInternal)
+	}
+
+	// One-time use, and every session opened with the old password goes away.
+	if err := s.repo.DeleteTempToken(ctx, token); err != nil {
+		s.log.Error("Failed to consume password reset token", zap.Error(err))
+	}
+	if err := s.repo.DeleteAllUserSessions(ctx, userID); err != nil {
+		s.log.Error("Failed to revoke sessions after password reset", zap.Error(err))
+	}
+
+	s.log.Info("Password reset completed", zap.String("user_id", userID))
+
+	return nil
 }
 
 // createSession creates a session and tokens for a user

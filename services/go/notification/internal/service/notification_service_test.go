@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"go.uber.org/zap"
@@ -13,63 +14,44 @@ func TestProcessEvent_SupportedEventAliases(t *testing.T) {
 	repo := repository.NewNotificationRepository(nil, nil)
 	svc := NewNotificationService(repo, zap.NewNop())
 
+	// Every handler validates the payload before it touches the database and
+	// reports a missing user_id as errUserIDMissing. That error is therefore the
+	// observable that proves an alias was routed to its handler: an event type
+	// that is not wired up falls through to the default branch and returns nil.
+	//
+	// The happy path cannot be asserted here. SendNotification persists through
+	// the *pgxpool.Pool held by the repository, and this is a unit test with no
+	// database, so any payload carrying a user_id ends in
+	// "database client is not initialized". Asserting on that error would only
+	// test the repository guard, not the routing.
 	testCases := []struct {
 		name      string
 		eventType string
-		data      map[string]string
 	}{
-		{
-			name:      "bets.settled",
-			eventType: "bets.settled",
-			data: map[string]string{
-				"user_id": "42",
-				"bet_id":  "bet-1",
-				"result":  "won",
-			},
-		},
-		{
-			name:      "payments.deposit_confirmed",
-			eventType: "payments.deposit_confirmed",
-			data: map[string]string{
-				"user_id":  "42",
-				"amount":   "100.00",
-				"currency": "USD",
-			},
-		},
-		{
-			name:      "payments.withdrawal_processed",
-			eventType: "payments.withdrawal_processed",
-			data: map[string]string{
-				"user_id":  "42",
-				"amount":   "50.00",
-				"currency": "USD",
-			},
-		},
-		{
-			name:      "users.kyc_verified",
-			eventType: "users.kyc_verified",
-			data: map[string]string{
-				"user_id": "42",
-				"status":  "verified",
-			},
-		},
-		{
-			name:      "bonus.activated",
-			eventType: "bonus.activated",
-			data: map[string]string{
-				"user_id":    "42",
-				"bonus_name": "welcome",
-			},
-		},
+		{name: "bets.settled", eventType: "bets.settled"},
+		{name: "payments.deposit_confirmed", eventType: "payments.deposit_confirmed"},
+		{name: "payments.withdrawal_processed", eventType: "payments.withdrawal_processed"},
+		{name: "users.kyc_verified", eventType: "users.kyc_verified"},
+		{name: "bonus.activated", eventType: "bonus.activated"},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := svc.ProcessEvent(context.Background(), tc.eventType, tc.data)
-			if err != nil {
-				t.Fatalf("expected no error, got: %v", err)
+			err := svc.ProcessEvent(context.Background(), tc.eventType, map[string]string{})
+
+			if !errors.Is(err, errUserIDMissing) {
+				t.Fatalf("expected %q to be routed to its handler, got error: %v", tc.eventType, err)
 			}
 		})
+	}
+}
+
+func TestProcessEvent_UnknownEventTypeIsIgnored(t *testing.T) {
+	repo := repository.NewNotificationRepository(nil, nil)
+	svc := NewNotificationService(repo, zap.NewNop())
+
+	if err := svc.ProcessEvent(context.Background(), "totally.unknown", map[string]string{"user_id": "42"}); err != nil {
+		t.Fatalf("expected an unknown event type to be ignored, got: %v", err)
 	}
 }
 

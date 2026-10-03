@@ -15,7 +15,8 @@ on:
       - 'libs/proto/**'
 
 env:
-  GO_VERSION: '1.21'
+  # Must satisfy the highest `go` directive in services/go/*/go.mod (>= 1.24).
+  GO_VERSION: '1.26'
   REGISTRY: ghcr.io
   IMAGE_PREFIX: opus-casino
 
@@ -35,21 +36,41 @@ jobs:
             services/go/casino/go.mod
             services/go/notification/go.mod
 
-      - name: Install golangci-lint
-        uses: golangci/golangci-lint-action@v3
+      # libs/proto/gen is gitignored, so a clean checkout has no Go stubs.
+      # Generate them with the same pinned buf as CI - Go.
+      - name: Install buf (pinned)
+        run: |
+          BUF_VERSION=1.73.0
+          curl -fsSL -o /tmp/buf.tar.gz "https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/buf-Linux-x86_64.tar.gz"
+          sudo tar -xzf /tmp/buf.tar.gz -C /tmp
+          sudo install -m 0755 /tmp/buf/bin/buf /usr/local/bin/buf
+          buf --version
+
+      - name: Generate Proto stubs
+        run: make -C libs/proto gen-go
+
+      # services/go is not a Go module; each service is linted from inside
+      # its own directory. golangci-lint v1 cannot type-check a Go 1.26
+      # module, so v2.14.0 (built with go1.27.0) is pinned, same as CI - Go.
+      - name: Install golangci-lint (casino)
+        uses: golangci/golangci-lint-action@v9
         with:
-          version: latest
-          working-directory: services/go
+          version: v2.14.0
+          working-directory: services/go/casino
 
       - name: Lint Casino Service
-        run: |
-          cd services/go/casino
-          golangci-lint run ./...
+        working-directory: services/go/casino
+        run: golangci-lint run --output.text.path=stdout
+
+      - name: Install golangci-lint (notification)
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.14.0
+          working-directory: services/go/notification
 
       - name: Lint Notification Service
-        run: |
-          cd services/go/notification
-          golangci-lint run ./...
+        working-directory: services/go/notification
+        run: golangci-lint run --output.text.path=stdout
 
   test:
     name: Test Go Services
@@ -91,16 +112,16 @@ jobs:
             services/go/casino/go.mod
             services/go/notification/go.mod
 
-      - name: Generate Proto files
+      - name: Install buf (pinned)
         run: |
-          cd libs/proto
-          # Install protoc-gen-go
-          go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
-          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
-          # Generate Go code from proto files
-          protoc --go_out=. --go_opt=paths=source_relative \
-                 --go-grpc_out=. --go-grpc_opt=paths=source_relative \
-                 */v1/*.proto
+          BUF_VERSION=1.73.0
+          curl -fsSL -o /tmp/buf.tar.gz "https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/buf-Linux-x86_64.tar.gz"
+          sudo tar -xzf /tmp/buf.tar.gz -C /tmp
+          sudo install -m 0755 /tmp/buf/bin/buf /usr/local/bin/buf
+          buf --version
+
+      - name: Generate Proto stubs
+        run: make -C libs/proto gen-go
 
       - name: Test Casino Service
         run: |

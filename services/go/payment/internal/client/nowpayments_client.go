@@ -7,12 +7,14 @@ import (
 	"crypto/sha512"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/opus-casino/payment/internal/observability"
 	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 )
@@ -155,7 +157,7 @@ type WebhookPayload struct {
 // CreatePayment creates a new payment in NOWPayments
 func (c *NOWPaymentsClient) CreatePayment(ctx context.Context, req CreatePaymentRequest) (*CreatePaymentResponse, error) {
 	var resp CreatePaymentResponse
-	err := c.doRequest(ctx, http.MethodPost, "/v1/payment", req, &resp)
+	err := c.doRequest(ctx, http.MethodPost, "/v1/payment", req, &resp, observability.ProviderOpCreatePayment)
 	if err != nil {
 		return nil, fmt.Errorf("create payment: %w", err)
 	}
@@ -165,7 +167,7 @@ func (c *NOWPaymentsClient) CreatePayment(ctx context.Context, req CreatePayment
 // CreatePayout creates a withdrawal in NOWPayments
 func (c *NOWPaymentsClient) CreatePayout(ctx context.Context, req CreatePayoutRequest) (*CreatePayoutResponse, error) {
 	var resp CreatePayoutResponse
-	err := c.doRequest(ctx, http.MethodPost, "/v1/payout", req, &resp)
+	err := c.doRequest(ctx, http.MethodPost, "/v1/payout", req, &resp, observability.ProviderOpCreatePayout)
 	if err != nil {
 		return nil, fmt.Errorf("create payout: %w", err)
 	}
@@ -178,7 +180,7 @@ func (c *NOWPaymentsClient) GetEstimatedPrice(ctx context.Context, amount decima
 		amount.String(), fromCurrency, toCurrency)
 
 	var resp EstimatedPriceResponse
-	err := c.doRequest(ctx, http.MethodGet, path, nil, &resp)
+	err := c.doRequest(ctx, http.MethodGet, path, nil, &resp, observability.ProviderOpGetRate)
 	if err != nil {
 		return nil, fmt.Errorf("get estimated price: %w", err)
 	}
@@ -188,7 +190,7 @@ func (c *NOWPaymentsClient) GetEstimatedPrice(ctx context.Context, amount decima
 // GetCurrencies gets list of supported currencies
 func (c *NOWPaymentsClient) GetCurrencies(ctx context.Context) (*CurrenciesResponse, error) {
 	var resp CurrenciesResponse
-	err := c.doRequest(ctx, http.MethodGet, "/v1/currencies", nil, &resp)
+	err := c.doRequest(ctx, http.MethodGet, "/v1/currencies", nil, &resp, observability.ProviderOpGetCurrencies)
 	if err != nil {
 		return nil, fmt.Errorf("get currencies: %w", err)
 	}
@@ -197,14 +199,82 @@ func (c *NOWPaymentsClient) GetCurrencies(ctx context.Context) (*CurrenciesRespo
 
 // VerifyWebhookSignature verifies HMAC signature of webhook payload
 func (c *NOWPaymentsClient) VerifyWebhookSignature(payload []byte, signature string) bool {
+	start := time.Now()
 	mac := hmac.New(sha512.New, []byte(c.ipnSecret))
 	mac.Write(payload)
 	expectedMAC := hex.EncodeToString(mac.Sum(nil))
-	return hmac.Equal([]byte(signature), []byte(expectedMAC))
+	// hmac.Equal, not bytes.Equal: it is constant-time, so a caller cannot
+	// learn the expected MAC one byte at a time from response timing.
+	valid := hmac.Equal([]byte(signature), []byte(expectedMAC))
+	observability.RecordProviderLatency(
+		observability.ProviderOpVerifyWebhook,
+		time.Since(start).Seconds(),
+	)
+	return valid
 }
 
-// doRequest performs an HTTP request with authentication and retry logic
-func (c *NOWPaymentsClient) doRequest(ctx context.Context, method, path string, reqBody, respBody interface{}) error {
+// doRequest performs an HTTP request with authentication and retry logic.
+//
+// operation labels the metric series. It must be one of the ProviderOp*
+// constants: the value becomes a Prometheus label, so a free-form string here
+// would let an upstream response mint unbounded time series.
+func (c *NOWPaymentsClient) doRequest(ctx context.Context, method, path string, reqBody, respBody interface{}, operation string) error {
+	start := time.Now()
+
+	err := c.doRequestAttempts(ctx, method, path, reqBody, respBody)
+
+	// Measured across the whole call, retries and backoff included: that is
+	// the latency the player actually waits, so it is the one worth alerting
+	// on. Per-attempt timing would under-report a degraded provider.
+	observability.RecordProviderLatency(operation, time.Since(start).Seconds())
+
+	if err != nil {
+		observability.RecordError(providerErrorType(err), operation)
+	}
+
+	return err
+}
+
+// providerErrorType classifies a NOWPayments failure into a bounded label.
+// The provider response body is echoed into err and is attacker-influenced in
+// the general case, so it must never reach a label value.
+func providerErrorType(err error) string {
+	if err == nil {
+		return ""
+	}
+	if errors.Is(err, context.Canceled) {
+		return "cancelled"
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return "timeout"
+	}
+
+	// The retry loop already collapses failures into these shapes.
+	msg := err.Error()
+	switch {
+	case strings.Contains(msg, "API error: status=4"):
+		return "rejected"
+	case strings.Contains(msg, "API error: status=5"):
+		return "provider_5xx"
+	case strings.Contains(msg, "API error: status="):
+		return "provider_error_status"
+	case strings.Contains(msg, "do request:"):
+		return "transport_error"
+	case strings.Contains(msg, "read response:"):
+		return "response_read_error"
+	case strings.Contains(msg, "unmarshal response:"):
+		return "malformed_response"
+	case strings.Contains(msg, "create request:"):
+		return "invalid_request"
+	case strings.Contains(msg, "marshal request:"):
+		return "invalid_request"
+	default:
+		return "provider_error"
+	}
+}
+
+// doRequestAttempts runs the retry loop for a single provider call.
+func (c *NOWPaymentsClient) doRequestAttempts(ctx context.Context, method, path string, reqBody, respBody interface{}) error {
 	var bodyBytes []byte
 	if reqBody != nil {
 		var err error
@@ -263,7 +333,7 @@ func (c *NOWPaymentsClient) doRequest(ctx context.Context, method, path string, 
 		}
 
 		respBodyBytes, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if err != nil {
 			lastErr = fmt.Errorf("read response: %w", err)
 			continue

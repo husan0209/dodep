@@ -1,0 +1,441 @@
+# Grafana Alerting Rules — Payment Service
+# Standalone ConfigMap (consumed the same way as grafana-alerting-rules),
+# does NOT edit alerting/alerting-rules.yaml (shared file, parallel work).
+#
+# Every PromQL expression below is over series that
+# services/go/payment/internal/observability/metrics.go actually emits and that
+# the service code actually records. The module existed but nothing called it,
+# so /metrics exposed only Go runtime series; the rules were therefore
+# unwritable before the wiring landed in internal/service/*.go and
+# internal/client/nowpayments_client.go. There are no invented metrics here.
+#
+# Exposed series (namespace `payment`, added by promauto):
+#   payment_deposits_total{status,currency,kyc_level}
+#       status = pending | completed | failed | expired
+#   payment_withdrawals_total{status,currency,kyc_level}
+#       status = processing | completed | failed | cancelled
+#   payment_deposit_amount_usd      (histogram, one observation per request)
+#   payment_withdrawal_amount_usd   (histogram, one observation per request)
+#   payment_provider_latency_seconds{operation}
+#       operation = create_payment | create_payout | get_rate | get_currencies
+#                   | verify_webhook
+#   payment_errors_total{error_type,operation}
+#       operation = deposit | withdrawal | webhook
+#       error_type is a bounded constant set — see the mapping in
+#       internal/service/payment_service.go (metricErrorType),
+#       withdrawal_service.go (walletErrorType) and
+#       nowpayments_client.go (providerErrorType). Raw upstream text never
+#       reaches a label, so cardinality is fixed.
+#
+# Two rules below protect player money directly and are the reason this file
+# exists: deposit_credit_failed and withdrawal_unlock_failed.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-alerting-rules-payment
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/component: alerting
+    app.kubernetes.io/domain: payment
+data:
+  payment-alerting-rules.yaml: |
+    groups:
+      # =============================================================================
+      # Payment — availability (kube-state-metrics)
+      # =============================================================================
+      - name: PaymentAvailability
+        interval: 1m
+        rules:
+          - uid: payment-no-ready-pods
+            title: Payment Service Has No Ready Pods
+            condition: C
+            data:
+              - refId: A
+                datasourceUid: VictoriaMetrics
+                model:
+                  expr: sum(kube_pod_status_ready{namespace="platform", pod=~"payment-.*", condition="true"})
+              - refId: C
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: A
+                  reducer: last
+                  comparator: lt
+                  threshold: 1
+            for: 3m
+            annotations:
+              summary: "No ready payment pod — deposits and withdrawals are down"
+              description: "payment has 0 ready replicas in platform. Deposit intake stops and in-flight crypto arrives with no service to credit it. Runbook PAY-RB-01."
+            labels:
+              severity: critical
+              runbook: "docs/infra/runbooks/payment-service.md#pay-rb-01-payment-service-not-ready"
+
+          - uid: payment-crash-looping
+            title: Payment Service CrashLooping
+            condition: C
+            data:
+              - refId: A
+                datasourceUid: VictoriaMetrics
+                model:
+                  expr: sum(increase(kube_pod_container_status_restarts_total{namespace="platform", container="payment", pod=~"payment-.*"}[15m]))
+              - refId: C
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: A
+                  reducer: last
+                  comparator: gt
+                  threshold: 0
+            for: 5m
+            annotations:
+              summary: "Payment pod restarting repeatedly"
+              description: "Restarts drop the in-memory idempotency window and can replay webhooks against a cold cache. Runbook PAY-RB-01."
+            labels:
+              severity: warning
+              runbook: "docs/infra/runbooks/payment-service.md#pay-rb-01-payment-service-not-ready"
+
+          # The exposition itself disappearing turns every rule in this file
+          # into a permanent no-op that reports "no problems". That is the most
+          # dangerous silent state, so it gets its own rule.
+          - uid: payment-metrics-absent
+            title: Payment Metrics Endpoint Is Missing
+            condition: C
+            data:
+              - refId: A
+                datasourceUid: VictoriaMetrics
+                model:
+                  expr: absent(payment_deposits_total)
+              - refId: C
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: A
+                  reducer: last
+                  comparator: gt
+                  threshold: 0.5
+            for: 10m
+            annotations:
+              summary: "payment_deposits_total is absent — every payment_* alert is silently blind"
+              description: "ServiceMonitor, the metrics port or the /metrics listener on :9104 is broken. Until this is fixed the money-correctness rules below evaluate to an empty series and cannot fire. Runbook PAY-RB-05."
+            labels:
+              severity: warning
+              runbook: "docs/infra/runbooks/payment-service.md#pay-rb-05-metrics-endpoint-missing"
+
+      # =============================================================================
+      # Payment — money correctness (player balance depends on these)
+      # =============================================================================
+      - name: PaymentMoney
+        interval: 1m
+        rules:
+          # Crypto arrived at the provider and the webhook said finished, but
+          # the wallet credit failed. The player paid and sees no money. This
+          # is the single most expensive failure in the service: it is silent
+          # to the player, silent to support, and only visible here.
+          - uid: payment-deposit-credit-failed
+            title: Deposit Settled but Wallet Credit Failed (Player Paid, Balance Missing)
+            condition: C
+            data:
+              - refId: A
+                datasourceUid: VictoriaMetrics
+                model:
+                  expr: sum(increase(payment_errors_total{error_type="deposit_credit_failed",operation="webhook"}[10m]))
+              - refId: C
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: A
+                  reducer: last
+                  comparator: gt
+                  threshold: 0
+            for: 1m
+            annotations:
+              summary: "Wallet credit failed for a finished deposit"
+              description: "A deposit reached status=finished at NOWPayments but CreditWallet to wallet-core failed. The player sent crypto and has no balance. The webhook returns an error so the provider retries and the wallet-side idempotency key ('deposit:<payment_id>') prevents a double credit — do NOT replay the credit manually. Reconcile by hand. Runbook PAY-RB-02."
+            labels:
+              severity: critical
+              runbook: "docs/infra/runbooks/payment-service.md#pay-rb-02-deposit-credited-without-wallet"
+
+          # The mirror image: the payout never happened, but the unlock also
+          # failed, so the player's balance stays locked for money they never
+          # lost. They cannot bet it and support sees nothing.
+          - uid: payment-withdrawal-unlock-failed
+            title: Withdrawal Failed but Funds Still Locked (Player Balance Stranded)
+            condition: C
+            data:
+              - refId: A
+                datasourceUid: VictoriaMetrics
+                model:
+                  expr: sum(increase(payment_errors_total{error_type="withdrawal_unlock_failed",operation="webhook"}[10m]))
+              - refId: C
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: A
+                  reducer: last
+                  comparator: gt
+                  threshold: 0
+            for: 1m
+            annotations:
+              summary: "Failed withdrawal did not release the player's locked funds"
+              description: "CreatePayout or the payout webhook reported failure, and the compensating UnlockFunds to wallet-core also failed. The balance remains locked for a payout that never happened. Needs manual reconciliation with wallet-core. Runbook PAY-RB-03."
+            labels:
+              severity: critical
+              runbook: "docs/infra/runbooks/payment-service.md#pay-rb-03-withdrawal-failed-without-unlock"
+
+          # The compensating unlock in the *request* path failed. Same stranded
+          # balance, different code path: the payout call itself errored before
+          # a withdrawal row existed.
+          - uid: payment-compensation-failed
+            title: Withdrawal Compensation Failed After a Rejected Request
+            condition: C
+            data:
+              - refId: A
+                datasourceUid: VictoriaMetrics
+                model:
+                  expr: sum(increase(payment_errors_total{error_type="compensation_failed"}[15m]))
+              - refId: C
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: A
+                  reducer: last
+                  comparator: gt
+                  threshold: 0
+            for: 2m
+            annotations:
+              summary: "Funds locked by a withdrawal request that then failed, and the unlock failed too"
+              description: "InitiateWithdrawal locked funds, the payout or the row write failed, and the compensating UnlockFunds failed as well. The lock has no owner and will not expire on its own. Runbook PAY-RB-03."
+            labels:
+              severity: critical
+              runbook: "docs/infra/runbooks/payment-service.md#pay-rb-03-withdrawal-failed-without-unlock"
+
+          # Crypto left the platform but the debit was never finalized, so the
+          # balance stays locked instead of being spent. The player is neither
+          # charged nor credited.
+          - uid: payment-withdrawal-debit-not-finalized
+            title: Withdrawal Payout Completed but Debit Not Finalized
+            condition: C
+            data:
+              - refId: A
+                datasourceUid: VictoriaMetrics
+                model:
+                  expr: sum(increase(payment_errors_total{error_type="withdrawal_debit_not_finalized"}[15m]))
+              - refId: C
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: A
+                  reducer: last
+                  comparator: gt
+                  threshold: 0
+            for: 2m
+            annotations:
+              summary: "Crypto payout settled but the wallet debit was not finalized"
+              description: "The withdrawal webhook reported finished and FinalizeDebit to wallet-core failed. The player received crypto while their balance remains locked rather than debited. Reconcile the lock against the payout. Runbook PAY-RB-03."
+            labels:
+              severity: critical
+              runbook: "docs/infra/runbooks/payment-service.md#pay-rb-03-withdrawal-failed-without-unlock"
+
+          # Money moved (or did not) but the row still says pending, so the
+          # deposit history and reconciliation disagree with the wallet.
+          - uid: payment-status-not-persisted
+            title: Payment Settled in Money but Not in State
+            condition: C
+            data:
+              - refId: A
+                datasourceUid: VictoriaMetrics
+                model:
+                  expr: sum(increase(payment_errors_total{error_type=~"deposit_status_not_persisted|withdrawal_status_not_persisted"}[15m]))
+              - refId: C
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: A
+                  reducer: last
+                  comparator: gt
+                  threshold: 0
+            for: 5m
+            annotations:
+              summary: "A payment reached its terminal state in the wallet but the status write failed"
+              description: "UpdateStatus failed after the wallet leg succeeded. The webhook returns an error so the provider retries; the wallet-side idempotency key stops a double credit, so the retry converges. If this persists the row is stuck and reconciliation will double-count it. Runbook PAY-RB-04."
+            labels:
+              severity: warning
+              runbook: "docs/infra/runbooks/payment-service.md#pay-rb-04-payment-state-out-of-sync-with-wallet"
+
+          # The withdrawal exists and the payout is in flight, but the daily
+          # cap was not charged, so the player can exceed their limit today.
+          - uid: payment-daily-limit-not-tracked
+            title: Withdrawal Daily Limit Not Charged
+            condition: C
+            data:
+              - refId: A
+                datasourceUid: VictoriaMetrics
+                model:
+                  expr: sum(increase(payment_errors_total{error_type="daily_limit_not_tracked"}[15m]))
+              - refId: C
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: A
+                  reducer: last
+                  comparator: gt
+                  threshold: 0
+            for: 5m
+            annotations:
+              summary: "Withdrawal completed without charging the daily limit"
+              description: "The daily-limits write failed after the withdrawal row was created. The player can withdraw more than their configured daily cap until the counter recovers. Runbook PAY-RB-04."
+            labels:
+              severity: warning
+              runbook: "docs/infra/runbooks/payment-service.md#pay-rb-04-payment-state-out-of-sync-with-wallet"
+
+      # =============================================================================
+      # Payment — provider (NOWPayments)
+      # =============================================================================
+      - name: PaymentProvider
+        interval: 1m
+        rules:
+          # Measured across retries and backoff, so this is the latency the
+          # player actually waits on a deposit or withdrawal.
+          - uid: payment-provider-latency-high
+            title: NOWPayments API Latency Above Budget
+            condition: C
+            data:
+              - refId: A
+                datasourceUid: VictoriaMetrics
+                model:
+                  expr: histogram_quantile(0.95, sum by (le) (rate(payment_provider_latency_seconds_bucket{operation=~"create_payment|create_payout"}[5m])))
+              - refId: C
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: A
+                  reducer: last
+                  comparator: gt
+                  threshold: 5
+            for: 10m
+            annotations:
+              summary: "p95 NOWPayments latency is above 5s"
+              description: "create_payment/create_payout p95 exceeds 5s including retries. Deposit and withdrawal requests will start hitting the client timeout and appear to the player as a failed payment. Runbook PAY-RB-06."
+            labels:
+              severity: warning
+              runbook: "docs/infra/runbooks/payment-service.md#pay-rb-06-provider-degraded"
+
+          - uid: payment-provider-error-rate-high
+            title: NOWPayments Error Rate Above 2%
+            condition: C
+            data:
+              - refId: A
+                datasourceUid: VictoriaMetrics
+                model:
+                  expr: sum(rate(payment_errors_total{operation=~"create_payment|create_payout",error_type=~"provider_5xx|transport_error|timeout"}[10m]))
+              - refId: B
+                datasourceUid: VictoriaMetrics
+                model:
+                  expr: sum(rate(payment_provider_latency_seconds_count{operation=~"create_payment|create_payout"}[10m]))
+              - refId: C
+                datasourceUid: __expr__
+                model:
+                  type: classic_conditions
+                  expression: A
+                  conditions:
+                    - evaluator:
+                        type: gt
+                        params: [0.02, B]
+            for: 10m
+            annotations:
+              summary: "More than 2% of provider calls are failing"
+              description: "NOWPayments 5xx, transport errors or timeouts exceed 2% of create_payment/create_payout calls. Players see deposits and withdrawals rejected at the provider. Runbook PAY-RB-06."
+            labels:
+              severity: warning
+              runbook: "docs/infra/runbooks/payment-service.md#pay-rb-06-provider-degraded"
+
+      # =============================================================================
+      # Payment — funnel (deposit and withdrawal health)
+      # =============================================================================
+      - name: PaymentFunnel
+        interval: 5m
+        rules:
+          # Deposits are opened but not settling. The ratio is used rather than
+          # a raw count because a quiet period would otherwise look like a
+          # healthy one.
+          - uid: payment-deposit-completion-stalled
+            title: Deposits Opened but Not Settling
+            condition: C
+            data:
+              - refId: A
+                datasourceUid: VictoriaMetrics
+                model:
+                  expr: sum(increase(payment_deposits_total{status="pending"}[30m]))
+              - refId: B
+                datasourceUid: VictoriaMetrics
+                model:
+                  expr: sum(increase(payment_deposits_total{status="completed"}[30m]))
+              - refId: C
+                datasourceUid: __expr__
+                model:
+                  type: classic_conditions
+                  expression: A
+                  conditions:
+                    - evaluator:
+                        type: gt
+                        params: [20, B]
+            for: 15m
+            annotations:
+              summary: "More than 20 deposits opened without a matching completion in 30m"
+              description: "pending outnumbers completed by more than 20 over 30 minutes. Either the IPN webhook is not being delivered, or handleDepositFinished is failing (see payment-deposit-credit-failed). Players pay crypto and wait. Runbook PAY-RB-02."
+            labels:
+              severity: critical
+              runbook: "docs/infra/runbooks/payment-service.md#pay-rb-02-deposit-credited-without-wallet"
+
+          # A sustained drop in completions with pending flat usually means the
+          # webhook endpoint stopped validating signatures.
+          - uid: payment-webhook-rejected-spike
+            title: Provider Webhooks Rejected at a Sustained Rate
+            condition: C
+            data:
+              - refId: A
+                datasourceUid: VictoriaMetrics
+                model:
+                  expr: sum(rate(payment_errors_total{error_type="webhook_invalid",operation="webhook"}[15m]))
+              - refId: C
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: A
+                  reducer: last
+                  comparator: gt
+                  threshold: 0.1
+            for: 10m
+            annotations:
+              summary: "More than 0.1 invalid webhooks per second"
+              description: "Signature verification is rejecting a sustained share of IPN callbacks. Every rejected callback is a deposit or withdrawal that will not settle. Check PAYMENT_NOWPAYMENTS_IPN_SECRET against the provider dashboard. Runbook PAY-RB-07."
+            labels:
+              severity: critical
+              runbook: "docs/infra/runbooks/payment-service.md#pay-rb-07-webhooks-not-settling"
+
+          # Business-rule rejections are not incidents, but a sustained spike
+          # means either a limits misconfiguration or an attack probing the caps
+          # across many accounts.
+          - uid: payment-limit-rejection-spike
+            title: Deposit Limit Rejections Sustained Above 1/s
+            condition: C
+            data:
+              - refId: A
+                datasourceUid: VictoriaMetrics
+                model:
+                  expr: sum(rate(payment_errors_total{error_type="limit_exceeded",operation="deposit"}[15m]))
+              - refId: C
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: A
+                  reducer: last
+                  comparator: gt
+                  threshold: 1
+            for: 15m
+            annotations:
+              summary: "Sustained deposit-limit rejections"
+              description: "More than 1/s rejected for exceeding the daily deposit cap. Usually a limits misconfiguration after a deploy; if it clusters on one user set, treat as an attempt to launder through many accounts. Runbook PAY-RB-04."
+            labels:
+              severity: warning
+              runbook: "docs/infra/runbooks/payment-service.md#pay-rb-04-payment-state-out-of-sync-with-wallet"

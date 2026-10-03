@@ -194,6 +194,7 @@ func toProtoUser(user *domain.User) *pb.User {
 		Country:     user.CountryCode,
 		Currency:    user.CurrencyCode,
 		Status:      pb.UserStatus(pb.UserStatus_value[string(user.Status)]),
+		// #nosec G115 -- KYC level is 0..3 by domain invariant, far below int32 range.
 		KycLevel:    pb.KycLevel(user.KYCLevel),
 		CreatedAt:   timestamppb.New(user.CreatedAt),
 		UpdatedAt:   timestamppb.New(user.UpdatedAt),
@@ -210,6 +211,7 @@ func toProtoPreferences(pref *domain.UserPreferences) *pb.UserPreferences {
 		SmsNotifications:            pref.SMSNotifications,
 		PushNotifications:           pref.PushNotifications,
 		RealityCheck:                pref.RealityCheck,
+		// #nosec G115 -- reality-check interval is minutes (bounded by RG limits), far below int32 range.
 		RealityCheckIntervalMinutes: int32(pref.RealityCheckIntervalMinutes),
 		AutoPlay:                    pref.AutoPlay,
 		SoundPreference:             pref.SoundPreference,
@@ -224,6 +226,7 @@ func toProtoLimits(limits *domain.UserLimits) *pb.UserLimits {
 	}
 	if limits.SessionTimeLimit != nil {
 		result.SessionTimeLimit = &pb.TimeLimit{
+			// #nosec G115 -- session limit is minutes (bounded by RG limits), far below int32 range.
 			Minutes:  int32(limits.SessionTimeLimit.Minutes),
 			IsActive: limits.SessionTimeLimit.IsActive,
 		}

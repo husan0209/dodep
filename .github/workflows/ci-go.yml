@@ -20,7 +20,11 @@ on:
       - '.github/workflows/ci-go.yml'
 
 env:
-  GO_VERSION: '1.21'
+  # Must satisfy the highest `go` directive across services/go/*/go.mod.
+  # Every module in the matrix declares `go >= 1.24` (kyc is on 1.26), so the
+  # previous 1.21 toolchain could not even load the module graph: every job
+  # failed with "go.mod requires go >= 1.24".
+  GO_VERSION: '1.26'
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
@@ -30,13 +34,60 @@ concurrency:
 
 jobs:
   # ==========================================================================
+  # Protobuf stubs
+  # ==========================================================================
+  # libs/proto/gen is gitignored on purpose (libs/proto/.gitignore), so a clean
+  # checkout has no generated Go stubs. Every service imports
+  # github.com/opus-casino/proto/gen/go/* through the `replace` directive in its
+  # go.mod, so without this job lint, test and security all fail with
+  # "no required module provides package github.com/opus-casino/proto/gen/go/...".
+  protos:
+    name: Generate Protobuf Stubs (Go)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Pinned, not "latest": remote plugin resolution has to be reproducible
+      # for a build gate. The archive unpacks to buf/bin/buf.
+      - name: Install buf (pinned)
+        run: |
+          BUF_VERSION=1.73.0
+          curl -fsSL -o /tmp/buf.tar.gz \
+            "https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/buf-Linux-x86_64.tar.gz"
+          sudo tar -xzf /tmp/buf.tar.gz -C /tmp
+          sudo install -m 0755 /tmp/buf/bin/buf /usr/local/bin/buf
+          buf --version
+
+      # Canonical project target: writes straight to libs/proto/gen/go.
+      - name: Generate Go stubs
+        run: make -C libs/proto gen-go
+
+      - name: Assert the stubs exist
+        run: |
+          test -f libs/proto/gen/go/common/v1/money.pb.go
+          test -d libs/proto/gen/go/wallet/v1
+          test -d libs/proto/gen/go/payment/v1
+
+      - name: Upload generated stubs
+        uses: actions/upload-artifact@v4
+        with:
+          name: proto-go-stubs
+          path: libs/proto/gen/go
+          retention-days: 1
+
+  # ==========================================================================
   # Lint
   # ==========================================================================
   lint:
     name: Lint
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    needs: protos
     strategy:
+      # One broken service must not hide the verdict of the others.
+      fail-fast: false
       matrix:
         service: [auth, user, payment, bonus, casino, notification, kyc]
     
@@ -50,15 +101,32 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: services/go/${{ matrix.service }}/go.sum
 
-      - name: Install golangci-lint
-        uses: golangci/golangci-lint-action@v4
+      - name: Download generated protobuf stubs
+        uses: actions/download-artifact@v4
         with:
-          version: latest
+          name: proto-go-stubs
+          path: libs/proto/gen/go
+
+      # golangci-lint v1 (action v4) is built with go1.24 and cannot type-check a
+      # module whose `go` directive is 1.26: it reported every protobuf-importing
+      # package as `undefined: <pkg> (typecheck)` plus `file requires newer Go
+      # version go1.26 (application built with go1.24)`, hundreds of lines of
+      # noise that masked the real findings. v1 also reads `--out-format`, which
+      # v2 removed.
+      #
+      # The version is pinned deliberately. v2.1.0 is built with go1.24.2 and
+      # panics with "file requires newer Go version go1.25 (application built
+      # with go1.24)" on any dependency that raised its own `go` directive.
+      # v2.14.0 is built with go1.27.0 and type-checks the whole matrix.
+      - name: Install golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.14.0
           working-directory: services/go/${{ matrix.service }}
 
       - name: Run golangci-lint
         working-directory: services/go/${{ matrix.service }}
-        run: golangci-lint run --out-format=github-actions
+        run: golangci-lint run --output.text.path=stdout
 
   # ==========================================================================
   # Test
@@ -67,7 +135,10 @@ jobs:
     name: Test
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    needs: protos
     strategy:
+      # One broken service must not hide the verdict of the others.
+      fail-fast: false
       matrix:
         service: [auth, user, payment, bonus, casino, notification, kyc]
     
@@ -106,6 +177,12 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: services/go/${{ matrix.service }}/go.sum
 
+      - name: Download generated protobuf stubs
+        uses: actions/download-artifact@v4
+        with:
+          name: proto-go-stubs
+          path: libs/proto/gen/go
+
       - name: Install gotestsum
         run: go install gotest.tools/gotestsum@latest
 
@@ -138,7 +215,10 @@ jobs:
     name: Security Scan
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    needs: protos
     strategy:
+      # One broken service must not hide the verdict of the others.
+      fail-fast: false
       matrix:
         service: [auth, user, payment, bonus, casino, notification, kyc]
     
@@ -150,6 +230,13 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: services/go/${{ matrix.service }}/go.sum
+
+      - name: Download generated protobuf stubs
+        uses: actions/download-artifact@v4
+        with:
+          name: proto-go-stubs
+          path: libs/proto/gen/go
 
       - name: Install gosec
         run: go install github.com/securego/gosec/v2/cmd/gosec@latest
@@ -215,6 +302,10 @@ jobs:
             type=ref,event=pr
             type=semver,pattern={{version}}
 
+      # On a pull_request nothing is pushed, so the registry never receives
+      # the sha-* tag and the Trivy step below has nothing to scan - it fails
+      # the whole matrix. Load the freshly built image into the runner under
+      # a local tag as well, and scan that one on pull_request runs.
       - name: Build and push
         id: build
         uses: docker/build-push-action@v5
@@ -222,7 +313,10 @@ jobs:
           context: .
           file: infra/docker/Dockerfile.go
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
+          load: ${{ github.event_name == 'pull_request' }}
+          tags: |
+            ${{ steps.meta.outputs.tags }}
+            local/${{ matrix.service }}:sha-${{ github.sha }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -230,10 +324,22 @@ jobs:
             SERVICE_PATH=services/go/${{ matrix.service }}
             VERSION=${{ github.sha }}
 
+      # The local tag exists only on pull_request runs; on a push the image is
+      # in the registry. Scanning a reference that was never pushed is exactly
+      # what failed the matrix before.
+      - name: Resolve image reference for scanning
+        id: image
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "ref=local/${{ matrix.service }}:sha-${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/${{ matrix.service }}:sha-${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/${{ matrix.service }}:sha-${{ github.sha }}
+          image-ref: ${{ steps.image.outputs.ref }}
           format: 'sarif'
           output: 'trivy-results-${{ matrix.service }}.sarif'
           severity: 'CRITICAL,HIGH'
