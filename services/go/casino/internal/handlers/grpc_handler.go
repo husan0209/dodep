@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"context"
-	"fmt"
 
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
@@ -88,7 +87,7 @@ func (h *CasinoGRPCHandler) LaunchGame(ctx context.Context, req *casinov1.Launch
 	}
 
 	serviceReq := &service.LaunchGameRequest{
-		UserID:     fmt.Sprintf("%s", req.UserId.GetValue()),
+		UserID:     req.UserId.GetValue(),
 		GameID:     req.GameId,
 		DeviceType: req.DeviceType,
 		LobbyURL:   req.LobbyUrl,

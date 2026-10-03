@@ -41,7 +41,9 @@ func main() {
 	if cfg.Env == "development" {
 		log, _ = zap.NewDevelopment()
 	}
-	defer log.Sync()
+	// Sync flushes buffered entries; it legitimately fails on stdout/stderr
+	// on some platforms, which is not worth failing the process over.
+	defer func() { _ = log.Sync() }()
 
 	// ── Database (GORM + pgx) ──────────────────────────────────────────────
 	db, err := gorm.Open(postgres.Open(cfg.DatabaseURL), &gorm.Config{})
