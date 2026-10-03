@@ -102,16 +102,19 @@ jobs:
             services/go/casino/go.mod
             services/go/notification/go.mod
 
-      - name: Generate Proto files
-        run: |
-          cd libs/proto
-          # Install protoc-gen-go
-          go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
-          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
-          # Generate Go code from proto files
-          protoc --go_out=. --go_opt=paths=source_relative \
-                 --go-grpc_out=. --go-grpc_opt=paths=source_relative \
-                 */v1/*.proto
+      # No proto regeneration here. It failed with
+      #   protoc: command not found   (exit 127)
+      # because the step installed protoc-gen-go / protoc-gen-go-grpc but never
+      # installed protoc itself. It was also writing to the wrong place:
+      # --go_opt=paths=source_relative from libs/proto emits
+      # libs/proto/<service>/v1/*.pb.go, while the generated code the Go
+      # modules import is committed under libs/proto/gen/go, which is where
+      # buf.gen.yaml points (`out: gen/go`) and what `option go_package`
+      # declares. Regeneration belongs to `make -C libs/proto proto` (buf) when
+      # a .proto changes, not to every test run.
+      #
+      # The committed generated code is still exercised - `go build` and
+      # `go test` below compile it, and would fail if it were stale.
 
       - name: Test Casino Service
         run: |
