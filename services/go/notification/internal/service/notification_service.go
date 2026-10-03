@@ -382,23 +382,58 @@ func (s *NotificationService) UpdateNotificationSettings(ctx context.Context, re
 	return toNotificationSettings(settings), nil
 }
 
+// Canonical event types. Upstream producers publish the same logical event under
+// more than one spelling (the legacy singular form and the Redpanda topic form),
+// so every accepted spelling is folded onto one of these constants first.
+const (
+	eventBetSettled          = "bet_settled"
+	eventDepositConfirmed    = "deposit_confirmed"
+	eventWithdrawalProcessed = "withdrawal_processed"
+	eventBonusActivated      = "bonus_activated"
+	eventKYCStatusChanged    = "kyc_status_changed"
+)
+
+// eventAliases maps every published spelling of an event onto its canonical
+// event type. An event that is absent from the table is not ours to handle.
+var eventAliases = map[string]string{
+	"bet.settled":                   eventBetSettled,
+	"bets.settled":                  eventBetSettled,
+	"payment.deposit_confirmed":     eventDepositConfirmed,
+	"payments.deposit_confirmed":    eventDepositConfirmed,
+	"payment.withdrawal_processed":  eventWithdrawalProcessed,
+	"payments.withdrawal_processed": eventWithdrawalProcessed,
+	"bonus.activated":               eventBonusActivated,
+	"kyc.status_changed":            eventKYCStatusChanged,
+	"users.kyc_verified":            eventKYCStatusChanged,
+}
+
 // ProcessEvent processes an event from Redpanda and sends appropriate notifications
 func (s *NotificationService) ProcessEvent(ctx context.Context, eventType string, data map[string]string) error {
-	s.log.Info("Processing event", zap.String("event_type", eventType))
+	canonical, handled := eventAliases[eventType]
+	if !handled {
+		s.log.Debug("Unknown event type", zap.String("event_type", eventType))
+		return nil
+	}
 
-	switch eventType {
-	case "bet.settled", "bets.settled":
+	s.log.Info("Processing event",
+		zap.String("event_type", canonical),
+		zap.String("source_event_type", eventType))
+
+	switch canonical {
+	case eventBetSettled:
 		return s.processBetSettled(ctx, data)
-	case "payment.deposit_confirmed", "payments.deposit_confirmed":
+	case eventDepositConfirmed:
 		return s.processDepositConfirmed(ctx, data)
-	case "payment.withdrawal_processed", "payments.withdrawal_processed":
+	case eventWithdrawalProcessed:
 		return s.processWithdrawalProcessed(ctx, data)
-	case "bonus.activated":
+	case eventBonusActivated:
 		return s.processBonusActivated(ctx, data)
-	case "kyc.status_changed", "users.kyc_verified":
+	case eventKYCStatusChanged:
 		return s.processKYCStatusChanged(ctx, data)
 	default:
-		s.log.Debug("Unknown event type", zap.String("event_type", eventType))
+		// Unreachable while eventAliases and this switch stay in sync, but a
+		// silently dropped notification is worse than a logged one.
+		s.log.Error("No handler for canonical event type", zap.String("event_type", canonical))
 		return nil
 	}
 }

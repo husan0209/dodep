@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -14,6 +15,19 @@ import (
 	"github.com/opus-casino/casino/internal/provider"
 	"github.com/opus-casino/casino/internal/repository"
 )
+
+// clampRounds narrows a round count to the int32 the protobuf summary uses.
+// A session cannot realistically hold more than MaxInt32 rounds, but saturating
+// keeps the reported count meaningful instead of wrapping to a negative number.
+func clampRounds(n int) int32 {
+	if n > math.MaxInt32 {
+		return math.MaxInt32
+	}
+	if n < 0 {
+		return 0
+	}
+	return int32(n)
+}
 
 // UserServiceClient is the interface casino service needs from user service.
 type UserServiceClient interface {
@@ -594,7 +608,7 @@ func (s *CasinoService) EndGameSession(ctx context.Context, req *EndGameSessionR
 			TotalBet:      totalBet,
 			TotalWin:      totalWin,
 			NetResult:     netResult,
-			RoundsPlayed:  int32(len(rounds)),
+			RoundsPlayed:  clampRounds(len(rounds)),
 			StartedAt:     session.StartedAt,
 			EndedAt:       endedAt,
 			DurationSecs:  int64(endedAt.Sub(session.StartedAt).Seconds()),

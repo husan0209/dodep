@@ -2,7 +2,7 @@ package pragmatic
 
 import (
 	"context"
-	"crypto/md5" //nolint:gosec // Pragmatic Play requires MD5 for hash parameter
+	"crypto/md5" // #nosec G501 -- the Pragmatic Play API requires MD5 for its hash parameter
 	"encoding/json"
 	"fmt"
 	"io"
@@ -39,7 +39,7 @@ func NewClient(cfg Config, log *zap.Logger) *Client {
 	}
 }
 
-// ─── Outbound API ─────────────────────────────────────────────────────────
+// в”Ђв”Ђв”Ђ Outbound API в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 
 // GetGamesResponse is the raw Pragmatic Play game list response.
 type GetGamesResponse struct {
@@ -85,7 +85,11 @@ func (c *Client) GetGames(ctx context.Context) (*GetGamesResponse, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			c.log.Warn("Failed to close response body", zap.Error(err))
+		}
+	}()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -138,7 +142,11 @@ func (c *Client) GetLaunchURL(ctx context.Context, opts LaunchURLOptions) (strin
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			c.log.Warn("Failed to close response body", zap.Error(err))
+		}
+	}()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -169,7 +177,7 @@ type LaunchURLOptions struct {
 	Demo             bool
 }
 
-// ─── Internal helpers ─────────────────────────────────────────────────────
+// в”Ђв”Ђв”Ђ Internal helpers в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 
 // buildParams builds a url.Values with hash parameter (MD5 of sorted values + secret).
 // Pragmatic Play signs requests by: MD5(concat(sorted_values) + secret_key)
@@ -194,8 +202,10 @@ func (c *Client) buildParams(kv map[string]string) url.Values {
 	}
 	sb.WriteString(c.cfg.SecretKey)
 
-	//nolint:gosec // Pragmatic Play specifies MD5 — cannot be changed
-	hash := fmt.Sprintf("%x", md5.Sum([]byte(sb.String())))
+	// The Pragmatic Play API accepts only this MD5 form: the concatenated
+	// sorted values with the secret key appended. It is a provider-mandated
+	// request signature, not a password hash, so the algorithm cannot change.
+	hash := fmt.Sprintf("%x", md5.Sum([]byte(sb.String()))) // #nosec G401 -- mandated by the Pragmatic Play API
 	params.Set("hash", hash)
 
 	return params

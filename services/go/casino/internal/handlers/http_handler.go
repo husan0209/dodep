@@ -20,17 +20,30 @@ func NewCasinoHTTPHandler(svc *service.CasinoService, log *zap.Logger) *CasinoHT
 	return &CasinoHTTPHandler{svc: svc, log: log}
 }
 
+// parsePaginationParam reads a non-negative integer query parameter and clamps
+// it to max. A missing, malformed or negative value falls back to def, so a
+// garbage `?limit=abc` can never turn into a negative page size or overflow
+// the int32 the service layer expects.
+func parsePaginationParam(raw string, def, max int32) int32 {
+	v, err := strconv.ParseInt(raw, 10, 32)
+	if err != nil || v < 0 {
+		return def
+	}
+	if v > int64(max) {
+		return max
+	}
+	return int32(v)
+}
+
 // GetGames GET /api/v1/casino/games
 func (h *CasinoHTTPHandler) GetGames(c *fiber.Ctx) error {
-	limit, _ := strconv.Atoi(c.Query("limit", "50"))
-	offset, _ := strconv.Atoi(c.Query("offset", "0"))
 	providerID := c.Query("provider")
 	category := c.Query("category")
 	search := c.Query("search")
 
 	opts := service.GetGamesOptions{
-		Limit:  int32(limit),
-		Offset: int32(offset),
+		Limit:  parsePaginationParam(c.Query("limit", "50"), 50, 200),
+		Offset: parsePaginationParam(c.Query("offset", "0"), 0, 10000),
 	}
 	if providerID != "" {
 		opts.ProviderID = &providerID
@@ -142,13 +155,10 @@ func (h *CasinoHTTPHandler) GetHistory(c *fiber.Ctx) error {
 		return c.Status(401).JSON(fiber.Map{"error": "unauthorized"})
 	}
 
-	limit, _ := strconv.Atoi(c.Query("limit", "20"))
-	offset, _ := strconv.Atoi(c.Query("offset", "0"))
-
 	result, err := h.svc.GetGameHistory(c.Context(), service.GetGameHistoryOptions{
 		UserID: userID,
-		Limit:  int32(limit),
-		Offset: int32(offset),
+		Limit:  parsePaginationParam(c.Query("limit", "20"), 20, 100),
+		Offset: parsePaginationParam(c.Query("offset", "0"), 0, 10000),
 	})
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{"error": err.Error()})

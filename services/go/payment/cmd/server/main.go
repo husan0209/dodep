@@ -78,7 +78,11 @@ func run() error {
 		if err != nil {
 			return fmt.Errorf("init tracing: %w", err)
 		}
-		defer shutdownTracing(context.Background())
+		defer func() {
+			if err := shutdownTracing(context.Background()); err != nil {
+				log.Error().Err(err).Msg("shutdown tracing")
+			}
+		}()
 	}
 
 	// 4. Initialize database
@@ -89,7 +93,9 @@ func run() error {
 	defer func() {
 		sqlDB, _ := db.DB()
 		if sqlDB != nil {
-			sqlDB.Close()
+			if err := sqlDB.Close(); err != nil {
+				log.Error().Err(err).Msg("close database")
+			}
 		}
 	}()
 
@@ -100,14 +106,22 @@ func run() error {
 		DB:       cfg.Redis.DB,
 		PoolSize: cfg.Redis.PoolSize,
 	})
-	defer rdb.Close()
+	defer func() {
+		if err := rdb.Close(); err != nil {
+			log.Error().Err(err).Msg("close redis client")
+		}
+	}()
 
 	// 5.5. Initialize Zap logger for dependencies
 	zapLogger, _ := zap.NewProduction()
 	if cfg.Environment == "development" {
 		zapLogger, _ = zap.NewDevelopment()
 	}
-	defer zapLogger.Sync()
+	defer func() {
+		// Sync flushes buffered entries. It legitimately fails when the log
+		// sink is stdout/stderr, so the error is not actionable.
+		_ = zapLogger.Sync()
+	}()
 
 	// 6. Initialize event producer
 	producer, err := event.NewProducer(event.ProducerConfig{
@@ -117,7 +131,11 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("create producer: %w", err)
 	}
-	defer producer.Close()
+	defer func() {
+		if err := producer.Close(); err != nil {
+			log.Error().Err(err).Msg("close event producer")
+		}
+	}()
 
 	// 7. Build layers
 	repos := buildRepositories(db, rdb)
@@ -441,6 +459,12 @@ func startMetricsServer(ctx context.Context, cfg *config.Config) error {
 	server := &http.Server{
 		Addr:    ":9104",
 		Handler: mux,
+		// Without these a client can open a connection and never finish sending
+		// headers, pinning a goroutine and its fd indefinitely (Slowloris).
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      10 * time.Second,
+		IdleTimeout:       60 * time.Second,
 	}
 
 	log.Info().Str("addr", ":9104").Msg("Starting metrics server")

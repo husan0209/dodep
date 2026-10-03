@@ -2,7 +2,7 @@ package amatic
 
 import (
 	"context"
-	"crypto/md5" //nolint:gosec // Amatic specifies MD5
+	"crypto/md5" // #nosec G501 -- the Amatic Cashier API mandates MD5 for its signature
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -103,8 +103,10 @@ func (a *Adapter) VerifyCallbackSignature(body []byte, _ map[string]string) bool
 	txID, _ := params["transactionId"].(string)
 
 	input := a.cfg.APIPassword + a.cfg.OperatorID + playerID + txID
-	//nolint:gosec
-	expected := fmt.Sprintf("%x", md5.Sum([]byte(input)))
+	// MD5 is fixed by the Amatic Cashier API spec: the secret is prepended to
+	// the message, so this is a provider-mandated request digest, not a
+	// stored-password hash.
+	expected := fmt.Sprintf("%x", md5.Sum([]byte(input))) // #nosec G401 -- mandated by the Amatic Cashier API
 
 	if !strings.EqualFold(expected, receivedKey) {
 		a.log.Warn("Amatic: key mismatch")
@@ -178,6 +180,7 @@ func (a *Adapter) mapMethod(m string) provider.CallbackEventType {
 
 // sign generates MD5(api_password + data).
 func (a *Adapter) sign(data string) string {
-	//nolint:gosec
-	return fmt.Sprintf("%x", md5.Sum([]byte(a.cfg.APIPassword+data)))
+	// Provider-mandated digest: the API password is prepended to the payload,
+	// so this is not a stored-password hash and MD5 cannot be replaced.
+	return fmt.Sprintf("%x", md5.Sum([]byte(a.cfg.APIPassword+data))) // #nosec G401 -- mandated by the Amatic Cashier API
 }

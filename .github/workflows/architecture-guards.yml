@@ -65,16 +65,31 @@ jobs:
 
       # ──────────────────────────────────────────────────────────────
       # G3: Запрет захардкоженных секретов
+      #
+      # Ищем PEM-заголовки приватных ключей в исходниках, конфигах, манифестах
+      # и воркфлоу. Исключения:
+      #   *.md                    — документация. Kubernetes/SSH-гайды обязаны
+      #                             показывать формат ключа и печатают усечённый
+      #                             плейсхолдер вида `b3BlbnNza...`; такой текст
+      #                             не деплоится и секретом не является.
+      #   architecture-guards.yml — сам guard, в нём лежит шаблон поиска.
+      # Каталоги .git, node_modules и target исключаются из обхода.
       # ──────────────────────────────────────────────────────────────
       - name: "G3: No hardcoded secrets or private keys"
         run: |
-          echo "Проверка G3: отсутствие захардкоженных приватных ключей..."
-          if grep -rn "BEGIN RSA PRIVATE KEY" . 2>/dev/null | grep -v ".git"; then
-            echo "❌ Обнаружен приватный ключ в репозитории!"
-            exit 1
-          fi
-          if grep -rn "BEGIN OPENSSH PRIVATE KEY" . 2>/dev/null | grep -v ".git"; then
-            echo "❌ Обнаружен SSH приватный ключ в репозитории!"
+          echo "Проверка G3: отсутствие приватных ключей в поставляемом коде..."
+          KEYS=$(grep -rnE "BEGIN (RSA |DSA |EC |OPENSSH )?PRIVATE KEY" . \
+            --binary-files=without-match \
+            --exclude-dir=.git \
+            --exclude-dir=node_modules \
+            --exclude-dir=target \
+            --exclude='*.md' \
+            --exclude='architecture-guards.yml' \
+            2>/dev/null || true)
+          if [ -n "$KEYS" ]; then
+            echo "❌ Обнаружен приватный ключ в репозитории:"
+            echo "$KEYS"
+            echo "Вынесите ключ в secret-хранилище (Vault / K8s Secret)."
             exit 1
           fi
           echo "✅ G3 пройден: приватные ключи не обнаружены."

@@ -235,7 +235,9 @@ func (r *UserRepository) SetLimits(ctx context.Context, userID int64, req *domai
 func (r *UserRepository) GetActivity(ctx context.Context, userID int64, limit, offset int) ([]map[string]interface{}, int, error) {
 	countQuery := `SELECT COUNT(*) FROM audit_log WHERE record_id = $1 AND table_name = 'users'`
 	var total int
-	r.pool.QueryRow(ctx, countQuery, userID).Scan(&total)
+	if err := r.pool.QueryRow(ctx, countQuery, userID).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("count audit_log entries for user %d: %w", userID, err)
+	}
 
 	query := `
 		SELECT id, action, old_data, new_data, user_id, created_at
@@ -254,12 +256,17 @@ func (r *UserRepository) GetActivity(ctx context.Context, userID int64, limit, o
 		var action, oldData, newData string
 		var logUserID *int64
 		var createdAt time.Time
-		rows.Scan(&id, &action, &oldData, &newData, &logUserID, &createdAt)
+		if err := rows.Scan(&id, &action, &oldData, &newData, &logUserID, &createdAt); err != nil {
+			return nil, 0, fmt.Errorf("scan audit_log row: %w", err)
+		}
 		activities = append(activities, map[string]interface{}{
 			"id":         id,
 			"action":     action,
 			"created_at": createdAt,
 		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("iterate audit_log rows: %w", err)
 	}
 	return activities, total, nil
 }

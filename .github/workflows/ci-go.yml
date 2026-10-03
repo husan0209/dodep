@@ -252,7 +252,17 @@ jobs:
     needs: [lint, test, security]
     strategy:
       matrix:
-        service: [auth, user, payment, bonus, casino, notification, kyc]
+        # Most services keep their main package at the service root; payment
+        # nests it under cmd/server, so CMD_PATH has to be declared per service.
+        include:
+          - service: auth
+          - service: user
+          - service: payment
+            cmd_path: cmd/server
+          - service: bonus
+          - service: casino
+          - service: notification
+          - service: kyc
     
     permissions:
       contents: read
@@ -265,6 +275,22 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      # libs/proto/gen is gitignored, so six of the seven services cannot be
+      # type-checked without a codegen pass. This is the same step the lint,
+      # test and security jobs get from the `protos` job, repeated here because
+      # build-push-action starts from a fresh context.
+      - name: Install buf (pinned)
+        run: |
+          BUF_VERSION=1.73.0
+          curl -fsSL -o /tmp/buf.tar.gz \
+            "https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/buf-Linux-x86_64.tar.gz"
+          sudo tar -xzf /tmp/buf.tar.gz -C /tmp
+          sudo install -m 0755 /tmp/buf/bin/buf /usr/local/bin/buf
+          buf --version
+
+      - name: Generate Go stubs
+        run: make -C libs/proto gen-go
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -287,6 +313,9 @@ jobs:
             type=ref,event=pr
             type=semver,pattern={{version}}
 
+      # On a pull request the image is never published, so load it into the
+      # local daemon instead: the Trivy step below then scans that image rather
+      # than failing to pull a tag that does not exist yet.
       - name: Build and push
         id: build
         uses: docker/build-push-action@v5
@@ -294,12 +323,14 @@ jobs:
           context: .
           file: infra/docker/Dockerfile.go
           push: ${{ github.event_name != 'pull_request' }}
+          load: ${{ github.event_name == 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
             SERVICE_PATH=services/go/${{ matrix.service }}
+            CMD_PATH=${{ matrix.cmd_path || '.' }}
             VERSION=${{ github.sha }}
 
       - name: Run Trivy vulnerability scanner

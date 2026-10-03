@@ -2,7 +2,7 @@ package pragmatic
 
 import (
 	"context"
-	"crypto/md5" //nolint:gosec
+	"crypto/md5" // #nosec G501 -- the Pragmatic Play API requires MD5 for its hash parameter
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -126,8 +126,9 @@ func (a *Adapter) VerifyCallbackSignature(body []byte, headers map[string]string
 	}
 	sb.WriteString(a.cfg.SecretKey)
 
-	//nolint:gosec
-	expected := fmt.Sprintf("%x", md5.Sum([]byte(sb.String())))
+	// MD5 is fixed by the Pragmatic Play callback spec: sorted parameter values
+	// concatenated with the secret key. Provider-mandated, not a password hash.
+	expected := fmt.Sprintf("%x", md5.Sum([]byte(sb.String()))) // #nosec G401 -- mandated by the Pragmatic Play API
 
 	if expected != strings.ToLower(receivedHash) {
 		a.log.Warn("Pragmatic: signature mismatch",

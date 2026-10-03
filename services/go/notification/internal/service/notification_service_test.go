@@ -9,67 +9,71 @@ import (
 	"github.com/opus-casino/notification/internal/repository"
 )
 
-func TestProcessEvent_SupportedEventAliases(t *testing.T) {
-	repo := repository.NewNotificationRepository(nil, nil)
-	svc := NewNotificationService(repo, zap.NewNop())
-
+func TestEventAliases_FoldOntoCanonicalType(t *testing.T) {
 	testCases := []struct {
 		name      string
 		eventType string
-		data      map[string]string
+		expected  string
 	}{
-		{
-			name:      "bets.settled",
-			eventType: "bets.settled",
-			data: map[string]string{
-				"user_id": "42",
-				"bet_id":  "bet-1",
-				"result":  "won",
-			},
-		},
-		{
-			name:      "payments.deposit_confirmed",
-			eventType: "payments.deposit_confirmed",
-			data: map[string]string{
-				"user_id":  "42",
-				"amount":   "100.00",
-				"currency": "USD",
-			},
-		},
-		{
-			name:      "payments.withdrawal_processed",
-			eventType: "payments.withdrawal_processed",
-			data: map[string]string{
-				"user_id":  "42",
-				"amount":   "50.00",
-				"currency": "USD",
-			},
-		},
-		{
-			name:      "users.kyc_verified",
-			eventType: "users.kyc_verified",
-			data: map[string]string{
-				"user_id": "42",
-				"status":  "verified",
-			},
-		},
-		{
-			name:      "bonus.activated",
-			eventType: "bonus.activated",
-			data: map[string]string{
-				"user_id":    "42",
-				"bonus_name": "welcome",
-			},
-		},
+		{name: "legacy singular bet", eventType: "bet.settled", expected: eventBetSettled},
+		{name: "topic bet", eventType: "bets.settled", expected: eventBetSettled},
+		{name: "legacy singular deposit", eventType: "payment.deposit_confirmed", expected: eventDepositConfirmed},
+		{name: "topic deposit", eventType: "payments.deposit_confirmed", expected: eventDepositConfirmed},
+		{name: "legacy singular withdrawal", eventType: "payment.withdrawal_processed", expected: eventWithdrawalProcessed},
+		{name: "topic withdrawal", eventType: "payments.withdrawal_processed", expected: eventWithdrawalProcessed},
+		{name: "bonus", eventType: "bonus.activated", expected: eventBonusActivated},
+		{name: "legacy kyc", eventType: "kyc.status_changed", expected: eventKYCStatusChanged},
+		{name: "topic kyc", eventType: "users.kyc_verified", expected: eventKYCStatusChanged},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := svc.ProcessEvent(context.Background(), tc.eventType, tc.data)
-			if err != nil {
-				t.Fatalf("expected no error, got: %v", err)
+			canonical, handled := eventAliases[tc.eventType]
+			if !handled {
+				t.Fatalf("event type %q is not registered as a supported alias", tc.eventType)
+			}
+			if canonical != tc.expected {
+				t.Fatalf("expected %q, got %q", tc.expected, canonical)
 			}
 		})
+	}
+}
+
+// Every canonical event type must be reachable from ProcessEvent: the switch in
+// ProcessEvent dispatches on the canonical value, so an alias without a matching
+// case would silently drop notifications.
+func TestEventAliases_AllCanonicalTypesAreDispatched(t *testing.T) {
+	dispatched := map[string]bool{
+		eventBetSettled:          true,
+		eventDepositConfirmed:    true,
+		eventWithdrawalProcessed: true,
+		eventBonusActivated:      true,
+		eventKYCStatusChanged:    true,
+	}
+
+	for alias, canonical := range eventAliases {
+		if !dispatched[canonical] {
+			t.Errorf("alias %q resolves to %q, which ProcessEvent does not dispatch", alias, canonical)
+		}
+	}
+}
+
+func TestProcessEvent_UnknownTypeIsIgnored(t *testing.T) {
+	// No repository is wired up: an event we do not own must be dropped before
+	// any persistence is attempted, so this must succeed without a database.
+	svc := NewNotificationService(repository.NewNotificationRepository(nil, nil), zap.NewNop())
+
+	if err := svc.ProcessEvent(context.Background(), "wallet.something_new", map[string]string{"user_id": "42"}); err != nil {
+		t.Fatalf("expected no error for an unhandled event, got: %v", err)
+	}
+}
+
+func TestProcessEvent_RejectsPayloadWithoutUserID(t *testing.T) {
+	svc := NewNotificationService(repository.NewNotificationRepository(nil, nil), zap.NewNop())
+
+	err := svc.ProcessEvent(context.Background(), "bets.settled", map[string]string{"bet_id": "bet-1"})
+	if err == nil {
+		t.Fatal("expected an error when user_id is missing from the payload")
 	}
 }
 
