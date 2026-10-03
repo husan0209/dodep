@@ -8,9 +8,7 @@ use axum::{
 use serde::Deserialize;
 use tokio::sync::mpsc;
 
-use crate::domain::channel::{
-    parse_topic, ClientMessage, ServerMessage, Topic, TopicResponse,
-};
+use crate::domain::channel::{parse_topic, ClientMessage, ServerMessage, Topic, TopicResponse};
 use crate::infrastructure::kafka_consumer::KafkaMessage;
 use crate::state::AppState;
 
@@ -29,11 +27,7 @@ pub async fn ws_handler(
     // In production: call Auth Service gRPC or validate JWT locally
     // For now: simple token presence check
     if params.token.is_empty() {
-        return (
-            axum::http::StatusCode::UNAUTHORIZED,
-            "Missing token",
-        )
-            .into_response();
+        return (axum::http::StatusCode::UNAUTHORIZED, "Missing token").into_response();
     }
 
     // Extract user_id from token (placeholder — in production decode JWT)
@@ -104,14 +98,8 @@ async fn handle_connection(socket: WebSocket, state: AppState, user_id: i64) {
         while let Some(Ok(msg)) = ws_receiver.next().await {
             match msg {
                 Message::Text(text) => {
-                    handle_client_message(
-                        &text,
-                        &sub_mgr_clone,
-                        &tx_clone,
-                        user_id,
-                        max_subs,
-                    )
-                    .await;
+                    handle_client_message(&text, &sub_mgr_clone, &tx_clone, user_id, max_subs)
+                        .await;
                 }
                 Message::Ping(data) => {
                     let _ = tx_clone.send(Message::Pong(data)).await;
@@ -128,9 +116,7 @@ async fn handle_connection(socket: WebSocket, state: AppState, user_id: i64) {
         let tx_clone = tx.clone();
         tokio::spawn(async move {
             while let Ok(msg) = kafka_rx.recv().await {
-                let _ = tx_clone
-                    .send(Message::Binary(msg.payload))
-                    .await;
+                let _ = tx_clone.send(Message::Binary(msg.payload)).await;
             }
         })
     };
@@ -162,14 +148,13 @@ async fn handle_client_message(
     let msg: ClientMessage = match serde_json::from_str(text) {
         Ok(m) => m,
         Err(_) => {
-            let _ = sender
-                .try_send(Message::Text(
-                    serde_json::to_string(&ServerMessage::Error {
-                        code: "WS_INVALID_MESSAGE".into(),
-                        message: "Invalid JSON".into(),
-                    })
-                    .unwrap_or_default(),
-                ));
+            let _ = sender.try_send(Message::Text(
+                serde_json::to_string(&ServerMessage::Error {
+                    code: "WS_INVALID_MESSAGE".into(),
+                    message: "Invalid JSON".into(),
+                })
+                .unwrap_or_default(),
+            ));
             return;
         }
     };
@@ -190,13 +175,10 @@ async fn handle_client_message(
                 }
             }
 
-            let _ = sender
-                .try_send(Message::Text(
-                    serde_json::to_string(&ServerMessage::Subscribed {
-                        topics: subscribed,
-                    })
+            let _ = sender.try_send(Message::Text(
+                serde_json::to_string(&ServerMessage::Subscribed { topics: subscribed })
                     .unwrap_or_default(),
-                ));
+            ));
         }
         ClientMessage::Unsubscribe { topics } => {
             let mut unsubscribed = Vec::new();
@@ -210,19 +192,17 @@ async fn handle_client_message(
                 }
             }
 
-            let _ = sender
-                .try_send(Message::Text(
-                    serde_json::to_string(&ServerMessage::Unsubscribed {
-                        topics: unsubscribed,
-                    })
-                    .unwrap_or_default(),
-                ));
+            let _ = sender.try_send(Message::Text(
+                serde_json::to_string(&ServerMessage::Unsubscribed {
+                    topics: unsubscribed,
+                })
+                .unwrap_or_default(),
+            ));
         }
         ClientMessage::Ping => {
-            let _ = sender
-                .try_send(Message::Text(
-                    serde_json::to_string(&ServerMessage::Pong).unwrap_or_default(),
-                ));
+            let _ = sender.try_send(Message::Text(
+                serde_json::to_string(&ServerMessage::Pong).unwrap_or_default(),
+            ));
         }
     }
 }

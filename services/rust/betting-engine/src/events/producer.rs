@@ -5,7 +5,7 @@ use rdkafka::config::ClientConfig;
 use rdkafka::producer::{FutureProducer, FutureRecord};
 use rdkafka::util::Timeout;
 use serde::Serialize;
-use tracing::{info, warn, error};
+use tracing::{error, info, warn};
 
 #[derive(Clone)]
 pub struct EventProducer {
@@ -133,11 +133,7 @@ impl EventProducer {
         }
     }
 
-    pub async fn publish_bet_voided(
-        &self,
-        user_id: i64,
-        bet_id: i64,
-    ) {
+    pub async fn publish_bet_voided(&self, user_id: i64, bet_id: i64) {
         let event = BetSettledEvent {
             event_id: uuid::Uuid::new_v4().to_string(),
             timestamp: Utc::now().to_rfc3339(),
@@ -155,8 +151,14 @@ impl EventProducer {
             .payload(&payload);
 
         match self.producer.send(record, Timeout::Never).await {
-            Ok(_) => info!(topic = "bets.bet.settled", bet_id = bet_id, "Void event published"),
-            Err((e, _)) => error!(topic = "bets.bet.settled", error = %e, "Failed to publish void event"),
+            Ok(_) => info!(
+                topic = "bets.bet.settled",
+                bet_id = bet_id,
+                "Void event published"
+            ),
+            Err((e, _)) => {
+                error!(topic = "bets.bet.settled", error = %e, "Failed to publish void event")
+            }
         }
     }
 }
