@@ -8,16 +8,79 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  RUST_VERSION: "1.75"
-  GO_VERSION: "1.21"
+  # Cargo.lock is format version 4 (needs cargo >= 1.78) and the highest MSRV
+  # declared by the 580 locked packages is home 0.5.12 at 1.88, so anything
+  # below that cannot read the lockfile.
+  RUST_VERSION: "1.88"
+  # Must satisfy the highest `go` directive in the matrix: auth, user, payment,
+  # casino and notification are on go 1.24, admin-bff on 1.24.1. Pinned to a
+  # patch rather than a bare minor so the toolchain does not change under the
+  # build.
+  GO_VERSION: "1.26.8"
   PYTHON_VERSION: "3.11"
   NODE_VERSION: "20"
 
 jobs:
+  # ==========================================================================
+  # Protobuf stubs (Go)
+  # ==========================================================================
+  # libs/proto/.gitignore excludes /gen, so a clean checkout has no generated Go
+  # stubs at all. Every service that imports
+  # github.com/opus-casino/proto/gen/go/* then fails to type-check:
+  #
+  #   no required module provides package
+  #     github.com/opus-casino/proto/gen/go/user/v1
+  #
+  # and golangci-lint reports it as "typechecking error" while go vet and
+  # go build fail outright. The Go stubs are generated once here and handed to
+  # the matrix as an artifact so all the legs see the same code.
+  protos:
+    name: Generate Protobuf Stubs
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Pinned rather than "latest": remote plugin resolution has to be
+      # reproducible for a build gate. The archive unpacks to buf/bin/buf.
+      - name: Install buf (pinned)
+        run: |
+          BUF_VERSION=1.73.0
+          curl -fsSL -o /tmp/buf.tar.gz \
+            "https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/buf-Linux-x86_64.tar.gz"
+          sudo tar -xzf /tmp/buf.tar.gz -C /tmp
+          sudo install -m 0755 /tmp/buf/bin/buf /usr/local/bin/buf
+          buf --version
+
+      # The target documented in libs/proto/Makefile for local development.
+      - name: Generate Go stubs
+        run: make -C libs/proto gen-go
+
+      # A silently empty generation must fail here, not as "package not found"
+      # in seven unrelated jobs.
+      - name: Assert the stubs exist
+        run: |
+          test -f libs/proto/gen/go/common/v1/money.pb.go
+          test -d libs/proto/gen/go/user/v1
+          test -d libs/proto/gen/go/bonus/v1
+
+      - name: Upload generated stubs
+        uses: actions/upload-artifact@v4
+        with:
+          name: proto-go-stubs
+          path: libs/proto/gen/go
+          retention-days: 1
+
   # Rust services build and test
   rust-build:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     strategy:
+      # One broken crate must not hide the other two. With the default
+      # fail-fast, a single `cargo fmt` finding cancelled both remaining legs and
+      # left no way to tell "only this crate is broken" from "all three are".
+      fail-fast: false
       matrix:
         service: [betting-engine, wallet-core, websocket-gateway]
     defaults:
@@ -25,13 +88,17 @@ jobs:
         working-directory: services/rust/${{ matrix.service }}
     steps:
     - uses: actions/checkout@v4
-    
+
+    # dtolnay/rust-action has been deleted from GitHub; every job that used it
+    # failed with "Unable to resolve action dtolnay/rust-action, repository not
+    # found" before running a single cargo command. dtolnay/rust-toolchain is the
+    # live equivalent and takes the same toolchain/components inputs.
     - name: Install Rust
-      uses: dtolnay/rust-action@stable
+      uses: dtolnay/rust-toolchain@stable
       with:
         toolchain: ${{ env.RUST_VERSION }}
         components: rustfmt, clippy
-    
+
     - name: Cache cargo registry
       uses: actions/cache@v4
       with:
@@ -40,28 +107,35 @@ jobs:
           ~/.cargo/git
           target
         key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-    
+
     - name: Install dependencies
       run: |
         sudo apt-get update
         sudo apt-get install -y pkg-config libssl-dev protobuf-compiler
-    
+
     - name: Check format
       run: cargo fmt --all -- --check
-    
+
     - name: Clippy linting
       run: cargo clippy -- -D warnings
-    
+
     - name: Build
       run: cargo build --release
-    
+
     - name: Run tests
       run: cargo test --release
 
   # Go services build and test
   go-build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: protos
     strategy:
+      # See rust-build: a single broken service must not blank out the report
+      # for the other six. Before this, `go-build (user)` failing on the missing
+      # proto stubs cancelled every other leg, so the matrix never reported which
+      # of the seven services could actually build.
+      fail-fast: false
       matrix:
         service: [auth, user, payment, bonus, casino, notification, kyc]
     defaults:
@@ -69,12 +143,18 @@ jobs:
         working-directory: services/go/${{ matrix.service }}
     steps:
     - uses: actions/checkout@v4
-    
+
+    - name: Download protobuf stubs
+      uses: actions/download-artifact@v4
+      with:
+        name: proto-go-stubs
+        path: libs/proto/gen/go
+
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
         go-version: ${{ env.GO_VERSION }}
-    
+
     - name: Cache Go modules
       uses: actions/cache@v4
       with:
@@ -82,7 +162,7 @@ jobs:
           ~/.cache/go-build
           ~/go/pkg/mod
         key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-    
+
     - name: Download dependencies
       run: go mod download
     
@@ -104,7 +184,12 @@ jobs:
   # Python services build and test
   python-build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
+      # See rust-build. `python-build (fraud-ml)` failing on 563 ruff errors
+      # cancelled the analytics leg, so nothing ever reported whether analytics
+      # was buildable.
+      fail-fast: false
       matrix:
         service: [fraud-ml, analytics]
     defaults:
@@ -112,70 +197,82 @@ jobs:
         working-directory: services/python/${{ matrix.service }}
     steps:
     - uses: actions/checkout@v4
-    
+
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
         python-version: ${{ env.PYTHON_VERSION }}
-    
+
     - name: Cache pip
       uses: actions/cache@v4
       with:
         path: ~/.cache/pip
         key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml') }}
-    
+
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -e ".[dev]"
-    
+
+    # ruff, mypy and pytest-cov all come from the dev extra above. Installing
+    # them again with an unpinned `pip install` meant the lint that gated the
+    # build could change version between two runs of the same commit.
     - name: Lint with ruff
-      run: |
-        pip install ruff
-        ruff check .
-    
+      run: ruff check .
+
     - name: Type check with mypy
-      run: |
-        pip install mypy
-        mypy src/
-    
+      run: mypy src/
+
     - name: Test
       run: pytest -v --cov=src
 
   # Frontend build and test
   frontend-build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
+      # See rust-build. `frontend-build (web)` failing on the OAuth prerender
+      # cancelled the admin leg, so the admin app was never actually built.
+      fail-fast: false
       matrix:
         app: [web, admin]
+        include:
+          # web runs jest, admin runs vitest, and the two need different flags:
+          # `--run` is a vitest flag, and passing it through `npm run test --`
+          # makes npm itself reject it ("Unknown cli flag: --run"). jest exits
+          # after one pass anyway, which is what the step wanted.
+          - app: web
+            test_args: "--ci"
+          - app: admin
+            test_args: "--run"
     defaults:
       run:
         working-directory: apps/${{ matrix.app }}
     steps:
     - uses: actions/checkout@v4
-    
+
     - name: Set up Node.js
       uses: actions/setup-node@v4
       with:
         node-version: ${{ env.NODE_VERSION }}
-    
+
     - name: Cache node modules
       uses: actions/cache@v4
       with:
         path: ~/.npm
         key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
-    
+
     - name: Install dependencies
       run: npm ci
     
     - name: Lint
       run: npm run lint
-    
+
     - name: Build
       run: npm run build
-    
+
     - name: Test
-      run: npm run test -- --run
+      run: npm run test -- ${{ matrix.test_args }}
 
   # Security scanning
   security-scan:

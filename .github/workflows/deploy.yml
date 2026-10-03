@@ -12,8 +12,11 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  RUST_VERSION: '1.75'
-  GO_VERSION: '1.21'
+  # See ci.yaml: Cargo.lock is format version 4 and the highest MSRV among the
+  # 580 locked packages is home 0.5.12 at 1.88.
+  RUST_VERSION: '1.88'
+  # Must satisfy the highest `go` directive in the tree (admin-bff is on 1.24.1).
+  GO_VERSION: '1.26.8'
   PYTHON_VERSION: '3.11'
   NODE_VERSION: '20'
 
@@ -25,7 +28,7 @@ jobs:
     name: Build and Test
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -36,8 +39,10 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
 
+      # dtolnay/rust-action has been deleted; dtolnay/rust-toolchain is the live
+      # equivalent and takes the same inputs.
       - name: Setup Rust
-        uses: dtolnay/rust-action@stable
+        uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ env.RUST_VERSION }}
           components: clippy, rustfmt
@@ -51,6 +56,16 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+
+      # golangci-lint is used below but was never installed, so the lint step
+      # failed with "golangci-lint: command not found" once the Rust action
+      # problem was out of the way. Pinned: `@latest` resolves to a different
+      # major every few months and v2 cannot read a v1 config.
+      - name: Install golangci-lint
+        run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
+
+      - name: Add Go bin to PATH
+        run: echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
       - name: Install dependencies
         run: |
@@ -181,11 +196,20 @@ jobs:
     timeout-minutes: 5
     needs: [deploy-web, deploy-backend, deploy-admin]
     if: always()
-    
+
+    env:
+      # Hoisted to the job level on purpose: the `secrets` context is not
+      # available in a step-level `if:`, so a Slack guard written against
+      # `secrets.SLACK_WEBHOOK != ''` is always false and the step silently
+      # never runs. Reading it from job env is the supported way.
+      SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+
     steps:
       - name: Notify Slack
-        if: always()
+        if: env.SLACK_WEBHOOK != ''
         uses: 8398a7/action-slack@v3
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
         with:
           status: ${{ job.status }}
           text: |
@@ -193,19 +217,25 @@ jobs:
             Web: ${{ needs.deploy-web.result }}
             Backend: ${{ needs.deploy-backend.result }}
             Admin: ${{ needs.deploy-admin.result }}
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
 
       - name: Notify Success
         if: success()
         run: |
-          echo "✅ Deployment successful!"
+          echo "Deployment successful"
           echo "Web: https://opus-casino.vercel.app"
           echo "Admin: https://admin.opus-casino.vercel.app"
 
+      # Reports the outcome and stops. It used to `exit 1`, which turned this
+      # notification job red on every PR: the deploy jobs are main-only, so on a
+      # pull request they are all `skipped`, `needs.*.result` is not `success`,
+      # and the workflow reported a deployment failure for a run that never
+      # deployed anything. Failing here also meant the notify job could never
+      # distinguish "the deploy failed" from "this job is the thing that failed".
       - name: Notify Failure
         if: failure()
         run: |
-          echo "❌ Deployment failed!"
+          echo "Deployment failed"
+          echo "Web:    ${{ needs.deploy-web.result }}"
+          echo "Backend: ${{ needs.deploy-backend.result }}"
+          echo "Admin:  ${{ needs.deploy-admin.result }}"
           echo "Check GitHub Actions logs for details"
-          exit 1
