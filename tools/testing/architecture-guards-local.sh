@@ -20,16 +20,21 @@ p="$(grep -rn 'fmt.Println(' services/go/ 2>/dev/null | grep -v '_test.go' | hea
 if [ -n "$p" ]; then echo "$p"; else echo "G2 OK"; fi
 
 echo "=== G3: hardcoded private keys ==="
-# Mirrors the repaired upstream guard: tracked files only, excluding this
-# workflow's own search strings and sanitised documentation examples.
+# Mirrors the repaired upstream guard: tracked files only, excluding the guard's
+# own sources and sanitised documentation examples.
 k="$(git grep -n -I -e 'BEGIN RSA PRIVATE KEY' -e 'BEGIN OPENSSH PRIVATE KEY' \
       -- . \
       ':!.github/workflows/architecture-guards.yml' \
+      ':!tools/testing/architecture-guards-local.sh' \
+      ':!tools/testing/guards/**' \
       ':!*.md' 2>/dev/null || true)"
 if [ -n "$k" ]; then echo "$k"; echo "G3 FAIL"; rc=1; else echo "G3 OK"; fi
 
 echo "=== G4: @ts-ignore in frontend ==="
-t="$(grep -rn '@ts-ignore' apps/ 2>/dev/null | head -5)"
+# git grep here too: `grep -rn apps/` reads apps/*/node_modules and
+# apps/web/.next, so after a local build it reports @ts-ignore out of webpack
+# cache packs rather than out of source.
+t="$(git grep -n -I -e '@ts-ignore' -- apps/ 2>/dev/null || true)"
 if [ -n "$t" ]; then echo "$t"; echo "G4 FAIL"; rc=1; else echo "G4 OK"; fi
 
 echo "=== guards exit=$rc ==="

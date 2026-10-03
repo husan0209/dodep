@@ -73,12 +73,18 @@ jobs:
           # node_modules (slow enough to look like a hang) and matched this very
           # workflow file, so the guard failed on itself.
           #
-          # Excluded on purpose:
-          #   this file  - contains the search strings themselves
-          #   *.md       - documentation prose; the only hits repo-wide are the
-          #                vendored agent skill docs, which print a sanitised
-          #                `ssh-keygen` example header (12 copies under
-          #                .claude/.cursor/.qwen/.../skills/).
+          # Excluded on purpose, and all three are files that have to contain the
+          # search strings in order to exist:
+          #   this file and tools/testing/architecture-guards-local.sh
+          #                              - the guard and its local mirror
+          #   tools/testing/guards/**     - the negative tests, whose fixtures are
+          #                                literal key headers planted to prove the
+          #                                guard still trips
+          #   *.md                        - documentation prose; the only other
+          #                                hits repo-wide are the vendored agent
+          #                                skill docs, which print a sanitised
+          #                                `ssh-keygen` example header (12 copies
+          #                                under .claude/.cursor/.qwen/.../skills)
           # Nothing else is excluded, so a real key dropped into source, config,
           # env or a manifest still fails the build.
           #
@@ -86,6 +92,8 @@ jobs:
           HITS="$(git grep -n -I -e 'BEGIN RSA PRIVATE KEY' -e 'BEGIN OPENSSH PRIVATE KEY' \
                     -- . \
                     ':!.github/workflows/architecture-guards.yml' \
+                    ':!tools/testing/architecture-guards-local.sh' \
+                    ':!tools/testing/guards/**' \
                     ':!*.md' 2>/dev/null || true)"
           if [ -n "$HITS" ]; then
             echo "❌ Обнаружен приватный ключ в репозитории:"
@@ -100,7 +108,11 @@ jobs:
       - name: "G4: No unsuppressed @ts-ignore in frontend"
         run: |
           echo "Проверка G4: проверка @ts-ignore во фронтенде..."
-          IGNORES=$(grep -rn "@ts-ignore" apps/ 2>/dev/null || true)
+          # git grep, for the same reason as G3: `grep -rn apps/` also reads
+          # apps/*/node_modules and apps/web/.next, so after any local build it
+          # reported @ts-ignore out of webpack cache packs. Scanning tracked files
+          # makes the result depend on the source and not on what is on disk.
+          IGNORES="$(git grep -n -I -e '@ts-ignore' -- apps/ 2>/dev/null || true)"
           if [ -n "$IGNORES" ]; then
             echo "❌ Найден @ts-ignore во фронтенде. Используйте строгую типизацию:"
             echo "$IGNORES"

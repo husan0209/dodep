@@ -10,8 +10,13 @@
 set -uo pipefail
 cd "$(dirname "$0")/../../.." || exit 1
 
+# Every entry here is a file that has to contain the search strings in order to
+# exist: the guard, its local mirror, and this script's own key fixtures. Keep
+# this list in step with the one in .github/workflows/architecture-guards.yml.
 EXCLUDES=(
   ':!.github/workflows/architecture-guards.yml'
+  ':!tools/testing/architecture-guards-local.sh'
+  ':!tools/testing/guards/**'
   ':!*.md'
 )
 
