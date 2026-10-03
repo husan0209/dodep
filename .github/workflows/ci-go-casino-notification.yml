@@ -15,7 +15,13 @@ on:
       - 'libs/proto/**'
 
 env:
-  GO_VERSION: '1.21'
+  # govulncheck (the Security Scan jobs) reports against the standard
+  # library of whatever toolchain is installed. On 1.21 that surfaced ~35
+  # unpatched stdlib CVEs and failed every Security Scan job. 1.25.13 is
+  # the oldest release carrying the fixes for all of them (crypto/tls
+  # GO-2026-5856, crypto/x509 GO-2026-5037, net/textproto GO-2026-5039).
+  # Do not lower without re-running govulncheck across services/go.
+  GO_VERSION: '1.25.13'
   REGISTRY: ghcr.io
   IMAGE_PREFIX: opus-casino
 
@@ -35,11 +41,15 @@ jobs:
             services/go/casino/go.mod
             services/go/notification/go.mod
 
+      # golangci-lint-action needs a go.mod at the directory it is pointed at,
+      # and neither the repo root nor services/go is a module - each Go service
+      # is its own. The action aborted with
+      #   pattern ./...: directory prefix . does not contain main module
+      #   golangci-lint exit with code 7
+      # before the two per-service steps below ever ran. Install the binary
+      # instead and lint each service from its own module root.
       - name: Install golangci-lint
-        uses: golangci/golangci-lint-action@v3
-        with:
-          version: latest
-          working-directory: services/go
+        run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
 
       - name: Lint Casino Service
         run: |

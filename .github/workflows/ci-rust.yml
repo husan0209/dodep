@@ -20,9 +20,10 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  # Floor imposed by the committed lockfile; see the comment in ci.yaml
-  # for the 1.75 / 1.78 / 1.85 evidence. Do not lower without re-checking.
-  RUST_VERSION: "1.85"
+  # Floor imposed by the committed lockfile; see the comment in ci.yaml for the
+  # measured evidence (1.75 / 1.78 / 1.85 / 1.86 all fail, 1.88 is the highest
+  # MSRV in the graph). Do not lower without re-running that query.
+  RUST_VERSION: "1.88"
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
