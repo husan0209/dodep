@@ -97,6 +97,7 @@ func newTestWithdrawalService(
 		nil, // user
 		nil, // producer
 		nil, // tracer
+		"https://test.com/webhook", // ipnCallbackURL
 	)
 }
 
