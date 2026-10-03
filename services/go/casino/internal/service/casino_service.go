@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -29,6 +30,20 @@ type CasinoService struct {
 	wallet    WalletClient
 	userSvc   UserServiceClient
 	log       *zap.Logger
+}
+
+// clampRoundCount keeps a round count inside the int32 range the API exposes.
+// The count comes from a slice length, so it cannot be negative, but an
+// int32 conversion of a 64-bit len would still be flagged as a potential
+// overflow (gosec G115).
+func clampRoundCount(n int) int32 {
+	if n > math.MaxInt32 {
+		return math.MaxInt32
+	}
+	if n < 0 {
+		return 0
+	}
+	return int32(n)
 }
 
 // NewCasinoService creates a new casino service.
@@ -594,7 +609,7 @@ func (s *CasinoService) EndGameSession(ctx context.Context, req *EndGameSessionR
 			TotalBet:      totalBet,
 			TotalWin:      totalWin,
 			NetResult:     netResult,
-			RoundsPlayed:  int32(len(rounds)),
+			RoundsPlayed:  clampRoundCount(len(rounds)),
 			StartedAt:     session.StartedAt,
 			EndedAt:       endedAt,
 			DurationSecs:  int64(endedAt.Sub(session.StartedAt).Seconds()),

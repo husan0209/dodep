@@ -21,16 +21,44 @@ func NewCasinoHTTPHandler(svc *service.CasinoService, log *zap.Logger) *CasinoHT
 }
 
 // GetGames GET /api/v1/casino/games
+// Page-size bounds for the list endpoints.
+const (
+	defaultPageLimit int32 = 50
+	maxPageLimit     int32 = 200
+)
+
+// parseBoundedInt32 reads a pagination parameter and clamps it into [min, max].
+//
+// The values used to go through strconv.Atoi and straight into an int32, so a
+// caller could supply anything int can hold and have it wrap (gosec G109/G115),
+// turning "limit=-1" or "limit=99999999999" into an arbitrary page size.
+func parseBoundedInt32(raw string, def, min, max int32) int32 {
+	v, err := strconv.Atoi(raw)
+	if err != nil {
+		return def
+	}
+	switch {
+	case int64(v) < int64(min):
+		return min
+	case int64(v) > int64(max):
+		return max
+	default:
+		//#nosec G109,G115 -- the switch above already rejected anything
+		// outside [min, max]; gosec cannot see the clamp.
+		return int32(v) //#nosec G109,G115
+	}
+}
+
 func (h *CasinoHTTPHandler) GetGames(c *fiber.Ctx) error {
-	limit, _ := strconv.Atoi(c.Query("limit", "50"))
-	offset, _ := strconv.Atoi(c.Query("offset", "0"))
+	limit := parseBoundedInt32(c.Query("limit", "50"), defaultPageLimit, 1, maxPageLimit)
+	offset := parseBoundedInt32(c.Query("offset", "0"), 0, 0, 1_000_000)
 	providerID := c.Query("provider")
 	category := c.Query("category")
 	search := c.Query("search")
 
 	opts := service.GetGamesOptions{
-		Limit:  int32(limit),
-		Offset: int32(offset),
+		Limit:  limit,
+		Offset: offset,
 	}
 	if providerID != "" {
 		opts.ProviderID = &providerID
@@ -142,13 +170,13 @@ func (h *CasinoHTTPHandler) GetHistory(c *fiber.Ctx) error {
 		return c.Status(401).JSON(fiber.Map{"error": "unauthorized"})
 	}
 
-	limit, _ := strconv.Atoi(c.Query("limit", "20"))
-	offset, _ := strconv.Atoi(c.Query("offset", "0"))
+	limit := parseBoundedInt32(c.Query("limit", "20"), 20, 1, maxPageLimit)
+	offset := parseBoundedInt32(c.Query("offset", "0"), 0, 0, 1_000_000)
 
 	result, err := h.svc.GetGameHistory(c.Context(), service.GetGameHistoryOptions{
 		UserID: userID,
-		Limit:  int32(limit),
-		Offset: int32(offset),
+		Limit:  limit,
+		Offset: offset,
 	})
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{"error": err.Error()})

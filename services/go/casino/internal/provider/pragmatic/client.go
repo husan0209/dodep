@@ -2,7 +2,7 @@ package pragmatic
 
 import (
 	"context"
-	"crypto/md5" //nolint:gosec // Pragmatic Play requires MD5 for hash parameter
+	"crypto/md5" //#nosec G501 -- Pragmatic Play mandates MD5 for the hash parameter.
 	"encoding/json"
 	"fmt"
 	"io"
@@ -194,8 +194,9 @@ func (c *Client) buildParams(kv map[string]string) url.Values {
 	}
 	sb.WriteString(c.cfg.SecretKey)
 
-	//nolint:gosec // Pragmatic Play specifies MD5 — cannot be changed
-	hash := fmt.Sprintf("%x", md5.Sum([]byte(sb.String())))
+	//#nosec G401 -- Pragmatic Play specifies an MD5 `hash` parameter; the scheme is
+	// fixed by the provider and cannot be changed.
+	hash := fmt.Sprintf("%x", md5.Sum([]byte(sb.String()))) //#nosec G401
 	params.Set("hash", hash)
 
 	return params

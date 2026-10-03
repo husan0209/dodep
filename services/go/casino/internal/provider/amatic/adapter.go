@@ -2,7 +2,7 @@ package amatic
 
 import (
 	"context"
-	"crypto/md5" //nolint:gosec // Amatic specifies MD5
+	"crypto/md5" //#nosec G501 -- Amatic mandates MD5 for callback signatures.
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -103,8 +103,10 @@ func (a *Adapter) VerifyCallbackSignature(body []byte, _ map[string]string) bool
 	txID, _ := params["transactionId"].(string)
 
 	input := a.cfg.APIPassword + a.cfg.OperatorID + playerID + txID
-	//nolint:gosec
-	expected := fmt.Sprintf("%x", md5.Sum([]byte(input)))
+	//#nosec G401 -- Amatic specifies an MD5 digest for the callback signature; the
+	// scheme is fixed by the provider, so this is interoperability rather than
+	// a choice of primitive.
+	expected := fmt.Sprintf("%x", md5.Sum([]byte(input))) //#nosec G401
 
 	if !strings.EqualFold(expected, receivedKey) {
 		a.log.Warn("Amatic: key mismatch")
@@ -178,6 +180,6 @@ func (a *Adapter) mapMethod(m string) provider.CallbackEventType {
 
 // sign generates MD5(api_password + data).
 func (a *Adapter) sign(data string) string {
-	//nolint:gosec
-	return fmt.Sprintf("%x", md5.Sum([]byte(a.cfg.APIPassword+data)))
+	//#nosec G401 -- provider-mandated MD5 signature, see verifyKey above.
+	return fmt.Sprintf("%x", md5.Sum([]byte(a.cfg.APIPassword+data))) //#nosec G401
 }

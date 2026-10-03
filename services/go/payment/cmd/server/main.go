@@ -441,6 +441,12 @@ func startMetricsServer(ctx context.Context, cfg *config.Config) error {
 	server := &http.Server{
 		Addr:    ":9104",
 		Handler: mux,
+		// Without a header deadline a client can hold a connection open
+		// indefinitely by dribbling headers (Slowloris, gosec G112). The
+		// metrics endpoint is scraped, so a short one is plenty.
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      30 * time.Second,
 	}
 
 	log.Info().Str("addr", ":9104").Msg("Starting metrics server")

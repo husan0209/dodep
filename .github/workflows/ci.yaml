@@ -26,7 +26,12 @@ env:
   #
   # Do not lower this without re-running that metadata query.
   RUST_VERSION: "1.88"
-  GO_VERSION: "1.21"
+  # Must be >= 1.25.13. The services declare go 1.25.0 (pgx 5.11 requires
+  # it), and with GO_VERSION 1.21 the toolchain switch happens mid-run:
+  #   ?   github.com/opus-casino/user [no test files]
+  #   go: no such tool "covdata"
+  # because the coverage tool is then looked up in the 1.21 GOROOT.
+  GO_VERSION: "1.25.13"
   PYTHON_VERSION: "3.11"
   NODE_VERSION: "20"
 

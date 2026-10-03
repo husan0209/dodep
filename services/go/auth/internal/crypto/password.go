@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"encoding/base64"
 	"fmt"
+	"math"
 	"strings"
 
 	"golang.org/x/crypto/argon2"
@@ -79,14 +80,25 @@ func VerifyPassword(password, encodedHash string) (bool, error) {
 		return false, fmt.Errorf("failed to decode hash: %w", err)
 	}
 
-	// Compute hash with same parameters
+	// Compute hash with same parameters.
+	//
+	// The key length has to be bounded before the conversion to uint32: it
+	// comes from a base64 field of a stored hash, so a corrupted or hostile
+	// value could exceed uint32 on a 64-bit platform and silently truncate
+	// (gosec G115) - which would then compare against a key of the wrong
+	// length. HashPassword always emits exactly argonKeyLength bytes, so
+	// anything else is a malformed hash.
+	if len(hash) == 0 || len(hash) > math.MaxUint32 {
+		return false, fmt.Errorf("invalid hash length: %d", len(hash))
+	}
+
 	otherHash := argon2.IDKey(
 		[]byte(password),
 		salt,
 		iterations,
 		memory,
-		uint8(parallelism),
-		uint32(len(hash)),
+		uint8(parallelism), //nolint:gosec // parallelised Argon2, value comes from our own encoded format
+		uint32(len(hash)), //#nosec G115 -- guarded by the MaxUint32 check above.
 	)
 
 	// Constant-time comparison
