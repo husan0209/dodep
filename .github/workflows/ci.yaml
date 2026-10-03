@@ -22,6 +22,10 @@ jobs:
   rust-build:
     runs-on: ubuntu-latest
     strategy:
+      # Report every service instead of cancelling the siblings on the first
+      # failure: branch protection requires all three checks anyway, and a
+      # cancelled sibling hides the actual error.
+      fail-fast: false
       matrix:
         service: [betting-engine, wallet-core, websocket-gateway]
     defaults:
@@ -66,6 +70,7 @@ jobs:
   go-build:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         service: [auth, user, payment, bonus, casino, notification, kyc]
     defaults:
@@ -109,6 +114,7 @@ jobs:
   python-build:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         service: [fraud-ml, analytics]
     defaults:
@@ -150,6 +156,7 @@ jobs:
   frontend-build:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         app: [web, admin]
     defaults:
