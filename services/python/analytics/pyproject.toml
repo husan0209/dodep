@@ -82,7 +82,7 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-python_files = "test_*.py"]
+python_files = "test_*.py"
 # The service root holds `src/`, and the tests import through it
 # (`from src.analytics.main import app`). CI invokes the `pytest` console
 # script, which does not put the invocation directory on sys.path, so this has
