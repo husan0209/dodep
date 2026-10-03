@@ -25,9 +25,14 @@ imbalanced-learn==0.12.0
 # These were only declared in pyproject.toml, so `pip install -r requirements.txt`
 # produced an environment in which src/export/onnx_export.py, src/models/
 # fraud_model.py and tests/test_export.py could not even be imported.
-onnx==1.17.0
+# onnx 1.17.0 carries 16 advisories. 1.22.0 is the first release pip-audit
+# reports clean, and also the newest that still accepts numpy 1.x - 1.23
+# requires numpy>=2, which pandas 2.2.0 does not support on Python 3.11.
+onnx==1.22.0
 onnxruntime==1.20.1
-skl2onnx==1.17.0
+# onnxmltools is the converter for XGBoost/LightGBM -> ONNX. skl2onnx has no
+# XGBoost converter, so FraudModel.export_onnx could never have worked with it.
+onnxmltools==1.16.0
 
 # Data Processing
 pandas==2.2.0

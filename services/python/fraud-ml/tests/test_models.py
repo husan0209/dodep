@@ -4,6 +4,7 @@ import numpy as np
 import polars as pl
 import pytest
 
+from src.features.transformation import FEATURE_REGISTRY
 from src.models.fraud_model import FraudModel
 
 
@@ -12,7 +13,15 @@ class TestFraudModel:
 
     @pytest.fixture
     def sample_data(self):
-        """Create sample training data."""
+        """Create sample training data.
+
+        The label has to be learnable from the feature columns, otherwise the
+        assertion that training beats a random guess cannot hold: the label used
+        to be an independent coin flip, so the best achievable AUC was 0.5 and
+        the test failed roughly half the time. The risk score below is built
+        from columns the model actually receives, and the top 5% are labelled
+        fraud, which keeps the ~5% positive rate the real service sees.
+        """
         np.random.seed(42)
         n_samples = 1000
 
@@ -37,8 +46,16 @@ class TestFraudModel:
             "multi_ip": np.random.randint(0, 2, n_samples),
             "high_roller": np.random.randint(0, 2, n_samples),
             "rapid_bettor": np.random.randint(0, 2, n_samples),
-            "is_fraud": np.random.choice([0, 1], n_samples, p=[0.95, 0.05]),
         }
+
+        risk_score = (
+            2.0 * data["device_count_30d"]
+            + 1.5 * data["ip_count_30d"]
+            + data["bet_cv_30d"]
+            + 2.0 * data["rapid_bettor"]
+            + 0.5 * data["high_roller"]
+        )
+        data["is_fraud"] = (risk_score >= np.quantile(risk_score, 0.95)).astype(int)
 
         return pl.DataFrame(data)
 
@@ -50,8 +67,13 @@ class TestFraudModel:
     def test_model_initialization(self, model):
         """Test model initializes correctly."""
         assert model.model is None
-        assert len(model.FEATURE_COLUMNS) == 18
+        # The feature registry grew since this assertion was written; pin the
+        # count to the registry it is derived from rather than to a stale number.
+        assert len(model.FEATURE_COLUMNS) == len(FEATURE_REGISTRY)
+        assert "bets_7d" in model.FEATURE_COLUMNS
+        assert "high_roller" in model.FEATURE_COLUMNS
         assert model.TARGET_COLUMN == "is_fraud"
+        assert model.TARGET_COLUMN not in model.FEATURE_COLUMNS
 
     def test_model_training(self, model, sample_data):
         """Test model training."""

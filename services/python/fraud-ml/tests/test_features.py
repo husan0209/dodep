@@ -41,6 +41,10 @@ class TestFeatureExtractor:
                 "settled_7d": [10, 20],
                 "std_bet_30d": [50.0, 100.0],
                 "avg_bet_30d": [100.0, 200.0],
+                "total_deposit_30d": [500.0, 1000.0],
+                "bets_7d": [10, 20],
+                "bets_24h": [2, 3],
+                "max_bet_30d": [500.0, 4000.0],
                 "device_count_30d": [5, 2],
                 "ip_count_30d": [15, 5],
             }
@@ -50,16 +54,27 @@ class TestFeatureExtractor:
 
         assert "win_rate_7d" in derived.columns
         assert "bet_cv_30d" in derived.columns
+        assert "deposit_bet_ratio" in derived.columns
         assert "multi_device" in derived.columns
         assert "multi_ip" in derived.columns
+        assert "high_roller" in derived.columns
+        assert "rapid_bettor" in derived.columns
 
         # Check win rate calculation
         assert derived["win_rate_7d"][0] == 0.5
         assert derived["win_rate_7d"][1] == 0.5
 
+        # Coefficient of variation = std / mean bet
+        assert derived["bet_cv_30d"][0] == 0.5
+        assert derived["bet_cv_30d"][1] == 0.5
+
         # Check multi-device indicator
         assert derived["multi_device"][0] == 1  # 5 > 3
         assert derived["multi_device"][1] == 0  # 2 <= 3
+
+        # Check multi-IP indicator
+        assert derived["multi_ip"][0] == 1  # 15 > 10
+        assert derived["multi_ip"][1] == 0  # 5 <= 10
 
     def test_extract_training_data(self, extractor):
         """Test training data extraction."""

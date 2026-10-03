@@ -70,9 +70,21 @@ class TestOnnxExport:
         session = ort.InferenceSession(str(onnx_path))
         input_name = session.get_inputs()[0].name
 
-        # Test inference
-        test_input = np.random.randn(5, 18).astype(np.float32)
-        output = session.run(None, {input_name: test_input})
+        # The input width has to follow the feature registry. It was hardcoded to
+        # 18 here, which broke as soon as a feature was added: the exported graph
+        # declares [None, len(FEATURE_COLUMNS)] = [None, 20] and onnxruntime
+        # rejected the call with "Got invalid dimensions for input: features".
+        n_features = len(trained_model.FEATURE_COLUMNS)
+        assert session.get_inputs()[0].shape == [None, n_features]
 
-        assert len(output) == 1
-        assert output[0].shape == (5, 2)  # 5 samples, 2 classes
+        test_input = np.random.randn(5, n_features).astype(np.float32)
+        outputs = session.run(None, {input_name: test_input})
+
+        # The XGBClassifier graph exposes two outputs: labels then probabilities.
+        assert len(outputs) == 2
+
+        labels, probabilities = outputs
+        assert labels.shape == (5,)
+        assert probabilities.shape == (5, 2)
+        # Probability rows must be a distribution.
+        np.testing.assert_allclose(probabilities.sum(axis=1), np.ones(5), rtol=1e-5)

@@ -59,8 +59,12 @@ def calculate_metrics(
         # Discrimination
         "auc_roc": float(auc),
         "avg_precision": float(ap),
-        # Threshold-based
-        f"precision_at_{target_recall*100}_recall": float(precision_at_recall),
+        # Threshold-based.
+        # The percentage is rounded to an int: interpolating the float directly
+        # produced "precision_at_90.0_recall", while compare_models,
+        # validate_quality_gates and the stored metrics all read the key
+        # "precision_at_90_recall", so the gate raised KeyError on every run.
+        f"precision_at_{round(target_recall * 100):d}_recall": float(precision_at_recall),
         "threshold": float(threshold),
         # Confusion matrix
         "true_positives": int(cm[1, 1]),

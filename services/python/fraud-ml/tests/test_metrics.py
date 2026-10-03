@@ -49,10 +49,12 @@ class TestMetrics:
         passed, failures = validate_quality_gates(
             metrics,
             auc_threshold=0.5,
-            precision_threshold=0.1,
+            precision_threshold=0.01,
         )
 
-        # With lenient thresholds, should pass
+        # With lenient thresholds, should pass. The floor has to sit below what this
+        # fixture actually scores (Prec@90R is ~0.07), otherwise the test asserts
+        # a gate outcome the sample data cannot produce.
         assert passed is True
         assert len(failures) == 0
 
