@@ -12,10 +12,10 @@ import (
 
 // ExchangeRateService handles exchange rate retrieval with caching
 type ExchangeRateService struct {
-	rateRepo  repository.ExchangeRateRepository
-	npClient  *client.NOWPaymentsClient
-	logger    *zap.Logger
-	cacheTTL  int // Cache TTL in seconds
+	rateRepo repository.ExchangeRateRepository
+	npClient *client.NOWPaymentsClient
+	logger   *zap.Logger
+	cacheTTL int // Cache TTL in seconds
 }
 
 // ExchangeRateConfig holds configuration for the exchange rate service

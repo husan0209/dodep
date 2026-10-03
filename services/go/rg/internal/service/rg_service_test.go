@@ -510,19 +510,22 @@ func TestSetLimitsValidation(t *testing.T) {
 func TestSelfExclusionLifecycle(t *testing.T) {
 	svc, _ := newTestService()
 	ctx := context.Background()
-	for _, p := range []domain.ExclusionPeriod{domain.Exclusion24H, domain.Exclusion7D, domain.Exclusion30D, domain.Exclusion6M, domain.Exclusion1Y} {
-		excl, err := svc.StartSelfExclusion(ctx, StartSelfExclusionInput{UserID: 10, Period: p, Type: domain.ExclusionSelf, By: "self"})
+	// Every period is exercised, each against its own user so the "already excluded"
+	// check below is meaningful. The previous version looped over the periods but
+	// `break`ed after the first one, so only Exclusion24H was ever covered.
+	for i, p := range []domain.ExclusionPeriod{domain.Exclusion24H, domain.Exclusion7D, domain.Exclusion30D, domain.Exclusion6M, domain.Exclusion1Y} {
+		userID := int64(100 + i)
+		excl, err := svc.StartSelfExclusion(ctx, StartSelfExclusionInput{UserID: userID, Period: p, Type: domain.ExclusionSelf, By: "self"})
 		if err != nil {
 			t.Fatalf("period %s failed: %v", p, err)
 		}
 		if excl.Permanent || excl.Until == nil {
 			t.Fatalf("period %s must be temporary with until", p)
 		}
-		// Second exclusion while active must fail; reset by expiring manually.
-		if _, err := svc.StartSelfExclusion(ctx, StartSelfExclusionInput{UserID: 10, Period: p, Type: domain.ExclusionSelf}); !errors.Is(err, domain.ErrExclusionExists) {
-			t.Fatalf("duplicate must fail: %v", err)
+		// Second exclusion while active must fail.
+		if _, err := svc.StartSelfExclusion(ctx, StartSelfExclusionInput{UserID: userID, Period: p, Type: domain.ExclusionSelf}); !errors.Is(err, domain.ErrExclusionExists) {
+			t.Fatalf("duplicate must fail for period %s: %v", p, err)
 		}
-		break // one iteration is enough; duplicates covered
 	}
 	if _, err := svc.StartSelfExclusion(ctx, StartSelfExclusionInput{UserID: 11, Period: "2y", Type: domain.ExclusionSelf}); err == nil {
 		t.Error("invalid period must be rejected")

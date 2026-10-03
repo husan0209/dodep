@@ -117,8 +117,13 @@ func (s *WebhookService) ProcessDepositWebhook(ctx context.Context, req ProcessW
 		}
 	}
 
-	// Mark as processed
-	s.idempotencyRepo.Set(ctx, idempotencyKey, []byte("processed"), 86400)
+	// Mark as processed.
+	// Best-effort: if the idempotency key is not stored the provider may replay this
+	// webhook, and the handlers above are written to be replay-safe, so this must not
+	// fail the request after the money movement already succeeded.
+	if err := s.idempotencyRepo.Set(ctx, idempotencyKey, []byte("processed"), 86400); err != nil {
+		log.Error().Err(err).Msg("Failed to store idempotency key")
+	}
 
 	// Log audit
 	var outcomeAmount *decimal.Decimal
@@ -183,8 +188,10 @@ func (s *WebhookService) ProcessWithdrawalWebhook(ctx context.Context, req Proce
 		}
 	}
 
-	// Mark as processed
-	s.idempotencyRepo.Set(ctx, idempotencyKey, []byte("processed"), 86400)
+	// Mark as processed (best-effort; see the deposit path for rationale).
+	if err := s.idempotencyRepo.Set(ctx, idempotencyKey, []byte("processed"), 86400); err != nil {
+		log.Error().Err(err).Msg("Failed to store idempotency key")
+	}
 
 	// Log audit
 	s.logAudit(ctx, withdrawal.UserID, "withdrawal", withdrawal.ID, withdrawal.WithdrawalID, string(withdrawal.Status), string(newStatus), nil)
@@ -221,7 +228,11 @@ func (s *WebhookService) handleDepositFinished(ctx context.Context, payment *dom
 
 	// Update actual amount if different
 	if !payload.OutcomeAmount.IsZero() && !payload.OutcomeAmount.Equal(payment.RequestedAmount) {
-		s.paymentRepo.UpdateActualAmount(ctx, payment.ID, payload.OutcomeAmount)
+		// Recording what the provider actually paid is reconciliation metadata, not a
+		// settlement step, so a write failure is logged rather than propagated.
+		if err := s.paymentRepo.UpdateActualAmount(ctx, payment.ID, payload.OutcomeAmount); err != nil {
+			log.Error().Err(err).Msg("Failed to record actual amount")
+		}
 	}
 
 	log.Info().
@@ -300,15 +311,15 @@ func (s *WebhookService) handleWithdrawalFailed(ctx context.Context, withdrawal 
 // mapPaymentStatus maps NOWPayments status to domain status
 func (s *WebhookService) mapPaymentStatus(status string) domain.PaymentStatus {
 	statusMap := map[string]domain.PaymentStatus{
-		"waiting":       domain.PaymentStatusWaiting,
-		"confirming":    domain.PaymentStatusConfirming,
-		"confirmed":     domain.PaymentStatusConfirmed,
-		"sending":       domain.PaymentStatusSending,
+		"waiting":        domain.PaymentStatusWaiting,
+		"confirming":     domain.PaymentStatusConfirming,
+		"confirmed":      domain.PaymentStatusConfirmed,
+		"sending":        domain.PaymentStatusSending,
 		"partially_paid": domain.PaymentStatusPartiallyPaid,
-		"finished":      domain.PaymentStatusFinished,
-		"failed":        domain.PaymentStatusFailed,
-		"expired":       domain.PaymentStatusExpired,
-		"refunded":      domain.PaymentStatusRefunded,
+		"finished":       domain.PaymentStatusFinished,
+		"failed":         domain.PaymentStatusFailed,
+		"expired":        domain.PaymentStatusExpired,
+		"refunded":       domain.PaymentStatusRefunded,
 	}
 	if s, ok := statusMap[status]; ok {
 		return s

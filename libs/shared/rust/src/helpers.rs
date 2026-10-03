@@ -51,7 +51,7 @@ pub fn compare_money(a: &Money, b: &Money) -> Result<i8, String> {
             a.currency, b.currency
         ));
     }
-    
+
     Ok(if a.amount < b.amount {
         -1
     } else if a.amount > b.amount {
@@ -96,23 +96,23 @@ where
 {
     let mut delay = initial_delay_ms;
     let mut last_error: Option<E> = None;
-    
+
     for attempt in 0..=max_retries {
         match operation() {
             Ok(result) => return Ok(result),
             Err(error) => {
                 last_error = Some(error);
-                
+
                 if attempt == max_retries {
                     break;
                 }
-                
+
                 tokio::time::sleep(Duration::from_millis(delay)).await;
                 delay = (delay as f64 * multiplier).min(max_delay_ms as f64) as u64;
             }
         }
     }
-    
+
     Err(last_error.unwrap())
 }
 
@@ -130,17 +130,17 @@ impl Debouncer {
             delay,
         }
     }
-    
+
     pub fn should_allow(&self) -> bool {
         let now = std::time::Instant::now();
         let mut last_call = self.last_call.lock().unwrap();
-        
+
         if let Some(last) = *last_call {
             if now.duration_since(last) < self.delay {
                 return false;
             }
         }
-        
+
         *last_call = Some(now);
         true
     }
@@ -159,17 +159,17 @@ impl Throttler {
             limit,
         }
     }
-    
+
     pub fn should_allow(&self) -> bool {
         let now = std::time::Instant::now();
         let mut last_execution = self.last_execution.lock().unwrap();
-        
+
         if let Some(last) = *last_execution {
             if now.duration_since(last) < self.limit {
                 return false;
             }
         }
-        
+
         *last_execution = Some(now);
         true
     }
@@ -220,7 +220,10 @@ pub fn clamp_decimal(value: Decimal, min: Decimal, max: Decimal) -> Decimal {
 /// Money rounding must not differ between services, so the strategy is set
 /// explicitly here instead of relying on the crate default.
 pub fn round_decimal(value: Decimal, precision: u32) -> Decimal {
-    value.round_dp_with_strategy(precision, rust_decimal::RoundingStrategy::MidpointAwayFromZero)
+    value.round_dp_with_strategy(
+        precision,
+        rust_decimal::RoundingStrategy::MidpointAwayFromZero,
+    )
 }
 
 #[cfg(test)]
@@ -343,14 +346,25 @@ mod tests {
             Decimal::new(10, 0)
         );
         assert_eq!(
-            clamp_decimal(Decimal::new(25, 0), Decimal::new(10, 0), Decimal::new(20, 0)),
+            clamp_decimal(
+                Decimal::new(25, 0),
+                Decimal::new(10, 0),
+                Decimal::new(20, 0)
+            ),
             Decimal::new(20, 0)
         );
         assert_eq!(
-            clamp_decimal(Decimal::new(15, 0), Decimal::new(10, 0), Decimal::new(20, 0)),
+            clamp_decimal(
+                Decimal::new(15, 0),
+                Decimal::new(10, 0),
+                Decimal::new(20, 0)
+            ),
             Decimal::new(15, 0)
         );
-        assert_eq!(round_decimal(Decimal::new(2345, 3), 2), Decimal::new(235, 2));
+        assert_eq!(
+            round_decimal(Decimal::new(2345, 3), 2),
+            Decimal::new(235, 2)
+        );
     }
 
     #[test]
@@ -359,7 +373,9 @@ mod tests {
         struct Doc {
             tags: Vec<String>,
         }
-        let src = Doc { tags: vec!["a".into()] };
+        let src = Doc {
+            tags: vec!["a".into()],
+        };
         let mut cloned = deep_clone(&src).unwrap();
         cloned.tags[0] = "mutated".into();
         assert_eq!(src.tags[0], "a", "clone must not share memory");

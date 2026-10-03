@@ -112,8 +112,8 @@ func TestDatabaseMethods_ReturnErrorWhenDatabaseIsNil(t *testing.T) {
 	}
 
 	settings := &NotificationSettings{
-		UserID:      1,
-		UpdatedAt:   time.Now(),
+		UserID:          1,
+		UpdatedAt:       time.Now(),
 		TypePreferences: map[string]ChannelPreferences{},
 	}
 	if err := repo.UpdateNotificationSettings(ctx, settings); err == nil {

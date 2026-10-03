@@ -13,13 +13,13 @@ import (
 )
 
 var (
-	uuidRegex       = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
-	emailRegex      = regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`)
-	phoneRegex      = regexp.MustCompile(`^\+[1-9]\d{1,14}$`)
-	amountRegex     = regexp.MustCompile(`^\d+(\.\d{1,2})?$`)
-	oddsRegex       = regexp.MustCompile(`^\d+(\.\d+)?$`)
-	usernameRegex   = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_]{2,19}$`)
-	isoDateRegex    = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
+	uuidRegex     = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
+	emailRegex    = regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`)
+	phoneRegex    = regexp.MustCompile(`^\+[1-9]\d{1,14}$`)
+	amountRegex   = regexp.MustCompile(`^\d+(\.\d{1,2})?$`)
+	oddsRegex     = regexp.MustCompile(`^\d+(\.\d+)?$`)
+	usernameRegex = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_]{2,19}$`)
+	isoDateRegex  = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
 )
 
 // IsValidUUID validates UUID v4

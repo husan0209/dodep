@@ -126,11 +126,11 @@ func NewIntegrationService(
 	log *zap.Logger,
 ) *IntegrationService {
 	return &IntegrationService{
-		registry:    registry,
-		wallet:      wallet,
+		registry:     registry,
+		wallet:       wallet,
 		playerMapper: playerMapper,
-		idempotency: rdb,
-		log:         log,
+		idempotency:  rdb,
+		log:          log,
 	}
 }
 

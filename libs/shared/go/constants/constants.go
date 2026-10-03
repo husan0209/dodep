@@ -3,20 +3,20 @@ package constants
 
 // Currency codes (ISO 4217)
 var Currencies = map[string]string{
-	"USD": "USD",
-	"EUR": "EUR",
-	"GBP": "GBP",
-	"RUB": "RUB",
-	"BRL": "BRL",
-	"INR": "INR",
-	"JPY": "JPY",
-	"CNY": "CNY",
-	"KRW": "KRW",
-	"CAD": "CAD",
-	"AUD": "AUD",
-	"CHF": "CHF",
-	"BTC": "BTC",
-	"ETH": "ETH",
+	"USD":  "USD",
+	"EUR":  "EUR",
+	"GBP":  "GBP",
+	"RUB":  "RUB",
+	"BRL":  "BRL",
+	"INR":  "INR",
+	"JPY":  "JPY",
+	"CNY":  "CNY",
+	"KRW":  "KRW",
+	"CAD":  "CAD",
+	"AUD":  "AUD",
+	"CHF":  "CHF",
+	"BTC":  "BTC",
+	"ETH":  "ETH",
 	"USDT": "USDT",
 }
 
@@ -41,39 +41,39 @@ var RestrictedCountries = []string{
 // RateLimits defines rate limiting constants
 var RateLimits = struct {
 	// Authentication
-	LoginAttempts       uint32
-	LoginWindowMs       uint64
+	LoginAttempts uint32
+	LoginWindowMs uint64
 	// API
 	APIRequestsPerMinute uint32
 	APIRequestsPerHour   uint32
 	// Betting
-	BetsPerSecond       uint32
+	BetsPerSecond uint32
 	// Withdrawal
 	WithdrawalRequestsPerDay uint32
 	// Password reset
-	PasswordResetPerHour   uint32
+	PasswordResetPerHour uint32
 	// 2FA
-	TOTPWindowSeconds     uint64
-	TOTPMaxAttempts       uint32
+	TOTPWindowSeconds uint64
+	TOTPMaxAttempts   uint32
 }{
-	LoginAttempts:              5,
-	LoginWindowMs:              15 * 60 * 1000,
-	APIRequestsPerMinute:       100,
-	APIRequestsPerHour:         1000,
-	BetsPerSecond:              10,
-	WithdrawalRequestsPerDay:   5,
-	PasswordResetPerHour:       3,
-	TOTPWindowSeconds:          30,
-	TOTPMaxAttempts:            5,
+	LoginAttempts:            5,
+	LoginWindowMs:            15 * 60 * 1000,
+	APIRequestsPerMinute:     100,
+	APIRequestsPerHour:       1000,
+	BetsPerSecond:            10,
+	WithdrawalRequestsPerDay: 5,
+	PasswordResetPerHour:     3,
+	TOTPWindowSeconds:        30,
+	TOTPMaxAttempts:          5,
 }
 
 // BetLimits defines betting limit constants
 var BetLimits = struct {
-	MinStake        string
-	MaxStake        string
+	MinStake         string
+	MaxStake         string
 	MaxWinMultiplier uint32
-	MaxOdds         string
-	MinOdds         string
+	MaxOdds          string
+	MinOdds          string
 }{
 	MinStake:         "0.10",
 	MaxStake:         "10000.00",
@@ -84,10 +84,10 @@ var BetLimits = struct {
 
 // PaymentLimits defines payment limit constants
 var PaymentLimits = struct {
-	MinDeposit          string
-	MaxDepositDaily     string
-	MinWithdrawal       string
-	MaxWithdrawalDaily  string
+	MinDeposit           string
+	MaxDepositDaily      string
+	MinWithdrawal        string
+	MaxWithdrawalDaily   string
 	MaxWithdrawalMonthly string
 }{
 	MinDeposit:           "1.00",
@@ -120,19 +120,19 @@ var ErrorCodes = struct {
 	Auth2FAInvalid         string
 	AuthAccountLocked      string
 	// Wallet (5000-5999)
-	WalletNotFound            string
-	InsufficientBalance       string
+	WalletNotFound               string
+	InsufficientBalance          string
 	InsufficientAvailableBalance string
 	// Bet (7000-7999)
-	BetNotFound        string
-	BetInvalid         string
-	BetAlreadySettled  string
-	BetLimitExceeded   string
-	BetOddsChanged     string
+	BetNotFound       string
+	BetInvalid        string
+	BetAlreadySettled string
+	BetLimitExceeded  string
+	BetOddsChanged    string
 	// System (11000-11999)
-	InternalError         string
-	ServiceUnavailable    string
-	RateLimitExceeded     string
+	InternalError      string
+	ServiceUnavailable string
+	RateLimitExceeded  string
 }{
 	AuthInvalidCredentials:       "AUTH_1001",
 	AuthTokenExpired:             "AUTH_1002",

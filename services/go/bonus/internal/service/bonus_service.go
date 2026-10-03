@@ -33,9 +33,9 @@ func DefaultBonusConfig() BonusConfig {
 
 // BonusService handles bonus business logic.
 type BonusService struct {
-	db   *gorm.DB
-	cfg  BonusConfig
-	log  *zap.Logger
+	db  *gorm.DB
+	cfg BonusConfig
+	log *zap.Logger
 }
 
 // NewBonusService creates a new bonus service.

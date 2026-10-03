@@ -50,8 +50,8 @@ type Adapter struct {
 // New creates a PG Soft adapter.
 func New(cfg Config, log *zap.Logger) *Adapter {
 	return &Adapter{
-		cfg: cfg,
-		log: log,
+		cfg:        cfg,
+		log:        log,
 		httpClient: &http.Client{Timeout: cfg.HTTPTimeout},
 	}
 }
@@ -100,7 +100,7 @@ func (a *Adapter) BuildLaunchURL(ctx context.Context, req provider.LaunchRequest
 	if err != nil {
 		return "", fmt.Errorf("pgsoft: launch url http: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, _ := io.ReadAll(resp.Body)
 
@@ -138,21 +138,21 @@ func (a *Adapter) GetGames(ctx context.Context) ([]provider.ProviderGame, error)
 	if err != nil {
 		return nil, fmt.Errorf("pgsoft: games http: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, _ := io.ReadAll(resp.Body)
 
 	var result struct {
 		Data []struct {
-			GameID      string   `json:"game_id"`
-			Name        string   `json:"name"`
-			Category    string   `json:"category"`
-			RTP         float64  `json:"rtp"`
-			Currencies  []string `json:"currencies"`
-			ImageURL    string   `json:"image_url"`
-			IsDemo      bool     `json:"is_demo"`
-			HasJackpot  bool     `json:"has_jackpot"`
-			HasFreeGame bool     `json:"has_free_game"`
+			GameID      string          `json:"game_id"`
+			Name        string          `json:"name"`
+			Category    string          `json:"category"`
+			RTP         float64         `json:"rtp"`
+			Currencies  []string        `json:"currencies"`
+			ImageURL    string          `json:"image_url"`
+			IsDemo      bool            `json:"is_demo"`
+			HasJackpot  bool            `json:"has_jackpot"`
+			HasFreeGame bool            `json:"has_free_game"`
 			MinBet      decimal.Decimal `json:"min_bet"`
 			MaxBet      decimal.Decimal `json:"max_bet"`
 		} `json:"data"`
@@ -206,17 +206,17 @@ func (a *Adapter) VerifyCallbackSignature(body []byte, headers map[string]string
 
 // pgsoftCallback is the inbound wallet API callback from PG Soft.
 type pgsoftCallback struct {
-	OperatorToken   string          `json:"operator_token"`
-	PlayerToken     string          `json:"player_token"`
-	GameID          string          `json:"game_id"`
-	BetID           string          `json:"bet_id"`
-	RoundID         string          `json:"round_id"`
-	TransactionID   string          `json:"transaction_id"`
-	RefTransactionID string         `json:"ref_transaction_id,omitempty"`
-	Type            string          `json:"type"` // "BET","WIN","CANCEL","FREE_ROUNDS_ACCEPTED","FREE_ROUNDS_CANCEL"
-	Amount          decimal.Decimal `json:"amount"`
-	Currency        string          `json:"currency"`
-	Timestamp       int64           `json:"timestamp"`
+	OperatorToken    string          `json:"operator_token"`
+	PlayerToken      string          `json:"player_token"`
+	GameID           string          `json:"game_id"`
+	BetID            string          `json:"bet_id"`
+	RoundID          string          `json:"round_id"`
+	TransactionID    string          `json:"transaction_id"`
+	RefTransactionID string          `json:"ref_transaction_id,omitempty"`
+	Type             string          `json:"type"` // "BET","WIN","CANCEL","FREE_ROUNDS_ACCEPTED","FREE_ROUNDS_CANCEL"
+	Amount           decimal.Decimal `json:"amount"`
+	Currency         string          `json:"currency"`
+	Timestamp        int64           `json:"timestamp"`
 }
 
 // ParseCallback parses a PG Soft wallet callback.

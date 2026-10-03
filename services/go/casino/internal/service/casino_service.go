@@ -24,11 +24,11 @@ type UserServiceClient interface {
 
 // CasinoService handles casino business logic
 type CasinoService struct {
-	repo      *repository.CasinoRepository
-	registry  *provider.Registry
-	wallet    WalletClient
-	userSvc   UserServiceClient
-	log       *zap.Logger
+	repo     *repository.CasinoRepository
+	registry *provider.Registry
+	wallet   WalletClient
+	userSvc  UserServiceClient
+	log      *zap.Logger
 }
 
 // NewCasinoService creates a new casino service.
@@ -50,27 +50,27 @@ func NewCasinoService(
 
 // Game represents a casino game
 type Game struct {
-	ID                  string                 `json:"id"`
-	Name                string                 `json:"name"`
-	ProviderID          string                 `json:"provider_id"`
-	ProviderName        string                 `json:"provider_name"`
-	Category            string                 `json:"category"`
-	Tags                []string               `json:"tags"`
-	Description         string                 `json:"description"`
-	ImageURL            string                 `json:"image_url"`
-	ThumbnailURL        string                 `json:"thumbnail_url"`
-	SupportedCurrencies []string               `json:"supported_currencies"`
-	MinBet              string                 `json:"min_bet"`
-	MaxBet              string                 `json:"max_bet"`
-	Features            GameFeatures           `json:"features"`
-	RTP                 float64                `json:"rtp"`
-	Volatility          string                 `json:"volatility"`
-	IsActive            bool                   `json:"is_active"`
-	IsDemoAvailable     bool                   `json:"is_demo_available"`
-	RestrictedCountries []string               `json:"restricted_countries"`
-	PopularityScore     int32                  `json:"popularity_score"`
-	ReleasedAt          time.Time              `json:"released_at"`
-	Metadata            map[string]string      `json:"metadata"`
+	ID                  string            `json:"id"`
+	Name                string            `json:"name"`
+	ProviderID          string            `json:"provider_id"`
+	ProviderName        string            `json:"provider_name"`
+	Category            string            `json:"category"`
+	Tags                []string          `json:"tags"`
+	Description         string            `json:"description"`
+	ImageURL            string            `json:"image_url"`
+	ThumbnailURL        string            `json:"thumbnail_url"`
+	SupportedCurrencies []string          `json:"supported_currencies"`
+	MinBet              string            `json:"min_bet"`
+	MaxBet              string            `json:"max_bet"`
+	Features            GameFeatures      `json:"features"`
+	RTP                 float64           `json:"rtp"`
+	Volatility          string            `json:"volatility"`
+	IsActive            bool              `json:"is_active"`
+	IsDemoAvailable     bool              `json:"is_demo_available"`
+	RestrictedCountries []string          `json:"restricted_countries"`
+	PopularityScore     int32             `json:"popularity_score"`
+	ReleasedAt          time.Time         `json:"released_at"`
+	Metadata            map[string]string `json:"metadata"`
 }
 
 // GameFeatures represents game features
@@ -147,12 +147,12 @@ type GetGamesResult struct {
 
 // GetGameHistoryOptions represents options for getting game history
 type GetGameHistoryOptions struct {
-	UserID    string
-	GameID    *string
-	DateFrom  *time.Time
-	DateTo    *time.Time
-	Limit     int32
-	Offset    int32
+	UserID   string
+	GameID   *string
+	DateFrom *time.Time
+	DateTo   *time.Time
+	Limit    int32
+	Offset   int32
 }
 
 // GetGameHistoryResult represents paginated game history result
@@ -535,16 +535,16 @@ type EndGameSessionResult struct {
 
 // GameSessionSummary represents a summary of a game session
 type GameSessionSummary struct {
-	SessionID     string
-	GameID        string
-	GameName      string
-	TotalBet      string
-	TotalWin      string
-	NetResult     string
-	RoundsPlayed  int32
-	StartedAt     time.Time
-	EndedAt       time.Time
-	DurationSecs  int64
+	SessionID    string
+	GameID       string
+	GameName     string
+	TotalBet     string
+	TotalWin     string
+	NetResult    string
+	RoundsPlayed int32
+	StartedAt    time.Time
+	EndedAt      time.Time
+	DurationSecs int64
 }
 
 // EndGameSession ends a game session
@@ -588,16 +588,16 @@ func (s *CasinoService) EndGameSession(ctx context.Context, req *EndGameSessionR
 	return &EndGameSessionResult{
 		Success: true,
 		Summary: &GameSessionSummary{
-			SessionID:     req.SessionID,
-			GameID:        session.GameID,
-			GameName:      session.GameID,
-			TotalBet:      totalBet,
-			TotalWin:      totalWin,
-			NetResult:     netResult,
-			RoundsPlayed:  int32(len(rounds)),
-			StartedAt:     session.StartedAt,
-			EndedAt:       endedAt,
-			DurationSecs:  int64(endedAt.Sub(session.StartedAt).Seconds()),
+			SessionID:    req.SessionID,
+			GameID:       session.GameID,
+			GameName:     session.GameID,
+			TotalBet:     totalBet,
+			TotalWin:     totalWin,
+			NetResult:    netResult,
+			RoundsPlayed: int32(len(rounds)),
+			StartedAt:    session.StartedAt,
+			EndedAt:      endedAt,
+			DurationSecs: int64(endedAt.Sub(session.StartedAt).Seconds()),
 		},
 	}, nil
 }

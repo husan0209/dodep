@@ -115,7 +115,7 @@ func (a *Adapter) VerifyCallbackSignature(body []byte, _ map[string]string) bool
 
 // amaticCallback maps to Amatic Cashier API callback fields.
 type amaticCallback struct {
-	Method        string          `json:"method"`        // "getBalance","withdraw","deposit","cancel"
+	Method        string          `json:"method"` // "getBalance","withdraw","deposit","cancel"
 	OperatorID    string          `json:"operatorId"`
 	PlayerID      string          `json:"playerId"`
 	SessionToken  string          `json:"sessionToken"`

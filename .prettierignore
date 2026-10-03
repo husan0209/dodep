@@ -1,0 +1,53 @@
+# Prettier must not try to parse files that are not valid in the language it infers.
+#
+# The CI "Lint" job ran `npm run format` (`nx format:write`, i.e. prettier --write) over
+# the whole repository. Helm charts and Argo CD ApplicationSets are Go templates, not
+# YAML, so prettier aborted with 30+ SyntaxErrors:
+#   infra/helm/charts/admin/templates/deployment.yaml: SyntaxError: All collection
+#     items must start at the same column (1:1)
+#   infra/argocd/applications/applicationset.yaml: SyntaxError: Comments must be
+#     separated from other tokens by white space characters (84:11)
+# None of these files are formattable JavaScript/TypeScript/JSON/CSS.
+
+node_modules
+**/node_modules
+dist
+**/dist
+build
+**/build
+coverage
+**/coverage
+.next
+**/.next
+out
+**/out
+
+# Helm / Argo CD / Kustomize templates are Go templates rendered at deploy time.
+infra/helm/charts/*/templates/
+infra/helm/charts/*/charts/
+infra/argocd/
+infra/k8s/istio/
+
+# Generated protobuf code - never hand-formatted.
+libs/proto/gen/
+
+# Vendored AI-tooling skills (documentation with its own formatting).
+.agents/
+.aider/
+.claude/
+.codex/
+.continue/
+.cursor/
+.factory/
+.gemini/
+.junie/
+.kiro/
+.openhands/
+.qoder/
+.qwen/
+.trae/
+.vibe/
+.windsurf/
+
+# Checkpoint backups.
+*.md.bak

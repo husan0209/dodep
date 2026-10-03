@@ -18,12 +18,20 @@ func RegisterWithdrawalRoutes(router fiber.Router, db *gorm.DB) {
 		playerID := c.Query("player_id", "")
 		page := c.QueryInt("page", 1)
 		ps := c.QueryInt("page_size", 50)
-		if page < 1 { page = 1 }
-		if ps < 1 || ps > 200 { ps = 50 }
+		if page < 1 {
+			page = 1
+		}
+		if ps < 1 || ps > 200 {
+			ps = 50
+		}
 
 		q := db.Model(&models.Withdrawal{})
-		if status != "" { q = q.Where("status = ?", status) }
-		if playerID != "" { q = q.Where("player_id = ?", playerID) }
+		if status != "" {
+			q = q.Where("status = ?", status)
+		}
+		if playerID != "" {
+			q = q.Where("player_id = ?", playerID)
+		}
 
 		var total int64
 		q.Count(&total)
@@ -34,7 +42,7 @@ func RegisterWithdrawalRoutes(router fiber.Router, db *gorm.DB) {
 			"data": items,
 			"pagination": fiber.Map{
 				"page": page, "page_size": ps,
-				"total": total, "total_pages": int(math.Ceil(float64(total)/float64(ps))),
+				"total": total, "total_pages": int(math.Ceil(float64(total) / float64(ps))),
 			},
 		})
 	})

@@ -1,8 +1,8 @@
 //! Application state
 
-use std::sync::Arc;
-use sqlx::PgPool;
 use redis::Client as RedisClient;
+use sqlx::PgPool;
+use std::sync::Arc;
 
 use crate::config::Config;
 use crate::telemetry::MetricsState;

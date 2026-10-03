@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
@@ -28,14 +29,36 @@ func NewNotificationGRPCHandler(service *service.NotificationService) *Notificat
 	}
 }
 
+// parseUserID converts the string user identifier carried by the protobuf wrapper
+// into the uint64 the service works with.
+//
+// This replaces three inline `fmt.Sscanf` calls that discarded the parse error: a
+// malformed id silently became user 0, which is a real user id, so a bad request was
+// served as if it targeted somebody else. An unparsable id is now rejected explicitly.
+func parseUserID(raw string) (uint64, error) {
+	id, err := strconv.ParseUint(raw, 10, 64)
+	if err != nil {
+		return 0, status.Errorf(codes.InvalidArgument, "user_id must be a positive integer, got %q", raw)
+	}
+	if id == 0 {
+		return 0, status.Error(codes.InvalidArgument, "user_id must be greater than zero")
+	}
+	return id, nil
+}
+
 // SendNotification sends a notification to user
 func (h *NotificationGRPCHandler) SendNotification(ctx context.Context, req *pb.SendNotificationRequest) (*pb.SendNotificationResponse, error) {
 	if req.UserId == nil || req.UserId.Value == "" {
 		return nil, status.Error(codes.InvalidArgument, "user_id is required")
 	}
 
+	userID, err := parseUserID(req.UserId.Value)
+	if err != nil {
+		return nil, err
+	}
+
 	serviceReq := &service.SendNotificationRequest{
-		UserID:      func() uint64 { var v uint64; fmt.Sscanf(req.UserId.Value, "%d", &v); return v }(),
+		UserID:      userID,
 		Channel:     req.Channel.String(),
 		Type:        req.Type.String(),
 		Subject:     req.Subject,
@@ -78,7 +101,14 @@ func (h *NotificationGRPCHandler) SendNotification(ctx context.Context, req *pb.
 func (h *NotificationGRPCHandler) SendBulkNotification(ctx context.Context, req *pb.SendBulkNotificationRequest) (*pb.SendBulkNotificationResponse, error) {
 	userIDs := make([]uint64, len(req.UserIds))
 	for i, id := range req.UserIds {
-		userIDs[i] = func() uint64 { var v uint64; fmt.Sscanf(id.Value, "%d", &v); return v }()
+		if id == nil || id.Value == "" {
+			return nil, status.Errorf(codes.InvalidArgument, "user_ids[%d] is required", i)
+		}
+		parsed, err := parseUserID(id.Value)
+		if err != nil {
+			return nil, err
+		}
+		userIDs[i] = parsed
 	}
 
 	var userSegment *string
@@ -134,8 +164,13 @@ func (h *NotificationGRPCHandler) GetUserNotifications(ctx context.Context, req 
 	if req.Pagination != nil && req.Pagination.PageSize > 0 {
 		pageSize = req.Pagination.PageSize
 	}
+	userID, err := parseUserID(req.UserId.Value)
+	if err != nil {
+		return nil, err
+	}
+
 	serviceReq := &service.GetUserNotificationsRequest{
-		UserID: func() uint64 { var v uint64; fmt.Sscanf(req.UserId.Value, "%d", &v); return v }(),
+		UserID: userID,
 		Limit:  pageSize,
 		Offset: 0,
 	}
@@ -167,8 +202,8 @@ func (h *NotificationGRPCHandler) GetUserNotifications(ctx context.Context, req 
 
 	return &pb.GetUserNotificationsResponse{
 		Notifications: notifications,
-		Pagination: &commonv1.PageResponse{TotalCount: &result.TotalCount},
-		UnreadCount: result.UnreadCount,
+		Pagination:    &commonv1.PageResponse{TotalCount: &result.TotalCount},
+		UnreadCount:   result.UnreadCount,
 	}, nil
 }
 
@@ -183,7 +218,17 @@ func (h *NotificationGRPCHandler) MarkAsRead(ctx context.Context, req *pb.MarkAs
 		}, nil
 	}
 
-	err := h.service.MarkAsRead(ctx, req.NotificationId, func() uint64 { var v uint64; fmt.Sscanf(req.UserId.Value, "%d", &v); return v }())
+	userID, err := parseUserID(req.UserId.Value)
+	if err != nil {
+		return &pb.MarkAsReadResponse{
+			Success: false,
+			Error: &commonv1.ErrorDetails{
+				ErrorMessage: err.Error(),
+			},
+		}, nil
+	}
+
+	err = h.service.MarkAsRead(ctx, req.NotificationId, userID)
 	if err != nil {
 		h.log.Error("MarkAsRead failed", zap.Error(err))
 		return &pb.MarkAsReadResponse{
@@ -207,13 +252,20 @@ func (h *NotificationGRPCHandler) MarkAllAsRead(ctx context.Context, req *pb.Mar
 		}, nil
 	}
 
+	userID, err := parseUserID(req.UserId.Value)
+	if err != nil {
+		return &pb.MarkAllAsReadResponse{
+			MarkedCount: 0,
+		}, nil
+	}
+
 	var typeFilter *string
 	if req.Type != nil {
 		typeStr := req.Type.String()
 		typeFilter = &typeStr
 	}
 
-	count, err := h.service.MarkAllAsRead(ctx, func() uint64 { var v uint64; fmt.Sscanf(req.UserId.Value, "%d", &v); return v }(), typeFilter)
+	count, err := h.service.MarkAllAsRead(ctx, userID, typeFilter)
 	if err != nil {
 		h.log.Error("MarkAllAsRead failed", zap.Error(err))
 		return &pb.MarkAllAsReadResponse{
@@ -237,7 +289,17 @@ func (h *NotificationGRPCHandler) DeleteNotification(ctx context.Context, req *p
 		}, nil
 	}
 
-	err := h.service.DeleteNotification(ctx, req.NotificationId, func() uint64 { var v uint64; fmt.Sscanf(req.UserId.Value, "%d", &v); return v }())
+	userID, err := parseUserID(req.UserId.Value)
+	if err != nil {
+		return &pb.DeleteNotificationResponse{
+			Success: false,
+			Error: &commonv1.ErrorDetails{
+				ErrorMessage: err.Error(),
+			},
+		}, nil
+	}
+
+	err = h.service.DeleteNotification(ctx, req.NotificationId, userID)
 	if err != nil {
 		h.log.Error("DeleteNotification failed", zap.Error(err))
 		return &pb.DeleteNotificationResponse{
@@ -259,7 +321,12 @@ func (h *NotificationGRPCHandler) GetNotificationSettings(ctx context.Context, r
 		return nil, status.Error(codes.InvalidArgument, "user_id is required")
 	}
 
-	settings, err := h.service.GetNotificationSettings(ctx, func() uint64 { var v uint64; fmt.Sscanf(req.UserId.Value, "%d", &v); return v }())
+	userID, err := parseUserID(req.UserId.Value)
+	if err != nil {
+		return nil, err
+	}
+
+	settings, err := h.service.GetNotificationSettings(ctx, userID)
 	if err != nil {
 		h.log.Error("GetNotificationSettings failed", zap.Error(err))
 		return nil, status.Error(codes.Internal, "failed to get notification settings")
@@ -276,12 +343,17 @@ func (h *NotificationGRPCHandler) UpdateNotificationSettings(ctx context.Context
 		return nil, status.Error(codes.InvalidArgument, "user_id is required")
 	}
 
+	userID, err := parseUserID(req.UserId.Value)
+	if err != nil {
+		return nil, err
+	}
+
 	serviceReq := &service.UpdateNotificationSettingsRequest{
-		UserID:       func() uint64 { var v uint64; fmt.Sscanf(req.UserId.Value, "%d", &v); return v }(),
-		EmailEnabled: req.EmailEnabled,
-		SMSEnabled:   req.SmsEnabled,
-		PushEnabled:  req.PushEnabled,
-		InAppEnabled: req.InAppEnabled,
+		UserID:          userID,
+		EmailEnabled:    req.EmailEnabled,
+		SMSEnabled:      req.SmsEnabled,
+		PushEnabled:     req.PushEnabled,
+		InAppEnabled:    req.InAppEnabled,
 		TypePreferences: make(map[string]service.ChannelPreferences),
 	}
 
@@ -312,19 +384,19 @@ func (h *NotificationGRPCHandler) UpdateNotificationSettings(ctx context.Context
 
 func toProtoNotification(notif *service.Notification) *pb.Notification {
 	return &pb.Notification{
-		Id:         notif.ID,
-		UserId:     &commonv1.UserId{Value: fmt.Sprintf("%d", notif.UserID)},
-		Channel:    pb.NotificationChannel(pb.NotificationChannel_value[notif.Channel]),
-		Type:       pb.NotificationType(pb.NotificationType_value[notif.Type]),
-		Priority:   pb.NotificationPriority(pb.NotificationPriority_value[notif.Priority]),
-		Subject:    notif.Subject,
-		Message:    notif.Message,
-		Data:       notif.Data,
-		IsRead:     notif.IsRead,
-		CreatedAt:  timestamppb.New(notif.CreatedAt),
-		ReadAt:     nil,
-		SentAt:     nil,
-		Status:     pb.NotificationStatus(pb.NotificationStatus_value[notif.Status]),
+		Id:           notif.ID,
+		UserId:       &commonv1.UserId{Value: fmt.Sprintf("%d", notif.UserID)},
+		Channel:      pb.NotificationChannel(pb.NotificationChannel_value[notif.Channel]),
+		Type:         pb.NotificationType(pb.NotificationType_value[notif.Type]),
+		Priority:     pb.NotificationPriority(pb.NotificationPriority_value[notif.Priority]),
+		Subject:      notif.Subject,
+		Message:      notif.Message,
+		Data:         notif.Data,
+		IsRead:       notif.IsRead,
+		CreatedAt:    timestamppb.New(notif.CreatedAt),
+		ReadAt:       nil,
+		SentAt:       nil,
+		Status:       pb.NotificationStatus(pb.NotificationStatus_value[notif.Status]),
 		ErrorMessage: notif.ErrorMessage,
 		ReferenceId:  notif.ReferenceID,
 		Metadata:     notif.Metadata,

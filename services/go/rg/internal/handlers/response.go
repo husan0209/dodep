@@ -32,28 +32,8 @@ type Meta struct {
 	Timestamp string `json:"timestamp"`
 }
 
-// PaginatedResponse wraps list results.
-type PaginatedResponse struct {
-	Data       interface{} `json:"data"`
-	Pagination Pagination  `json:"pagination"`
-	Meta       Meta        `json:"meta"`
-}
-
-// Pagination carries total-count paging info.
-type Pagination struct {
-	TotalCount int64 `json:"total_count"`
-}
-
 func respondSuccess(c *fiber.Ctx, status int, data interface{}) error {
 	return c.Status(status).JSON(SuccessResponse{Data: data, Meta: buildMeta(c)})
-}
-
-func respondPaginated(c *fiber.Ctx, status int, items interface{}, total int64) error {
-	return c.Status(status).JSON(PaginatedResponse{
-		Data:       items,
-		Pagination: Pagination{TotalCount: total},
-		Meta:       buildMeta(c),
-	})
 }
 
 func respondError(c *fiber.Ctx, status int, code, message string) error {

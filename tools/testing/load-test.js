@@ -1,4 +1,4 @@
-# k6 load testing script template
+// k6 load testing script template
 
 import http from 'k6/http';
 import { check, sleep } from 'k6';

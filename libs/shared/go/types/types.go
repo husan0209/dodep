@@ -241,11 +241,11 @@ func DefaultPaginationParams() PaginationParams {
 
 // PaginationResult for cursor-based pagination
 type PaginationResult[T any] struct {
-	Items       []T    `json:"items"`
-	NextCursor  string `json:"next_cursor,omitempty"`
-	PrevCursor  string `json:"prev_cursor,omitempty"`
-	HasMore     bool   `json:"has_more"`
-	TotalCount  *int64 `json:"total_count,omitempty"`
+	Items      []T    `json:"items"`
+	NextCursor string `json:"next_cursor,omitempty"`
+	PrevCursor string `json:"prev_cursor,omitempty"`
+	HasMore    bool   `json:"has_more"`
+	TotalCount *int64 `json:"total_count,omitempty"`
 }
 
 // DateRange filter
@@ -256,11 +256,11 @@ type DateRange struct {
 
 // ErrorDetails for API responses
 type ErrorDetails struct {
-	ErrorCode    string                 `json:"error_code"`
-	ErrorMessage string                 `json:"error_message"`
-	Metadata     map[string]string      `json:"metadata,omitempty"`
-	FieldErrors  []FieldError           `json:"field_errors,omitempty"`
-	TraceID      string                 `json:"trace_id,omitempty"`
+	ErrorCode    string            `json:"error_code"`
+	ErrorMessage string            `json:"error_message"`
+	Metadata     map[string]string `json:"metadata,omitempty"`
+	FieldErrors  []FieldError      `json:"field_errors,omitempty"`
+	TraceID      string            `json:"trace_id,omitempty"`
 }
 
 // FieldError represents a validation error for a specific field
@@ -272,7 +272,7 @@ type FieldError struct {
 
 // ApiResponse wrapper
 type ApiResponse[T any] struct {
-	Data  *T           `json:"data,omitempty"`
+	Data  *T            `json:"data,omitempty"`
 	Error *ErrorDetails `json:"error,omitempty"`
 }
 
@@ -314,36 +314,36 @@ const (
 type WalletType string
 
 const (
-	WalletTypeMain       WalletType = "main"
-	WalletTypeBonus      WalletType = "bonus"
-	WalletTypeFreeSpins  WalletType = "free_spins"
-	WalletTypeCashback   WalletType = "cashback"
+	WalletTypeMain      WalletType = "main"
+	WalletTypeBonus     WalletType = "bonus"
+	WalletTypeFreeSpins WalletType = "free_spins"
+	WalletTypeCashback  WalletType = "cashback"
 )
 
 // TransactionType enum
 type TransactionType string
 
 const (
-	TransactionTypeDeposit       TransactionType = "deposit"
-	TransactionTypeWithdrawal    TransactionType = "withdrawal"
-	TransactionTypeBetPlace      TransactionType = "bet_place"
-	TransactionTypeBetWin        TransactionType = "bet_win"
-	TransactionTypeBetRefund     TransactionType = "bet_refund"
-	TransactionTypeBonusCredit   TransactionType = "bonus_credit"
-	TransactionTypeBonusDebit    TransactionType = "bonus_debit"
-	TransactionTypeTransfer      TransactionType = "transfer"
-	TransactionTypeAdjustment    TransactionType = "adjustment"
+	TransactionTypeDeposit     TransactionType = "deposit"
+	TransactionTypeWithdrawal  TransactionType = "withdrawal"
+	TransactionTypeBetPlace    TransactionType = "bet_place"
+	TransactionTypeBetWin      TransactionType = "bet_win"
+	TransactionTypeBetRefund   TransactionType = "bet_refund"
+	TransactionTypeBonusCredit TransactionType = "bonus_credit"
+	TransactionTypeBonusDebit  TransactionType = "bonus_debit"
+	TransactionTypeTransfer    TransactionType = "transfer"
+	TransactionTypeAdjustment  TransactionType = "adjustment"
 )
 
 // BetType enum
 type BetType string
 
 const (
-	BetTypeSports   BetType = "sports"
-	BetTypeLive     BetType = "live"
-	BetTypeCasino   BetType = "casino"
-	BetTypeLottery  BetType = "lottery"
-	BetTypeVirtual  BetType = "virtual"
+	BetTypeSports  BetType = "sports"
+	BetTypeLive    BetType = "live"
+	BetTypeCasino  BetType = "casino"
+	BetTypeLottery BetType = "lottery"
+	BetTypeVirtual BetType = "virtual"
 )
 
 // BetStatus enum
@@ -361,9 +361,9 @@ const (
 type KycLevel string
 
 const (
-	KycLevelNone      KycLevel = "none"
-	KycLevelBasic     KycLevel = "basic"
-	KycLevelIdentity  KycLevel = "identity"
-	KycLevelEnhanced  KycLevel = "enhanced"
-	KycLevelVip       KycLevel = "vip"
+	KycLevelNone     KycLevel = "none"
+	KycLevelBasic    KycLevel = "basic"
+	KycLevelIdentity KycLevel = "identity"
+	KycLevelEnhanced KycLevel = "enhanced"
+	KycLevelVip      KycLevel = "vip"
 )

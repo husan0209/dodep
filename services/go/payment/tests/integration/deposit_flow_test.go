@@ -14,6 +14,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// testIPNCallbackURL is the webhook callback URL injected into the services under
+// test. It mirrors the production wiring in cmd/server/main.go, which passes
+// cfg.NOWPayments.IPNCallbackURL.
+const testIPNCallbackURL = "https://test.example.com/api/v1/payments/webhook/nowpayments"
+
 // TestDepositFlow_Complete tests the complete deposit flow
 // Validates: Requirements 1.1-1.5, 2.1-2.7
 func TestDepositFlow_Complete(t *testing.T) {
@@ -58,6 +63,7 @@ func TestDepositFlow_Complete(t *testing.T) {
 		userClient,
 		nil, // producer
 		nil, // tracer
+		testIPNCallbackURL,
 	)
 	_ = paymentService
 

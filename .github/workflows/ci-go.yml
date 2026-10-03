@@ -20,7 +20,8 @@ on:
       - '.github/workflows/ci-go.yml'
 
 env:
-  GO_VERSION: '1.21'
+  # services/go/* declare go 1.24.x; 1.21 cannot build them.
+  GO_VERSION: '1.24'
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
@@ -53,12 +54,16 @@ jobs:
       - name: Install golangci-lint
         uses: golangci/golangci-lint-action@v4
         with:
-          version: latest
+          # Pinned rather than `latest`: an unpinned major bump changes the enabled
+          # linter set and turns every unrelated PR red on the day it ships.
+          version: v2.14.0
           working-directory: services/go/${{ matrix.service }}
 
       - name: Run golangci-lint
         working-directory: services/go/${{ matrix.service }}
-        run: golangci-lint run --out-format=github-actions
+        # `colored-line-number` replaced the deprecated `github-actions` output format
+        # in golangci-lint v2 (it warns and keeps going, but is no longer supported).
+        run: golangci-lint run --out-format=colored-line-number
 
   # ==========================================================================
   # Test

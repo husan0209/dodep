@@ -27,7 +27,7 @@ import (
 func main() {
 	cfg := config.Load()
 	log, _ := zap.NewProduction()
-	defer log.Sync()
+	defer func() { _ = log.Sync() }()
 
 	// Every player route is authenticated, so an unusable JWT key means the
 	// service cannot serve traffic at all. Fail at startup rather than
@@ -40,12 +40,12 @@ func main() {
 	if err != nil {
 		log.Fatal("Failed to connect to database", zap.Error(err))
 	}
-	defer dbPool.Close()
+	defer dbPool.Close() //nolint:errcheck // best-effort close on shutdown
 
 	rdb := redis.NewClient(&redis.Options{
 		Addr: cfg.RedisAddr, Password: cfg.RedisPassword, DB: cfg.RedisDB,
 	})
-	defer rdb.Close()
+	defer func() { _ = rdb.Close() }()
 
 	userRepo := repository.NewUserRepository(dbPool)
 	userService := service.NewUserService(userRepo, log)
@@ -85,6 +85,8 @@ func main() {
 	<-quit
 	log.Info("Shutting down User Service...")
 	grpcServer.GracefulStop()
-	app.Shutdown()
+	if err := app.Shutdown(); err != nil {
+		log.Error("HTTP shutdown failed", zap.Error(err))
+	}
 	log.Info("User Service stopped")
 }

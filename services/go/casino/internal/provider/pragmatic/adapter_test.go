@@ -133,16 +133,16 @@ func TestAdapter_ParseCallback_Rollback(t *testing.T) {
 	a := testAdapter(t)
 
 	params := map[string]interface{}{
-		"type":                    "refund",
-		"token":                   "session_abc",
-		"gameId":                  "vs20doghouse",
-		"roundId":                 "round123",
-		"transactionId":           "txRollback001",
-		"referenceTransactionId":  "txBet001",
-		"currency":                "USD",
-		"amount":                  "5.00",
-		"timestamp":               float64(timeNowMillis()),
-		"hash":                    "placeholder",
+		"type":                   "refund",
+		"token":                  "session_abc",
+		"gameId":                 "vs20doghouse",
+		"roundId":                "round123",
+		"transactionId":          "txRollback001",
+		"referenceTransactionId": "txBet001",
+		"currency":               "USD",
+		"amount":                 "5.00",
+		"timestamp":              float64(timeNowMillis()),
+		"hash":                   "placeholder",
 	}
 
 	body, _ := json.Marshal(params)
@@ -200,7 +200,7 @@ func computePragmaticHash(params map[string]interface{}, secret string) string {
 
 	var sb strings.Builder
 	for _, k := range keys {
-		sb.WriteString(fmt.Sprintf("%v", params[k]))
+		fmt.Fprintf(&sb, "%v", params[k])
 	}
 	sb.WriteString(secret)
 

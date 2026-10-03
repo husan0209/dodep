@@ -23,7 +23,7 @@ func RegisterDashboardRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger, 
 		var openTickets int64
 		db.Model(&struct{ Count int64 }{Count: 0}).Table("support_tickets").Where("status = ?", "open").Count(&openTickets)
 		return c.JSON(fiber.Map{"data": fiber.Map{
-			"pending_kyc_reviews":   pendingKyc,
+			"pending_kyc_reviews":  pendingKyc,
 			"open_support_tickets": openTickets,
 		}})
 	})
@@ -31,12 +31,18 @@ func RegisterDashboardRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger, 
 	dash.Get("/audit-logs", func(c *fiber.Ctx) error {
 		page := c.QueryInt("page", 1)
 		pageSize := c.QueryInt("page_size", 50)
-		if page < 1 { page = 1 }
-		if pageSize < 1 || pageSize > 200 { pageSize = 50 }
+		if page < 1 {
+			page = 1
+		}
+		if pageSize < 1 || pageSize > 200 {
+			pageSize = 50
+		}
 		var adminID *int64
 		if id := c.Query("admin_id", ""); id != "" {
 			v := int64(0)
-			if n, err := strconv.ParseInt(id, 10, 64); err == nil { v = n }
+			if n, err := strconv.ParseInt(id, 10, 64); err == nil {
+				v = n
+			}
 			adminID = &v
 		}
 		items, total, err := auditSvc.List(c.Context(), adminID, c.Query("resource_type", ""), c.Query("resource_id", ""), page, pageSize)
@@ -45,7 +51,7 @@ func RegisterDashboardRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger, 
 			return c.Status(500).JSON(fiber.Map{"error": "database error"})
 		}
 		return c.JSON(fiber.Map{
-			"data": items,
+			"data":       items,
 			"pagination": fiber.Map{"page": page, "page_size": pageSize, "total": total},
 		})
 	})
@@ -67,11 +73,11 @@ func RegisterDashboardRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger, 
 				status = "degraded"
 			}
 			result = append(result, fiber.Map{
-				"name":             p.Name,
-				"status":           status,
-				"latency_p99_ms":   45,
-				"error_rate_pct":   0.02,
-				"ggr_today":        "0.00",
+				"name":           p.Name,
+				"status":         status,
+				"latency_p99_ms": 45,
+				"error_rate_pct": 0.02,
+				"ggr_today":      "0.00",
 			})
 		}
 		return c.JSON(fiber.Map{"data": result})
@@ -175,9 +181,9 @@ func RegisterDashboardRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger, 
 		var ftdCount int64
 		db.Model(&models.Deposit{}).Where("created_at >= ?", time.Now().AddDate(0, 0, -30)).Count(&ftdCount)
 		return c.JSON(fiber.Map{"data": fiber.Map{
-			"visits":        ftdCount * 12,
-			"registrations": ftdCount * 5,
-			"ftd":           ftdCount,
+			"visits":         ftdCount * 12,
+			"registrations":  ftdCount * 5,
+			"ftd":            ftdCount,
 			"second_deposit": int64(math.Max(0, float64(ftdCount)*0.45)),
 		}})
 	})
@@ -234,9 +240,9 @@ func RegisterDashboardRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger, 
 		var result []fiber.Map
 		for i := 0; i < len(pairs) && i < limit; i++ {
 			result = append(result, fiber.Map{
-				"id":    pairs[i].id,
-				"name":  gameName[pairs[i].id],
-				"value": pairs[i].value,
+				"id":       pairs[i].id,
+				"name":     gameName[pairs[i].id],
+				"value":    pairs[i].value,
 				"currency": "USD",
 			})
 		}
@@ -258,9 +264,9 @@ func RegisterDashboardRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger, 
 			result = nil
 			for _, s := range snaps {
 				result = append(result, fiber.Map{
-					"id":    s.EventID,
-					"name":  s.EventID,
-					"value": parseMoney(s.TotalStake),
+					"id":       s.EventID,
+					"name":     s.EventID,
+					"value":    parseMoney(s.TotalStake),
 					"currency": "USD",
 				})
 			}
@@ -282,5 +288,3 @@ func RegisterDashboardRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger, 
 		}})
 	})
 }
-
-

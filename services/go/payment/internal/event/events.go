@@ -8,11 +8,11 @@ import (
 
 // Event types
 const (
-	EventTypeDepositCompleted   = "deposit.completed"
-	EventTypeDepositFailed      = "deposit.failed"
+	EventTypeDepositCompleted    = "deposit.completed"
+	EventTypeDepositFailed       = "deposit.failed"
 	EventTypeWithdrawalCompleted = "withdrawal.completed"
-	EventTypeWithdrawalFailed   = "withdrawal.failed"
-	EventTypePaymentAudit       = "payment.audit"
+	EventTypeWithdrawalFailed    = "withdrawal.failed"
+	EventTypePaymentAudit        = "payment.audit"
 )
 
 // BaseEvent contains common event fields
@@ -27,13 +27,13 @@ type BaseEvent struct {
 // DepositCompletedEvent is published when a deposit completes
 type DepositCompletedEvent struct {
 	BaseEvent
-	UserID       int64           `json:"user_id"`
-	PaymentID    string          `json:"payment_id"`
-	PaymentUUID  string          `json:"payment_uuid"`
-	Amount       decimal.Decimal `json:"amount"`
-	FiatAmount   decimal.Decimal `json:"fiat_amount"`
-	Currency     string          `json:"currency"`
-	TransactionID string         `json:"transaction_id"`
+	UserID        int64           `json:"user_id"`
+	PaymentID     string          `json:"payment_id"`
+	PaymentUUID   string          `json:"payment_uuid"`
+	Amount        decimal.Decimal `json:"amount"`
+	FiatAmount    decimal.Decimal `json:"fiat_amount"`
+	Currency      string          `json:"currency"`
+	TransactionID string          `json:"transaction_id"`
 }
 
 // DepositFailedEvent is published when a deposit fails
@@ -49,14 +49,14 @@ type DepositFailedEvent struct {
 // WithdrawalCompletedEvent is published when a withdrawal completes
 type WithdrawalCompletedEvent struct {
 	BaseEvent
-	UserID        int64           `json:"user_id"`
-	WithdrawalID  string          `json:"withdrawal_id"`
-	WithdrawalUUID string         `json:"withdrawal_uuid"`
-	Amount        decimal.Decimal `json:"amount"`
-	FiatAmount    decimal.Decimal `json:"fiat_amount"`
-	Currency      string          `json:"currency"`
-	Address       string          `json:"address"`
-	TransactionID string          `json:"transaction_id"`
+	UserID         int64           `json:"user_id"`
+	WithdrawalID   string          `json:"withdrawal_id"`
+	WithdrawalUUID string          `json:"withdrawal_uuid"`
+	Amount         decimal.Decimal `json:"amount"`
+	FiatAmount     decimal.Decimal `json:"fiat_amount"`
+	Currency       string          `json:"currency"`
+	Address        string          `json:"address"`
+	TransactionID  string          `json:"transaction_id"`
 }
 
 // WithdrawalFailedEvent is published when a withdrawal fails

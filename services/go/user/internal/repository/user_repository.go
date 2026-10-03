@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/opus-casino/user/internal/domain"
 )
@@ -269,7 +270,11 @@ func (r *UserRepository) SetLimits(ctx context.Context, userID int64, req *domai
 func (r *UserRepository) GetActivity(ctx context.Context, userID int64, limit, offset int) ([]map[string]interface{}, int, error) {
 	countQuery := `SELECT COUNT(*) FROM audit_log WHERE record_id = $1 AND table_name = 'users'`
 	var total int
-	r.pool.QueryRow(ctx, countQuery, userID).Scan(&total)
+	// A failed count must not be reported as "0 rows": return it so the caller can
+	// distinguish an empty page from a broken query.
+	if err := r.pool.QueryRow(ctx, countQuery, userID).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("count audit log entries: %w", err)
+	}
 
 	query := `
 		SELECT id, action, old_data, new_data, user_id, created_at
@@ -286,14 +291,24 @@ func (r *UserRepository) GetActivity(ctx context.Context, userID int64, limit, o
 	for rows.Next() {
 		var id int64
 		var action, oldData, newData string
-		var logUserID *int64
+		// audit_log.user_id is nullable (system-initiated entries have no user).
+		// pgtype.Int8 is used instead of *int64 because a bare *int64 destination
+		// cannot represent NULL, and pgx refuses the scan outright.
+		var logUserID pgtype.Int8
 		var createdAt time.Time
-		rows.Scan(&id, &action, &oldData, &newData, &logUserID, &createdAt)
+		if err := rows.Scan(&id, &action, &oldData, &newData, &logUserID, &createdAt); err != nil {
+			rows.Close()
+			return nil, 0, fmt.Errorf("scan audit log entry %d: %w", id, err)
+		}
 		activities = append(activities, map[string]interface{}{
 			"id":         id,
 			"action":     action,
+			"user_id":    logUserID,
 			"created_at": createdAt,
 		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("iterate audit log entries: %w", err)
 	}
 	return activities, total, nil
 }

@@ -27,10 +27,10 @@ type Server struct {
 
 // ServerConfig holds configuration for the gRPC server.
 type ServerConfig struct {
-	Port              int
-	EnableReflection  bool
-	MaxRecvMsgSize    int
-	MaxSendMsgSize    int
+	Port             int
+	EnableReflection bool
+	MaxRecvMsgSize   int
+	MaxSendMsgSize   int
 }
 
 // NewServer creates a new gRPC server with health check and interceptors.

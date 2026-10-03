@@ -24,15 +24,15 @@ func setupRoutes(app *fiber.App, authService *service.AuthService) {
 		requestID := getOrCreateRequestID(c)
 		startedAt := time.Now()
 		var req struct {
-			Email        string `json:"email"`
-			Password     string `json:"password"`
-			Username     string `json:"username"`
-			CountryCode  string `json:"country_code"`
-			CountryCode2 string `json:"countryCode"`
-			CurrencyCode string `json:"currency_code"`
+			Email         string `json:"email"`
+			Password      string `json:"password"`
+			Username      string `json:"username"`
+			CountryCode   string `json:"country_code"`
+			CountryCode2  string `json:"countryCode"`
+			CurrencyCode  string `json:"currency_code"`
 			CurrencyCode2 string `json:"currencyCode"`
-			DeviceID     string `json:"device_id"`
-			DeviceID2    string `json:"deviceId"`
+			DeviceID      string `json:"device_id"`
+			DeviceID2     string `json:"deviceId"`
 		}
 
 		if err := c.BodyParser(&req); err != nil {

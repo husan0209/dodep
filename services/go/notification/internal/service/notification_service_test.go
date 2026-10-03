@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"go.uber.org/zap"
@@ -9,6 +10,14 @@ import (
 	"github.com/opus-casino/notification/internal/repository"
 )
 
+// TestProcessEvent_SupportedEventAliases asserts that every accepted event-type
+// spelling is actually routed to a handler.
+//
+// The repository is built without a database on purpose, so a *routed* event ends in
+// repository.ErrDatabaseUnavailable while an *unrouted* one returns nil from the
+// `default` branch of ProcessEvent. Asserting "no error" here (as this test used to)
+// could only ever pass if every alias silently fell through to `default`, i.e. the
+// exact bug the test exists to catch.
 func TestProcessEvent_SupportedEventAliases(t *testing.T) {
 	repo := repository.NewNotificationRepository(nil, nil)
 	svc := NewNotificationService(repo, zap.NewNop())
@@ -19,12 +28,30 @@ func TestProcessEvent_SupportedEventAliases(t *testing.T) {
 		data      map[string]string
 	}{
 		{
+			name:      "bet.settled",
+			eventType: "bet.settled",
+			data: map[string]string{
+				"user_id": "42",
+				"bet_id":  "bet-1",
+				"result":  "won",
+			},
+		},
+		{
 			name:      "bets.settled",
 			eventType: "bets.settled",
 			data: map[string]string{
 				"user_id": "42",
 				"bet_id":  "bet-1",
 				"result":  "won",
+			},
+		},
+		{
+			name:      "payment.deposit_confirmed",
+			eventType: "payment.deposit_confirmed",
+			data: map[string]string{
+				"user_id":  "42",
+				"amount":   "100.00",
+				"currency": "USD",
 			},
 		},
 		{
@@ -37,12 +64,29 @@ func TestProcessEvent_SupportedEventAliases(t *testing.T) {
 			},
 		},
 		{
+			name:      "payment.withdrawal_processed",
+			eventType: "payment.withdrawal_processed",
+			data: map[string]string{
+				"user_id":  "42",
+				"amount":   "50.00",
+				"currency": "USD",
+			},
+		},
+		{
 			name:      "payments.withdrawal_processed",
 			eventType: "payments.withdrawal_processed",
 			data: map[string]string{
 				"user_id":  "42",
 				"amount":   "50.00",
 				"currency": "USD",
+			},
+		},
+		{
+			name:      "kyc.status_changed",
+			eventType: "kyc.status_changed",
+			data: map[string]string{
+				"user_id": "42",
+				"status":  "verified",
 			},
 		},
 		{
@@ -66,10 +110,42 @@ func TestProcessEvent_SupportedEventAliases(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			err := svc.ProcessEvent(context.Background(), tc.eventType, tc.data)
-			if err != nil {
-				t.Fatalf("expected no error, got: %v", err)
+			if !errors.Is(err, repository.ErrDatabaseUnavailable) {
+				t.Fatalf("event %q was not routed to a handler: got %v, want %v",
+					tc.eventType, err, repository.ErrDatabaseUnavailable)
 			}
 		})
+	}
+}
+
+// TestProcessEvent_UnknownEventTypeIsIgnored pins the other half of the routing
+// contract: an event nobody handles must be dropped silently, not error.
+func TestProcessEvent_UnknownEventTypeIsIgnored(t *testing.T) {
+	repo := repository.NewNotificationRepository(nil, nil)
+	svc := NewNotificationService(repo, zap.NewNop())
+
+	if err := svc.ProcessEvent(context.Background(), "totally.unknown.event", map[string]string{
+		"user_id": "42",
+	}); err != nil {
+		t.Fatalf("unknown event type must be ignored, got: %v", err)
+	}
+}
+
+// TestProcessEvent_MissingUserIDIsRejected proves the handlers really validate their
+// payload instead of forwarding an empty user_id to the database.
+func TestProcessEvent_MissingUserIDIsRejected(t *testing.T) {
+	repo := repository.NewNotificationRepository(nil, nil)
+	svc := NewNotificationService(repo, zap.NewNop())
+
+	err := svc.ProcessEvent(context.Background(), "bets.settled", map[string]string{
+		"bet_id": "bet-1",
+		"result": "won",
+	})
+	if err == nil {
+		t.Fatal("expected an error when user_id is absent")
+	}
+	if errors.Is(err, repository.ErrDatabaseUnavailable) {
+		t.Fatalf("event without user_id must be rejected before persistence, got: %v", err)
 	}
 }
 

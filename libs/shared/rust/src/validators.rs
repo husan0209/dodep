@@ -8,7 +8,8 @@ use std::sync::OnceLock;
 pub fn is_valid_uuid(uuid: &str) -> bool {
     static UUID_REGEX: OnceLock<Regex> = OnceLock::new();
     let regex = UUID_REGEX.get_or_init(|| {
-        Regex::new(r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$").unwrap()
+        Regex::new(r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
+            .unwrap()
     });
     regex.is_match(&uuid.to_lowercase())
 }
@@ -16,9 +17,7 @@ pub fn is_valid_uuid(uuid: &str) -> bool {
 /// Validate email address
 pub fn is_valid_email(email: &str) -> bool {
     static EMAIL_REGEX: OnceLock<Regex> = OnceLock::new();
-    let regex = EMAIL_REGEX.get_or_init(|| {
-        Regex::new(r"^[^\s@]+@[^\s@]+\.[^\s@]+$").unwrap()
-    });
+    let regex = EMAIL_REGEX.get_or_init(|| Regex::new(r"^[^\s@]+@[^\s@]+\.[^\s@]+$").unwrap());
     regex.is_match(email)
 }
 
@@ -35,9 +34,7 @@ pub fn is_valid_currency_code(code: &str) -> bool {
 /// Validate money amount string
 pub fn is_valid_money_amount(amount: &str) -> bool {
     static AMOUNT_REGEX: OnceLock<Regex> = OnceLock::new();
-    let regex = AMOUNT_REGEX.get_or_init(|| {
-        Regex::new(r"^\d+(\.\d{1,2})?$").unwrap()
-    });
+    let regex = AMOUNT_REGEX.get_or_init(|| Regex::new(r"^\d+(\.\d{1,2})?$").unwrap());
     regex.is_match(amount)
 }
 
@@ -52,39 +49,35 @@ pub fn is_valid_password(password: &str) -> bool {
     if password.len() < 8 {
         return false;
     }
-    
+
     let has_upper = password.chars().any(|c| c.is_ascii_uppercase());
     let has_lower = password.chars().any(|c| c.is_ascii_lowercase());
     let has_digit = password.chars().any(|c| c.is_ascii_digit());
     let has_special = password.chars().any(|c| !c.is_alphanumeric());
-    
+
     has_upper && has_lower && has_digit && has_special
 }
 
 /// Validate phone number (E.164 format)
 pub fn is_valid_phone(phone: &str) -> bool {
     static PHONE_REGEX: OnceLock<Regex> = OnceLock::new();
-    let regex = PHONE_REGEX.get_or_init(|| {
-        Regex::new(r"^\+[1-9]\d{1,14}$").unwrap()
-    });
+    let regex = PHONE_REGEX.get_or_init(|| Regex::new(r"^\+[1-9]\d{1,14}$").unwrap());
     regex.is_match(phone)
 }
 
 /// Validate odds format (decimal)
 pub fn is_valid_odds(odds: &str) -> bool {
     static ODDS_REGEX: OnceLock<Regex> = OnceLock::new();
-    let regex = ODDS_REGEX.get_or_init(|| {
-        Regex::new(r"^\d+(\.\d+)?$").unwrap()
-    });
-    
+    let regex = ODDS_REGEX.get_or_init(|| Regex::new(r"^\d+(\.\d+)?$").unwrap());
+
     if !regex.is_match(odds) {
         return false;
     }
-    
+
     if let Ok(odds_value) = odds.parse::<f64>() {
         return odds_value >= 1.01 && odds_value <= 1000.0;
     }
-    
+
     false
 }
 
@@ -111,9 +104,7 @@ pub fn is_valid_ip(ip: &str) -> bool {
 /// 1900-2100 to match the other language implementations of this validator.
 pub fn is_valid_date(date: &str) -> bool {
     static DATE_REGEX: OnceLock<Regex> = OnceLock::new();
-    let regex = DATE_REGEX.get_or_init(|| {
-        Regex::new(r"^\d{4}-\d{2}-\d{2}$").unwrap()
-    });
+    let regex = DATE_REGEX.get_or_init(|| Regex::new(r"^\d{4}-\d{2}-\d{2}$").unwrap());
 
     if !regex.is_match(date) {
         return false;
@@ -133,9 +124,7 @@ pub fn is_valid_date(date: &str) -> bool {
 /// - Must start with a letter
 pub fn is_valid_username(username: &str) -> bool {
     static USERNAME_REGEX: OnceLock<Regex> = OnceLock::new();
-    let regex = USERNAME_REGEX.get_or_init(|| {
-        Regex::new(r"^[a-zA-Z][a-zA-Z0-9_]{2,19}$").unwrap()
-    });
+    let regex = USERNAME_REGEX.get_or_init(|| Regex::new(r"^[a-zA-Z][a-zA-Z0-9_]{2,19}$").unwrap());
     regex.is_match(username)
 }
 

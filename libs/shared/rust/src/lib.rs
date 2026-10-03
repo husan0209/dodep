@@ -1,8 +1,8 @@
 //! Opus Casino Shared Libraries
-//! 
+//!
 //! This crate provides shared types, validators, constants, and utilities
 //! for the Opus Casino gambling platform.
-//! 
+//!
 //! # Example
 //!
 //! ```
@@ -23,15 +23,15 @@
 //! assert!(is_valid_uuid(&generate_uuid().to_string()));
 //! ```
 
+pub mod constants;
+pub mod error;
+pub mod helpers;
 pub mod types;
 pub mod validators;
-pub mod constants;
-pub mod helpers;
-pub mod error;
 
 // Re-export commonly used items
+pub use constants::*;
+pub use error::{AppError, AppResult};
+pub use helpers::*;
 pub use types::*;
 pub use validators::*;
-pub use constants::*;
-pub use helpers::*;
-pub use error::{AppError, AppResult};

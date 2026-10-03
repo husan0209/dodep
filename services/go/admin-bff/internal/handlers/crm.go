@@ -18,7 +18,7 @@ type CRMSegment struct {
 	Name        string    `gorm:"type:varchar(255);not null" json:"name"`
 	Description *string   `gorm:"type:text" json:"description,omitempty"`
 	Conditions  []byte    `gorm:"type:jsonb;not null" json:"conditions"` // []SegmentCondition
-	PlayerCount int64     `gorm:"-" json:"player_count"` // computed on GET
+	PlayerCount int64     `gorm:"-" json:"player_count"`                 // computed on GET
 	CreatedBy   string    `gorm:"type:varchar(36);not null" json:"created_by"`
 	CreatedAt   time.Time `gorm:"not null;default:now()" json:"created_at"`
 	UpdatedAt   time.Time `gorm:"not null;default:now()" json:"updated_at"`
@@ -28,35 +28,35 @@ func (CRMSegment) TableName() string { return "crm_segments" }
 
 // CRMTrigger is an event-based automation rule.
 type CRMTrigger struct {
-	ID              string    `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
-	Name            string    `gorm:"type:varchar(255);not null" json:"name"`
-	TriggerEvent    string    `gorm:"type:varchar(100);not null" json:"trigger_event"` // ftd_completed|no_redeposit_after_Xdays|...
-	TriggerParams   []byte    `gorm:"type:jsonb" json:"trigger_params,omitempty"`
-	Actions         []byte    `gorm:"type:jsonb;not null" json:"actions"`              // []TriggerAction
-	DelaySeconds    int       `gorm:"not null;default:0" json:"delay_seconds"`
-	IsActive        bool      `gorm:"not null;default:false" json:"is_active"`
-	FiredCount30d   int64     `gorm:"-" json:"fired_count_30d"`
-	CreatedBy       string    `gorm:"type:varchar(36);not null" json:"created_by"`
-	CreatedAt       time.Time `gorm:"not null;default:now()" json:"created_at"`
-	UpdatedAt       time.Time `gorm:"not null;default:now()" json:"updated_at"`
+	ID            string    `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
+	Name          string    `gorm:"type:varchar(255);not null" json:"name"`
+	TriggerEvent  string    `gorm:"type:varchar(100);not null" json:"trigger_event"` // ftd_completed|no_redeposit_after_Xdays|...
+	TriggerParams []byte    `gorm:"type:jsonb" json:"trigger_params,omitempty"`
+	Actions       []byte    `gorm:"type:jsonb;not null" json:"actions"` // []TriggerAction
+	DelaySeconds  int       `gorm:"not null;default:0" json:"delay_seconds"`
+	IsActive      bool      `gorm:"not null;default:false" json:"is_active"`
+	FiredCount30d int64     `gorm:"-" json:"fired_count_30d"`
+	CreatedBy     string    `gorm:"type:varchar(36);not null" json:"created_by"`
+	CreatedAt     time.Time `gorm:"not null;default:now()" json:"created_at"`
+	UpdatedAt     time.Time `gorm:"not null;default:now()" json:"updated_at"`
 }
 
 func (CRMTrigger) TableName() string { return "crm_triggers" }
 
 // CRMCampaign is a one-off manual send.
 type CRMCampaign struct {
-	ID            string     `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
-	Name          string     `gorm:"type:varchar(255);not null" json:"name"`
-	SegmentID     *string    `gorm:"type:uuid" json:"segment_id,omitempty"`
-	Channel       string     `gorm:"type:varchar(20);not null" json:"channel"` // email|sms|push|all
-	TemplateID    *string    `gorm:"type:uuid" json:"template_id,omitempty"`
-	Status        string     `gorm:"type:varchar(30);not null;default:'draft'" json:"status"` // draft|scheduled|sending|sent|failed
-	ScheduledAt   *time.Time `json:"scheduled_at,omitempty"`
-	SentAt        *time.Time `json:"sent_at,omitempty"`
-	ReachCount    int        `gorm:"not null;default:0" json:"reach_count"`
-	DeliveredCount int       `gorm:"not null;default:0" json:"delivered_count"`
-	CreatedBy     string     `gorm:"type:varchar(36);not null" json:"created_by"`
-	CreatedAt     time.Time  `gorm:"not null;default:now()" json:"created_at"`
+	ID             string     `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
+	Name           string     `gorm:"type:varchar(255);not null" json:"name"`
+	SegmentID      *string    `gorm:"type:uuid" json:"segment_id,omitempty"`
+	Channel        string     `gorm:"type:varchar(20);not null" json:"channel"` // email|sms|push|all
+	TemplateID     *string    `gorm:"type:uuid" json:"template_id,omitempty"`
+	Status         string     `gorm:"type:varchar(30);not null;default:'draft'" json:"status"` // draft|scheduled|sending|sent|failed
+	ScheduledAt    *time.Time `json:"scheduled_at,omitempty"`
+	SentAt         *time.Time `json:"sent_at,omitempty"`
+	ReachCount     int        `gorm:"not null;default:0" json:"reach_count"`
+	DeliveredCount int        `gorm:"not null;default:0" json:"delivered_count"`
+	CreatedBy      string     `gorm:"type:varchar(36);not null" json:"created_by"`
+	CreatedAt      time.Time  `gorm:"not null;default:now()" json:"created_at"`
 }
 
 func (CRMCampaign) TableName() string { return "crm_campaigns" }
@@ -86,8 +86,12 @@ func RegisterCRMRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger, auditS
 	crm.Get("/segments", func(c *fiber.Ctx) error {
 		page := c.QueryInt("page", 1)
 		ps := c.QueryInt("page_size", 50)
-		if page < 1 { page = 1 }
-		if ps < 1 || ps > 200 { ps = 50 }
+		if page < 1 {
+			page = 1
+		}
+		if ps < 1 || ps > 200 {
+			ps = 50
+		}
 		var total int64
 		db.Model(&CRMSegment{}).Count(&total)
 		var items []CRMSegment
@@ -180,10 +184,16 @@ func RegisterCRMRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger, auditS
 		status := c.Query("status", "")
 		page := c.QueryInt("page", 1)
 		ps := c.QueryInt("page_size", 50)
-		if page < 1 { page = 1 }
-		if ps < 1 || ps > 200 { ps = 50 }
+		if page < 1 {
+			page = 1
+		}
+		if ps < 1 || ps > 200 {
+			ps = 50
+		}
 		q := db.Model(&CRMCampaign{})
-		if status != "" { q = q.Where("status = ?", status) }
+		if status != "" {
+			q = q.Where("status = ?", status)
+		}
 		var total int64
 		q.Count(&total)
 		var items []CRMCampaign
@@ -236,7 +246,9 @@ func RegisterCRMRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger, auditS
 		channel := c.Query("channel", "")
 		var items []CRMTemplate
 		q := db.Model(&CRMTemplate{})
-		if channel != "" { q = q.Where("channel = ?", channel) }
+		if channel != "" {
+			q = q.Where("channel = ?", channel)
+		}
 		q.Order("created_at DESC").Find(&items)
 		return c.JSON(fiber.Map{"data": items})
 	})
@@ -274,11 +286,19 @@ func RegisterCRMRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger, auditS
 		channel := c.Query("channel", "")
 		page := c.QueryInt("page", 1)
 		ps := c.QueryInt("page_size", 50)
-		if page < 1 { page = 1 }
-		if ps < 1 || ps > 200 { ps = 50 }
+		if page < 1 {
+			page = 1
+		}
+		if ps < 1 || ps > 200 {
+			ps = 50
+		}
 		q := db.Model(&models.CommunicationSuppression{})
-		if reason != "" { q = q.Where("reason = ?", reason) }
-		if channel != "" { q = q.Where("channel = ?", channel) }
+		if reason != "" {
+			q = q.Where("reason = ?", reason)
+		}
+		if channel != "" {
+			q = q.Where("channel = ?", channel)
+		}
 		var total int64
 		q.Count(&total)
 		var items []models.CommunicationSuppression
@@ -340,13 +360,15 @@ func RegisterCRMRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger, auditS
 			Select("COUNT(DISTINCT player_id)").Scan(&suppressedCount)
 
 		willReceive := int64(len(req.PlayerIDs)) - suppressedCount
-		if willReceive < 0 { willReceive = 0 }
+		if willReceive < 0 {
+			willReceive = 0
+		}
 
 		return c.JSON(fiber.Map{
 			"data": fiber.Map{
-				"total_target":    len(req.PlayerIDs),
-				"will_receive":    willReceive,
-				"rg_excluded":     suppressedCount,
+				"total_target":     len(req.PlayerIDs),
+				"will_receive":     willReceive,
+				"rg_excluded":      suppressedCount,
 				"suppressed_total": suppressedCount,
 			},
 		})

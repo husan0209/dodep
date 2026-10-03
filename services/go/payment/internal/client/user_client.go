@@ -20,19 +20,19 @@ import (
 
 // KYCCacheEntry represents a cached KYC level entry
 type KYCCacheEntry struct {
-	Level      int
-	ExpiresAt  time.Time
+	Level     int
+	ExpiresAt time.Time
 }
 
 // UserClient handles gRPC communication with User Service
 type UserClient struct {
-	client    userpb.UserServiceClient
-	conn      *grpc.ClientConn
-	logger    *zap.Logger
-	tracer    trace.Tracer
-	timeout   time.Duration
-	kycCache  map[int64]KYCCacheEntry
-	cacheTTL  time.Duration
+	client   userpb.UserServiceClient
+	conn     *grpc.ClientConn
+	logger   *zap.Logger
+	tracer   trace.Tracer
+	timeout  time.Duration
+	kycCache map[int64]KYCCacheEntry
+	cacheTTL time.Duration
 }
 
 // UserClientConfig holds configuration for User client

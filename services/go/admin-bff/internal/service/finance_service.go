@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	commonv1 "github.com/opus-casino/proto/gen/go/common/v1"
 	"github.com/opus-casino/admin-bff/internal/client"
+	commonv1 "github.com/opus-casino/proto/gen/go/common/v1"
 )
 
 type FinanceService struct {

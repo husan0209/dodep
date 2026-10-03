@@ -146,20 +146,20 @@ pub mod rate_limits {
     // Authentication
     pub const LOGIN_ATTEMPTS: u32 = 5;
     pub const LOGIN_WINDOW_MS: u64 = 15 * 60 * 1000; // 15 minutes
-    
+
     // API
     pub const API_REQUESTS_PER_MINUTE: u32 = 100;
     pub const API_REQUESTS_PER_HOUR: u32 = 1000;
-    
+
     // Betting
     pub const BETS_PER_SECOND: u32 = 10;
-    
+
     // Withdrawal
     pub const WITHDRAWAL_REQUESTS_PER_DAY: u32 = 5;
-    
+
     // Password reset
     pub const PASSWORD_RESET_PER_HOUR: u32 = 3;
-    
+
     // 2FA
     pub const TOTP_WINDOW_SECONDS: u64 = 30;
     pub const TOTP_MAX_ATTEMPTS: u32 = 5;
@@ -167,9 +167,9 @@ pub mod rate_limits {
 
 /// Betting limits
 pub mod bet_limits {
-    use rust_decimal::Decimal;
     use once_cell::sync::Lazy;
-    
+    use rust_decimal::Decimal;
+
     pub static MIN_STAKE: Lazy<Decimal> = Lazy::new(|| Decimal::new(10, 2)); // 0.10
     pub static MAX_STAKE: Lazy<Decimal> = Lazy::new(|| Decimal::new(1000000, 2)); // 10000.00
     pub const MAX_WIN_MULTIPLIER: u32 = 10000; // Max win = stake * multiplier
@@ -179,14 +179,15 @@ pub mod bet_limits {
 
 /// Payment limits
 pub mod payment_limits {
-    use rust_decimal::Decimal;
     use once_cell::sync::Lazy;
-    
+    use rust_decimal::Decimal;
+
     pub static MIN_DEPOSIT: Lazy<Decimal> = Lazy::new(|| Decimal::new(100, 2)); // 1.00
     pub static MAX_DEPOSIT_DAILY: Lazy<Decimal> = Lazy::new(|| Decimal::new(1000000, 2)); // 10000.00
     pub static MIN_WITHDRAWAL: Lazy<Decimal> = Lazy::new(|| Decimal::new(1000, 2)); // 10.00
     pub static MAX_WITHDRAWAL_DAILY: Lazy<Decimal> = Lazy::new(|| Decimal::new(5000000, 2)); // 50000.00
-    pub static MAX_WITHDRAWAL_MONTHLY: Lazy<Decimal> = Lazy::new(|| Decimal::new(50000000, 2)); // 500000.00
+    pub static MAX_WITHDRAWAL_MONTHLY: Lazy<Decimal> = Lazy::new(|| Decimal::new(50000000, 2));
+    // 500000.00
 }
 
 /// Session settings
@@ -215,19 +216,19 @@ pub mod error_codes {
     pub const AUTH_2FA_REQUIRED: &str = "AUTH_1006";
     pub const AUTH_2FA_INVALID: &str = "AUTH_1007";
     pub const AUTH_ACCOUNT_LOCKED: &str = "AUTH_1008";
-    
+
     // Wallet (5000-5999)
     pub const WALLET_NOT_FOUND: &str = "WALLET_5001";
     pub const INSUFFICIENT_BALANCE: &str = "WALLET_5002";
     pub const INSUFFICIENT_AVAILABLE_BALANCE: &str = "WALLET_5003";
-    
+
     // Bet (7000-7999)
     pub const BET_NOT_FOUND: &str = "BET_7001";
     pub const BET_INVALID: &str = "BET_7002";
     pub const BET_ALREADY_SETTLED: &str = "BET_7003";
     pub const BET_LIMIT_EXCEEDED: &str = "BET_7005";
     pub const BET_ODDS_CHANGED: &str = "BET_7007";
-    
+
     // System (11000-11999)
     pub const INTERNAL_ERROR: &str = "SYS_11001";
     pub const SERVICE_UNAVAILABLE: &str = "SYS_11002";

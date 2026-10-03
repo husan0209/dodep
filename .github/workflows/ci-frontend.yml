@@ -57,17 +57,36 @@ jobs:
       - name: Run ESLint
         run: npm run lint
 
-      - name: Run Prettier
-        run: npm run format -- --check
+      # NOTE: a repo-wide `prettier --check .` used to live here as
+      # `npm run format -- --check`. That was broken in three ways:
+      #   1. `format:write` *writes* files - `--check` was passed to nx, not prettier;
+      #   2. prettier globbed the whole repo and tried to parse Helm/ArgoCD Go templates
+      #      as YAML, producing 30+ SyntaxErrors;
+      #   3. even once the parse errors were fixed (see .prettierignore), 275 existing
+      #      files are not Prettier-formatted and the repository has no Prettier config
+      #      at all, so the check could never pass.
+      # Turning formatting into a gate means picking a style and reformatting the repo;
+      # that is a separate, reviewable change, so the step is dropped here rather than
+      # silently passing. `npm run format` still works locally for opted-in paths.
 
   # ==========================================================================
   # Type Check
+  #
+  # NOTE: this used to be a single `npx tsc --noEmit` executed in the repository root.
+  # There is no tsconfig.json at the root, so tsc printed its own help text and exited 1
+  # on every run ("Process completed with exit code 1" with a wall of compiler options in
+  # the log). Each TypeScript project has to be checked against its own tsconfig.
   # ==========================================================================
   typecheck:
     name: Type Check
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    
+
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [apps/web, apps/admin, libs/shared/typescript]
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -77,12 +96,17 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
+          cache-dependency-path: |
+            package-lock.json
+            ${{ matrix.project }}/package-lock.json
 
       - name: Install dependencies
+        working-directory: ${{ matrix.project }}
         run: npm ci
 
       - name: Run TypeScript check
-        run: npx tsc --noEmit
+        working-directory: ${{ matrix.project }}
+        run: npx tsc --noEmit -p tsconfig.json
 
   # ==========================================================================
   # Test

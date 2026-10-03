@@ -94,23 +94,23 @@ type AuditLogRepository interface {
 
 // AuditLog represents an audit log entry
 type AuditLog struct {
-	ID              int64         `gorm:"primaryKey;autoIncrement"`
-	UserID          int64         `gorm:"not null;index"`
-	OperationType   string        `gorm:"size:50;not null;index"`
-	OperationID     *int64        `gorm:""`
-	ReferenceType   string        `gorm:"size:50"`
-	ReferenceID     string        `gorm:"size:100;index"`
-	PreviousStatus  string        `gorm:"size:50"`
-	NewStatus       string        `gorm:"size:50"`
-	Amount          *decimal.Decimal `gorm:"type:numeric(18,8)"`
-	Currency        string        `gorm:"size:20"`
+	ID              int64                  `gorm:"primaryKey;autoIncrement"`
+	UserID          int64                  `gorm:"not null;index"`
+	OperationType   string                 `gorm:"size:50;not null;index"`
+	OperationID     *int64                 `gorm:""`
+	ReferenceType   string                 `gorm:"size:50"`
+	ReferenceID     string                 `gorm:"size:100;index"`
+	PreviousStatus  string                 `gorm:"size:50"`
+	NewStatus       string                 `gorm:"size:50"`
+	Amount          *decimal.Decimal       `gorm:"type:numeric(18,8)"`
+	Currency        string                 `gorm:"size:20"`
 	RequestDetails  map[string]interface{} `gorm:"type:jsonb"`
 	ResponseDetails map[string]interface{} `gorm:"type:jsonb"`
-	ErrorCode       string        `gorm:"size:50;index"`
-	ErrorMessage    string        `gorm:"type:text"`
-	TraceID         string        `gorm:"size:50;index"`
-	CorrelationID   string        `gorm:"size:50"`
-	CreatedAt       time.Time     `gorm:"not null;default:now();index"`
+	ErrorCode       string                 `gorm:"size:50;index"`
+	ErrorMessage    string                 `gorm:"type:text"`
+	TraceID         string                 `gorm:"size:50;index"`
+	CorrelationID   string                 `gorm:"size:50"`
+	CreatedAt       time.Time              `gorm:"not null;default:now();index"`
 }
 
 // TableName specifies the table name for AuditLog

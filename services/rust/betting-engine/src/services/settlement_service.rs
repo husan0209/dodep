@@ -43,7 +43,13 @@ impl SettlementService {
 
         let bet = self
             .bet_repo
-            .update_bet_status(&mut tx, bet_id, BetStatus::Active, target_status, Some(actual_win))
+            .update_bet_status(
+                &mut tx,
+                bet_id,
+                BetStatus::Active,
+                target_status,
+                Some(actual_win),
+            )
             .await
             .map_err(|e| match e {
                 sqlx::Error::RowNotFound => AppError::Conflict {

@@ -15,8 +15,8 @@ type Meta struct {
 
 // ErrorResponse represents an error response
 type ErrorResponse struct {
-	Error  ErrorDetail `json:"error"`
-	Meta   Meta        `json:"meta"`
+	Error ErrorDetail `json:"error"`
+	Meta  Meta        `json:"meta"`
 }
 
 // ErrorDetail represents error details
@@ -31,18 +31,12 @@ type SuccessResponse struct {
 	Meta Meta        `json:"meta"`
 }
 
-// PaginatedResponse represents a paginated response
-type PaginatedResponse struct {
-	Data       interface{} `json:"data"`
-	Pagination Pagination  `json:"pagination"`
-	Meta       Meta        `json:"meta"`
-}
-
-// Pagination represents pagination info
-type Pagination struct {
-	NextCursor string `json:"next_cursor,omitempty"`
-	HasMore    bool   `json:"has_more"`
-}
+// NOTE: a generic `PaginatedResponse`/`Pagination` envelope and a `respondPaginated`
+// helper used to live here. They were never called: the list endpoints
+// (GetPaymentHistory, GetWithdrawalHistory) answer with their own typed bodies
+// (PaymentHistoryResponse / WithdrawalHistoryResponse), which already carry
+// `next_cursor` and `has_more`. Dead code that golangci-lint's `unused` linter
+// rejected, so it is gone rather than kept as a second, contradictory shape.
 
 // respondSuccess sends a success response
 func respondSuccess(c *fiber.Ctx, status int, data interface{}) error {
@@ -61,21 +55,6 @@ func respondError(c *fiber.Ctx, status int, message string) error {
 		Error: ErrorDetail{
 			Code:    status * 10,
 			Message: message,
-		},
-		Meta: Meta{
-			RequestID: getRequestID(c),
-			Timestamp: time.Now().UTC().Format(time.RFC3339),
-		},
-	})
-}
-
-// respondPaginated sends a paginated response
-func respondPaginated(c *fiber.Ctx, items interface{}, nextCursor string, hasMore bool) error {
-	return c.Status(200).JSON(PaginatedResponse{
-		Data: items,
-		Pagination: Pagination{
-			NextCursor: nextCursor,
-			HasMore:    hasMore,
 		},
 		Meta: Meta{
 			RequestID: getRequestID(c),

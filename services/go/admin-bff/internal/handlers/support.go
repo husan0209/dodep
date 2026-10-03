@@ -21,14 +21,26 @@ func RegisterSupportRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger) {
 		assignedTo := c.Query("assigned_to", "")
 		page := c.QueryInt("page", 1)
 		ps := c.QueryInt("page_size", 50)
-		if page < 1 { page = 1 }
-		if ps < 1 || ps > 200 { ps = 50 }
+		if page < 1 {
+			page = 1
+		}
+		if ps < 1 || ps > 200 {
+			ps = 50
+		}
 
 		q := db.Model(&models.SupportTicket{})
-		if status != "" { q = q.Where("status = ?", status) }
-		if priority != "" { q = q.Where("priority = ?", priority) }
-		if category != "" { q = q.Where("category = ?", category) }
-		if assignedTo != "" { q = q.Where("assigned_to = ?", assignedTo) }
+		if status != "" {
+			q = q.Where("status = ?", status)
+		}
+		if priority != "" {
+			q = q.Where("priority = ?", priority)
+		}
+		if category != "" {
+			q = q.Where("category = ?", category)
+		}
+		if assignedTo != "" {
+			q = q.Where("assigned_to = ?", assignedTo)
+		}
 
 		var total int64
 		q.Count(&total)
@@ -36,8 +48,8 @@ func RegisterSupportRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger) {
 		q.Order("created_at DESC").Limit(ps).Offset((page - 1) * ps).Find(&items)
 
 		return c.JSON(fiber.Map{
-			"data": items,
-			"pagination": fiber.Map{"page": page, "page_size": ps, "total": total, "total_pages": int(math.Ceil(float64(total)/float64(ps)))},
+			"data":       items,
+			"pagination": fiber.Map{"page": page, "page_size": ps, "total": total, "total_pages": int(math.Ceil(float64(total) / float64(ps)))},
 		})
 	})
 
@@ -61,7 +73,9 @@ func RegisterSupportRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger) {
 		id := c.Params("id")
 		var t models.SupportTicket
 		if err := db.Where("id = ?", id).First(&t).Error; err != nil {
-			if err == gorm.ErrRecordNotFound { return c.Status(404).JSON(fiber.Map{"error": "not found"}) }
+			if err == gorm.ErrRecordNotFound {
+				return c.Status(404).JSON(fiber.Map{"error": "not found"})
+			}
 			return c.Status(500).JSON(fiber.Map{"error": "database error"})
 		}
 		var messages []models.SupportMessage
@@ -77,20 +91,30 @@ func RegisterSupportRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger) {
 	tickets.Put("/:id", func(c *fiber.Ctx) error {
 		id := c.Params("id")
 		var req struct {
-			Status       string `json:"status"`
-			Priority     string `json:"priority"`
-			AssignedTo   string `json:"assigned_to"`
+			Status         string `json:"status"`
+			Priority       string `json:"priority"`
+			AssignedTo     string `json:"assigned_to"`
 			AssignedToName string `json:"assigned_to_name"`
 		}
 		if err := c.BodyParser(&req); err != nil {
 			return c.Status(400).JSON(fiber.Map{"error": "invalid body"})
 		}
 		updates := map[string]any{}
-		if req.Status != "" { updates["status"] = req.Status }
-		if req.Priority != "" { updates["priority"] = req.Priority }
-		if req.AssignedTo != "" { updates["assigned_to"] = req.AssignedTo }
-		if req.AssignedToName != "" { updates["assigned_to_name"] = req.AssignedToName }
-		if len(updates) == 0 { return c.JSON(fiber.Map{"success": true}) }
+		if req.Status != "" {
+			updates["status"] = req.Status
+		}
+		if req.Priority != "" {
+			updates["priority"] = req.Priority
+		}
+		if req.AssignedTo != "" {
+			updates["assigned_to"] = req.AssignedTo
+		}
+		if req.AssignedToName != "" {
+			updates["assigned_to_name"] = req.AssignedToName
+		}
+		if len(updates) == 0 {
+			return c.JSON(fiber.Map{"success": true})
+		}
 		if err := db.Model(&models.SupportTicket{}).Where("id = ?", id).Updates(updates).Error; err != nil {
 			return c.Status(500).JSON(fiber.Map{"error": "database error"})
 		}
@@ -120,8 +144,8 @@ func RegisterSupportRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger) {
 		// Update ticket preview and count
 		db.Model(&models.SupportTicket{}).Where("id = ?", id).Updates(map[string]any{
 			"last_message_preview": req.Body,
-			"last_message_at":    time.Now(),
-			"message_count":      gorm.Expr("message_count + 1"),
+			"last_message_at":      time.Now(),
+			"message_count":        gorm.Expr("message_count + 1"),
 		})
 		return c.JSON(fiber.Map{"data": req})
 	})

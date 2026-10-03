@@ -24,11 +24,11 @@ type Config struct {
 	RedpandaBrokers []string
 
 	// Email
-	EmailEnabled    bool
-	EmailProvider   string
-	EmailFrom       string
-	EmailAPIKey     string
-	EmailAPISecret  string
+	EmailEnabled   bool
+	EmailProvider  string
+	EmailFrom      string
+	EmailAPIKey    string
+	EmailAPISecret string
 
 	// SMS
 	SMSEnabled   bool
@@ -37,8 +37,8 @@ type Config struct {
 	SMSAPISecret string
 
 	// Push
-	PushEnabled      bool
-	PushFirebaseKey  string
+	PushEnabled     bool
+	PushFirebaseKey string
 
 	// Environment
 	Env string
@@ -81,8 +81,8 @@ func Load() *Config {
 		SMSAPISecret: getEnv("SMS_API_SECRET", ""),
 
 		// Push
-		PushEnabled:      getEnv("PUSH_ENABLED", "true") == "true",
-		PushFirebaseKey:  getEnv("PUSH_FIREBASE_KEY", ""),
+		PushEnabled:     getEnv("PUSH_ENABLED", "true") == "true",
+		PushFirebaseKey: getEnv("PUSH_FIREBASE_KEY", ""),
 
 		// Environment
 		Env: getEnv("APP_ENV", "development"),

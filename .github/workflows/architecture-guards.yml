@@ -65,16 +65,40 @@ jobs:
 
       # ──────────────────────────────────────────────────────────────
       # G3: Запрет захардкоженных секретов
+      #
+      # Сканируем ТОЛЬКО отслеживаемые git-файлы и исключаем:
+      #   * сам этот workflow - иначе guard находит собственный grep-паттерн;
+      #   * вендоренные директории AI-инструментов (.claude/skills, .qwen/skills, ...)
+      #     - там лежит документация k8s с примером SSH-ключа, а не секрет.
+      # Раньше выполнялся `grep -rn ... . | grep -v ".git"`, который попадал и в .git,
+      # и в эти справочники, и всегда падал. "PRIVATE KEY" ищется в канонической
+      # форме PEM-заголовка.
       # ──────────────────────────────────────────────────────────────
       - name: "G3: No hardcoded secrets or private keys"
         run: |
           echo "Проверка G3: отсутствие захардкоженных приватных ключей..."
-          if grep -rn "BEGIN RSA PRIVATE KEY" . 2>/dev/null | grep -v ".git"; then
-            echo "❌ Обнаружен приватный ключ в репозитории!"
-            exit 1
-          fi
-          if grep -rn "BEGIN OPENSSH PRIVATE KEY" . 2>/dev/null | grep -v ".git"; then
-            echo "❌ Обнаружен SSH приватный ключ в репозитории!"
+          # Каталоги вендоренных AI-скиллов: примеры ключей в документации, не секреты.
+          EXCLUDES=(
+            ':(exclude).github/workflows/architecture-guards.yml'
+            ':(exclude).agents/**'   ':(exclude).claude/**'    ':(exclude).codex/**'
+            ':(exclude).continue/**' ':(exclude).cursor/**'   ':(exclude).factory/**'
+            ':(exclude).gemini/**'   ':(exclude).junie/**'    ':(exclude).kiro/**'
+            ':(exclude).openhands/**' ':(exclude).qoder/**'   ':(exclude).qwen/**'
+            ':(exclude).trae/**'     ':(exclude).vibe/**'     ':(exclude).windsurf/**'
+            ':(exclude).aider/**'
+          )
+
+          FOUND=$(git grep -n -I \
+            -e 'BEGIN RSA PRIVATE KEY' \
+            -e 'BEGIN OPENSSH PRIVATE KEY' \
+            -e 'BEGIN EC PRIVATE KEY' \
+            -e 'BEGIN DSA PRIVATE KEY' \
+            -e 'BEGIN PRIVATE KEY' \
+            -- . "${EXCLUDES[@]}" || true)
+
+          if [ -n "$FOUND" ]; then
+            echo "❌ Обнаружен приватный ключ в репозитории:"
+            echo "$FOUND" | head -20
             exit 1
           fi
           echo "✅ G3 пройден: приватные ключи не обнаружены."

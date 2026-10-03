@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"context"
-	"fmt"
 
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
@@ -88,7 +87,7 @@ func (h *CasinoGRPCHandler) LaunchGame(ctx context.Context, req *casinov1.Launch
 	}
 
 	serviceReq := &service.LaunchGameRequest{
-		UserID:     fmt.Sprintf("%s", req.UserId.GetValue()),
+		UserID:     req.UserId.GetValue(),
 		GameID:     req.GameId,
 		DeviceType: req.DeviceType,
 		LobbyURL:   req.LobbyUrl,
@@ -178,13 +177,13 @@ func (h *CasinoGRPCHandler) GetGameHistory(ctx context.Context, req *casinov1.Ge
 	sessions := make([]*casinov1.GameSessionSummary, len(result.Sessions))
 	for i, session := range result.Sessions {
 		sessions[i] = toProtoGameSessionSummary(&service.GameSessionSummary{
-			SessionID:     session.ID,
-			GameID:        session.GameID,
-			GameName:      session.GameID,
-			TotalBet:      session.BalanceAtStart,
-			StartedAt:     session.StartedAt,
-			EndedAt:       *session.EndedAt,
-			DurationSecs:  int64(session.EndedAt.Sub(session.StartedAt).Seconds()),
+			SessionID:    session.ID,
+			GameID:       session.GameID,
+			GameName:     session.GameID,
+			TotalBet:     session.BalanceAtStart,
+			StartedAt:    session.StartedAt,
+			EndedAt:      *session.EndedAt,
+			DurationSecs: int64(session.EndedAt.Sub(session.StartedAt).Seconds()),
 		})
 	}
 

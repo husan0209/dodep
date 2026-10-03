@@ -52,9 +52,9 @@ type IdempotencyResult struct {
 
 // CheckOrSetResult contains the result of CheckOrSet operation
 type CheckOrSetResult struct {
-	IsNew   bool                // true if key is new (operation should proceed)
-	Result  *IdempotencyResult  // existing result if key was found
-	Err     error               // error if any
+	IsNew  bool               // true if key is new (operation should proceed)
+	Result *IdempotencyResult // existing result if key was found
+	Err    error              // error if any
 }
 
 // CheckOrSet checks if an idempotency key exists and sets it if not.
@@ -80,13 +80,13 @@ func (s *IdempotencyService) CheckOrSet(ctx context.Context, key string, operati
 			// Treat as new operation but log the error
 			return &CheckOrSetResult{IsNew: true, Err: nil}
 		}
-		
+
 		s.logger.Info("Idempotency key found in cache",
 			zap.String("key", key),
 			zap.String("operation_type", result.OperationType),
 			zap.String("reference_id", result.ReferenceID),
 		)
-		
+
 		return &CheckOrSetResult{
 			IsNew:  false,
 			Result: &result,
@@ -100,7 +100,7 @@ func (s *IdempotencyService) CheckOrSet(ctx context.Context, key string, operati
 		Status:        "processing",
 		CreatedAt:     time.Now(),
 	}
-	
+
 	placeholderData, err := json.Marshal(placeholder)
 	if err != nil {
 		s.logger.Error("Failed to marshal idempotency placeholder",
@@ -160,7 +160,7 @@ func (s *IdempotencyService) SetResult(ctx context.Context, key string, result *
 	}
 
 	result.CreatedAt = time.Now()
-	
+
 	data, err := json.Marshal(result)
 	if err != nil {
 		return fmt.Errorf("marshal result: %w", err)
@@ -292,10 +292,10 @@ func (s *IdempotencyService) HandleUniqueConstraintViolation(ctx context.Context
 func IsDuplicateError(err error) bool {
 	// PostgreSQL unique constraint violation error code
 	// This is a simplified check - in production, use pgx or pq to check the error code
-	return err != nil && (err.Error() != "" && 
+	return err != nil && (err.Error() != "" &&
 		(containsString(err.Error(), "duplicate key") ||
-		 containsString(err.Error(), "unique constraint") ||
-		 containsString(err.Error(), "SQLSTATE 23505")))
+			containsString(err.Error(), "unique constraint") ||
+			containsString(err.Error(), "SQLSTATE 23505")))
 }
 
 // containsString checks if s contains substr (case-insensitive helper)

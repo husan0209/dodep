@@ -122,7 +122,7 @@ func (a *Adapter) VerifyCallbackSignature(body []byte, headers map[string]string
 
 	var sb strings.Builder
 	for _, k := range keys {
-		sb.WriteString(fmt.Sprintf("%v", params[k]))
+		fmt.Fprintf(&sb, "%v", params[k])
 	}
 	sb.WriteString(a.cfg.SecretKey)
 
@@ -142,8 +142,8 @@ func (a *Adapter) VerifyCallbackSignature(body []byte, headers map[string]string
 // ─── Inbound callback types ─────────────────────────────────────────────────
 
 type pragmaticCallback struct {
-	Type          string          `json:"type"`           // "balance","bet","result","refund","jackpotWin","promoWin"
-	Token         string          `json:"token"`          // session token = player_id for us
+	Type          string          `json:"type"`  // "balance","bet","result","refund","jackpotWin","promoWin"
+	Token         string          `json:"token"` // session token = player_id for us
 	PromoCode     string          `json:"promoCode,omitempty"`
 	GameID        string          `json:"gameId"`
 	RoundID       string          `json:"roundId"`

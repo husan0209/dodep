@@ -51,7 +51,7 @@ func IPWhitelist(db *gorm.DB) fiber.Handler {
 		}
 
 		return c.Status(403).JSON(fiber.Map{
-			"error": "IP_NOT_WHITELISTED",
+			"error":   "IP_NOT_WHITELISTED",
 			"message": "Access from this IP address is not permitted",
 		})
 	}

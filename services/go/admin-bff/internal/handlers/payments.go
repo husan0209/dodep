@@ -16,14 +16,14 @@ func RegisterPaymentRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger) {
 	// Chargeback webhook (internal endpoint from payment gateway)
 	pm.Post("/internal/webhooks/chargeback", func(c *fiber.Ctx) error {
 		var req struct {
-			PlayerID      int64   `json:"player_id"`
-			TransactionID string  `json:"transaction_id"`
-			Amount        string  `json:"amount"`
-			Currency      string  `json:"currency"`
-			Gateway       string  `json:"gateway"`
-			GatewayCbID   string  `json:"gateway_cb_id"`
-			ReasonCode    string  `json:"reason_code"`
-			ReasonText    string  `json:"reason_text"`
+			PlayerID      int64  `json:"player_id"`
+			TransactionID string `json:"transaction_id"`
+			Amount        string `json:"amount"`
+			Currency      string `json:"currency"`
+			Gateway       string `json:"gateway"`
+			GatewayCbID   string `json:"gateway_cb_id"`
+			ReasonCode    string `json:"reason_code"`
+			ReasonText    string `json:"reason_text"`
 		}
 		if err := c.BodyParser(&req); err != nil {
 			return c.Status(400).JSON(fiber.Map{"error": "invalid body"})
@@ -67,33 +67,47 @@ func RegisterPaymentRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger) {
 		assignedTo := c.Query("assigned_to", "")
 		page := c.QueryInt("page", 1)
 		ps := c.QueryInt("page_size", 50)
-		if page < 1 { page = 1 }
-		if ps < 1 || ps > 200 { ps = 50 }
+		if page < 1 {
+			page = 1
+		}
+		if ps < 1 || ps > 200 {
+			ps = 50
+		}
 		q := db.Model(&models.Chargeback{})
-		if status != "" { q = q.Where("status = ?", status) }
-		if assignedTo != "" { q = q.Where("assigned_to = ?", assignedTo) }
+		if status != "" {
+			q = q.Where("status = ?", status)
+		}
+		if assignedTo != "" {
+			q = q.Where("assigned_to = ?", assignedTo)
+		}
 		var total int64
 		q.Count(&total)
 		var items []models.Chargeback
 		q.Order("received_at DESC").Limit(ps).Offset((page - 1) * ps).Find(&items)
 		return c.JSON(fiber.Map{
-			"data": items,
-			"pagination": fiber.Map{"page": page, "page_size": ps, "total": total, "total_pages": int(math.Ceil(float64(total)/float64(ps)))},
+			"data":       items,
+			"pagination": fiber.Map{"page": page, "page_size": ps, "total": total, "total_pages": int(math.Ceil(float64(total) / float64(ps)))},
 		})
 	})
 
 	pm.Get("/chargebacks/:id", func(c *fiber.Ctx) error {
 		var cb models.Chargeback
 		if err := db.Where("id = ?", c.Params("id")).First(&cb).Error; err != nil {
-			if err == gorm.ErrRecordNotFound { return c.Status(404).JSON(fiber.Map{"error": "not found"}) }
+			if err == gorm.ErrRecordNotFound {
+				return c.Status(404).JSON(fiber.Map{"error": "not found"})
+			}
 			return c.Status(500).JSON(fiber.Map{"error": "database error"})
 		}
 		return c.JSON(fiber.Map{"data": cb})
 	})
 
 	pm.Put("/chargebacks/:id/assign", func(c *fiber.Ctx) error {
-		var req struct { AssignedTo string `json:"assigned_to"` }
-		if err := c.BodyParser(&req); err != nil { return c.Status(400).JSON(fiber.Map{"error": "invalid body"}) }
+		var req struct {
+			AssignedTo string `json:"assigned_to"`
+		}
+		if err := c.BodyParser(&req); err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": "invalid body"})
+		}
 		db.Model(&models.Chargeback{}).Where("id = ?", c.Params("id")).Updates(map[string]any{
 			"assigned_to": req.AssignedTo, "assigned_to_name": req.AssignedTo,
 		})
@@ -101,8 +115,12 @@ func RegisterPaymentRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger) {
 	})
 
 	pm.Post("/chargebacks/:id/fight", func(c *fiber.Ctx) error {
-		var req struct { Evidence []any `json:"evidence"` }
-		if err := c.BodyParser(&req); err != nil { return c.Status(400).JSON(fiber.Map{"error": "invalid body"}) }
+		var req struct {
+			Evidence []any `json:"evidence"`
+		}
+		if err := c.BodyParser(&req); err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": "invalid body"})
+		}
 		db.Model(&models.Chargeback{}).Where("id = ?", c.Params("id")).Updates(map[string]any{
 			"status": "fighting", "fight_evidence": req.Evidence,
 		})
@@ -140,12 +158,12 @@ func RegisterPaymentRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger) {
 			fightWinRate = float64(wonCount) / float64(foughtCount) * 100.0
 		}
 		return c.JSON(fiber.Map{"data": fiber.Map{
-			"total_this_month":    totalThisMonth,
-			"amount_this_month":   amountThisMonth,
-			"cb_rate_pct":         cbRate,
-			"fight_win_rate_pct":  fightWinRate,
-			"fought_count":        foughtCount,
-			"won_count":           wonCount,
+			"total_this_month":   totalThisMonth,
+			"amount_this_month":  amountThisMonth,
+			"cb_rate_pct":        cbRate,
+			"fight_win_rate_pct": fightWinRate,
+			"fought_count":       foughtCount,
+			"won_count":          wonCount,
 		}})
 	})
 
@@ -177,14 +195,14 @@ func RegisterPaymentRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger) {
 				"total":               "0",
 			},
 			"assets": fiber.Map{
-				"total_deposits":      totalDeposits,
-				"total_withdrawals":   totalWithdrawals,
-				"platform_hold":       platformHold,
-				"total":               "0",
+				"total_deposits":    totalDeposits,
+				"total_withdrawals": totalWithdrawals,
+				"platform_hold":     platformHold,
+				"total":             "0",
 			},
-			"coverage_ratio":     coverageRatio,
-			"status":             status,
-			"total_chargebacks":  totalChargebacks,
+			"coverage_ratio":    coverageRatio,
+			"status":            status,
+			"total_chargebacks": totalChargebacks,
 		}})
 	})
 
@@ -196,7 +214,7 @@ func RegisterPaymentRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger) {
 		}
 		type enrichedCryptoWallet struct {
 			models.CryptoWallet
-			IsLow           bool   `json:"is_low"`
+			IsLow              bool   `json:"is_low"`
 			HotWalletThreshold string `json:"hot_wallet_threshold"`
 		}
 		var enriched []enrichedCryptoWallet
@@ -225,18 +243,26 @@ func RegisterPaymentRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger) {
 		typ := c.Query("type", "")
 		page := c.QueryInt("page", 1)
 		ps := c.QueryInt("page_size", 50)
-		if page < 1 { page = 1 }
-		if ps < 1 || ps > 200 { ps = 50 }
+		if page < 1 {
+			page = 1
+		}
+		if ps < 1 || ps > 200 {
+			ps = 50
+		}
 		q := db.Model(&models.P2PTransaction{})
-		if status != "" { q = q.Where("status = ?", status) }
-		if typ != "" { q = q.Where("type = ?", typ) }
+		if status != "" {
+			q = q.Where("status = ?", status)
+		}
+		if typ != "" {
+			q = q.Where("type = ?", typ)
+		}
 		var total int64
 		q.Count(&total)
 		var items []models.P2PTransaction
 		q.Order("created_at DESC").Limit(ps).Offset((page - 1) * ps).Find(&items)
 		return c.JSON(fiber.Map{
-			"data": items,
-			"pagination": fiber.Map{"page": page, "page_size": ps, "total": total, "total_pages": int(math.Ceil(float64(total)/float64(ps)))},
+			"data":       items,
+			"pagination": fiber.Map{"page": page, "page_size": ps, "total": total, "total_pages": int(math.Ceil(float64(total) / float64(ps)))},
 		})
 	})
 
@@ -248,7 +274,9 @@ func RegisterPaymentRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger) {
 	})
 
 	pm.Post("/p2p/:id/reject", func(c *fiber.Ctx) error {
-		var req struct { Reason string `json:"reason"` }
+		var req struct {
+			Reason string `json:"reason"`
+		}
 		c.BodyParser(&req)
 		db.Model(&models.P2PTransaction{}).Where("id = ?", c.Params("id")).Updates(map[string]any{
 			"status": "rejected", "notes": req.Reason,
@@ -267,28 +295,40 @@ func RegisterPaymentRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger) {
 		to := c.Query("to", "")
 		page := c.QueryInt("page", 1)
 		ps := c.QueryInt("page_size", 50)
-		if page < 1 { page = 1 }
-		if ps < 1 || ps > 200 { ps = 50 }
+		if page < 1 {
+			page = 1
+		}
+		if ps < 1 || ps > 200 {
+			ps = 50
+		}
 		q := db.Model(&models.ReconciliationRecord{})
-		if from != "" { q = q.Where("recon_date >= ?", from) }
-		if to != "" { q = q.Where("recon_date <= ?", to) }
+		if from != "" {
+			q = q.Where("recon_date >= ?", from)
+		}
+		if to != "" {
+			q = q.Where("recon_date <= ?", to)
+		}
 		var total int64
 		q.Count(&total)
 		var items []models.ReconciliationRecord
 		q.Order("recon_date DESC").Limit(ps).Offset((page - 1) * ps).Find(&items)
 		return c.JSON(fiber.Map{
-			"data": items,
-			"pagination": fiber.Map{"page": page, "page_size": ps, "total": total, "total_pages": int(math.Ceil(float64(total)/float64(ps)))},
+			"data":       items,
+			"pagination": fiber.Map{"page": page, "page_size": ps, "total": total, "total_pages": int(math.Ceil(float64(total) / float64(ps)))},
 		})
 	})
 
 	pm.Post("/reconciliation/run", func(c *fiber.Ctx) error {
-		var req struct { Date string `json:"date"` }
-		if err := c.BodyParser(&req); err != nil { return c.Status(400).JSON(fiber.Map{"error": "invalid body"}) }
+		var req struct {
+			Date string `json:"date"`
+		}
+		if err := c.BodyParser(&req); err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": "invalid body"})
+		}
 		date, _ := time.Parse("2006-01-02", req.Date)
 		rec := models.ReconciliationRecord{
-			ReconDate:  date, Status: "pending",
-			CreatedAt:  time.Now(), UpdatedAt: time.Now(),
+			ReconDate: date, Status: "pending",
+			CreatedAt: time.Now(), UpdatedAt: time.Now(),
 		}
 		db.Create(&rec)
 		return c.JSON(fiber.Map{"success": true, "data": rec})
@@ -305,7 +345,9 @@ func RegisterPaymentRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger) {
 
 	pm.Put("/method-configs/:id", func(c *fiber.Ctx) error {
 		var req models.PaymentMethodConfig
-		if err := c.BodyParser(&req); err != nil { return c.Status(400).JSON(fiber.Map{"error": "invalid body"}) }
+		if err := c.BodyParser(&req); err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": "invalid body"})
+		}
 		db.Model(&models.PaymentMethodConfig{}).Where("id = ?", c.Params("id")).Updates(&req)
 		return c.JSON(fiber.Map{"success": true})
 	})

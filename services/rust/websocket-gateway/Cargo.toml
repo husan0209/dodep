@@ -6,7 +6,11 @@ description = "Real-time WebSocket gateway for Opus Casino platform"
 
 [dependencies]
 # Async runtime
-tokio = { version = "1.35", features = ["full", "rt-multi-thread", "io-uring"] }
+# NOTE: the `io-uring` feature was removed here. It is gated behind `--cfg
+# tokio_unstable` and made `cargo build`/`cargo clippy`/`cargo test` fail outright with
+# "The `io-uring` feature requires `--cfg tokio_unstable`". Nothing in this crate uses
+# io_uring directly.
+tokio = { version = "1.35", features = ["full", "rt-multi-thread"] }
 
 # Web framework
 axum = { version = "0.7", features = ["macros", "ws"] }

@@ -6,21 +6,21 @@ import (
 )
 
 type RiskAlert struct {
-	ID              string          `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
-	UserID          int64           `gorm:"not null;index" json:"user_id"`
-	Category        string          `gorm:"type:varchar(50);not null" json:"category"`
-	Severity        string          `gorm:"type:varchar(20);not null;default:'medium'" json:"severity"`
-	Status          string          `gorm:"type:varchar(20);not null;default:'open'" json:"status"`
-	RiskScore       int             `gorm:"not null;default:0" json:"risk_score"`
-	Title           string          `gorm:"type:varchar(255);not null" json:"title"`
-	Description     string          `gorm:"type:text;not null" json:"description"`
-	Evidence        json.RawMessage `gorm:"type:jsonb;not null;default:'{}'" json:"evidence"`
-	AssignedTo      *string         `gorm:"type:varchar(36)" json:"assigned_to,omitempty"`
-	Resolution      *string         `gorm:"type:text" json:"resolution,omitempty"`
-	DismissReason   *string         `gorm:"type:varchar(100)" json:"dismiss_reason,omitempty"`
-	ResolvedAt      *time.Time      `json:"resolved_at,omitempty"`
-	CreatedAt       time.Time       `gorm:"not null;default:now()" json:"created_at"`
-	UpdatedAt       time.Time       `gorm:"not null;default:now()" json:"updated_at"`
+	ID            string          `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
+	UserID        int64           `gorm:"not null;index" json:"user_id"`
+	Category      string          `gorm:"type:varchar(50);not null" json:"category"`
+	Severity      string          `gorm:"type:varchar(20);not null;default:'medium'" json:"severity"`
+	Status        string          `gorm:"type:varchar(20);not null;default:'open'" json:"status"`
+	RiskScore     int             `gorm:"not null;default:0" json:"risk_score"`
+	Title         string          `gorm:"type:varchar(255);not null" json:"title"`
+	Description   string          `gorm:"type:text;not null" json:"description"`
+	Evidence      json.RawMessage `gorm:"type:jsonb;not null;default:'{}'" json:"evidence"`
+	AssignedTo    *string         `gorm:"type:varchar(36)" json:"assigned_to,omitempty"`
+	Resolution    *string         `gorm:"type:text" json:"resolution,omitempty"`
+	DismissReason *string         `gorm:"type:varchar(100)" json:"dismiss_reason,omitempty"`
+	ResolvedAt    *time.Time      `json:"resolved_at,omitempty"`
+	CreatedAt     time.Time       `gorm:"not null;default:now()" json:"created_at"`
+	UpdatedAt     time.Time       `gorm:"not null;default:now()" json:"updated_at"`
 }
 
 type RiskRule struct {

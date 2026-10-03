@@ -44,11 +44,11 @@ impl Money {
         let amount = amount
             .parse::<Decimal>()
             .map_err(|e| format!("Invalid amount: {}", e))?;
-        
+
         if amount < Decimal::ZERO {
             return Err("Amount cannot be negative".to_string());
         }
-        
+
         Ok(Self {
             amount,
             currency: currency.to_uppercase(),
@@ -378,9 +378,7 @@ mod tests {
     #[test]
     fn money_serde_roundtrip_preserves_decimal_exactness() {
         // 0.1 + 0.2 != 0.3 in f64; Decimal must serialize exactly.
-        let total = m("0.1", "USD")
-            .add(&m("0.2", "USD"))
-            .unwrap();
+        let total = m("0.1", "USD").add(&m("0.2", "USD")).unwrap();
         assert_eq!(total.amount.to_string(), "0.3");
 
         let json = serde_json::to_string(&total).unwrap();
@@ -423,7 +421,8 @@ mod tests {
 
     #[test]
     fn pagination_params_respects_explicit_page_size() {
-        let params: PaginationParams = serde_json::from_str(r#"{"page_size":50,"descending":true}"#).unwrap();
+        let params: PaginationParams =
+            serde_json::from_str(r#"{"page_size":50,"descending":true}"#).unwrap();
         assert_eq!(params.page_size, 50);
         assert!(params.descending);
     }
@@ -453,7 +452,7 @@ mod tests {
             trace_id: None,
         };
         // `ApiResponse::error` is declared on `impl<T>` but always returns
-// `ApiResponse<()>`, so T is unconstrained here.
+        // `ApiResponse<()>`, so T is unconstrained here.
         let err = ApiResponse::<u32>::error(details);
         let json = serde_json::to_string(&err).unwrap();
         // NOTE: `rename_all = "camelCase"` on ApiResponse applies only to its
@@ -470,12 +469,30 @@ mod tests {
 
     #[test]
     fn enums_serialize_as_snake_case() {
-        assert_eq!(serde_json::to_string(&HealthStatus::Healthy).unwrap(), "\"healthy\"");
-        assert_eq!(serde_json::to_string(&DeviceType::MobileWeb).unwrap(), "\"mobile_web\"");
-        assert_eq!(serde_json::to_string(&WalletType::FreeSpins).unwrap(), "\"free_spins\"");
-        assert_eq!(serde_json::to_string(&TransactionType::BetPlace).unwrap(), "\"bet_place\"");
+        assert_eq!(
+            serde_json::to_string(&HealthStatus::Healthy).unwrap(),
+            "\"healthy\""
+        );
+        assert_eq!(
+            serde_json::to_string(&DeviceType::MobileWeb).unwrap(),
+            "\"mobile_web\""
+        );
+        assert_eq!(
+            serde_json::to_string(&WalletType::FreeSpins).unwrap(),
+            "\"free_spins\""
+        );
+        assert_eq!(
+            serde_json::to_string(&TransactionType::BetPlace).unwrap(),
+            "\"bet_place\""
+        );
         assert_eq!(serde_json::to_string(&BetType::Live).unwrap(), "\"live\"");
-        assert_eq!(serde_json::to_string(&BetStatus::Settled).unwrap(), "\"settled\"");
-        assert_eq!(serde_json::to_string(&KycLevel::Identity).unwrap(), "\"identity\"");
+        assert_eq!(
+            serde_json::to_string(&BetStatus::Settled).unwrap(),
+            "\"settled\""
+        );
+        assert_eq!(
+            serde_json::to_string(&KycLevel::Identity).unwrap(),
+            "\"identity\""
+        );
     }
 }

@@ -30,23 +30,23 @@ const (
 	SpanNOWPaymentsVerifyWebhook = "nowpayments.verify_webhook"
 
 	// Wallet Service gRPC operations
-	SpanWalletGetBalance   = "wallet.GetBalance"
-	SpanWalletCreditWallet = "wallet.CreditWallet"
-	SpanWalletLockFunds    = "wallet.LockFunds"
-	SpanWalletUnlockFunds  = "wallet.UnlockFunds"
+	SpanWalletGetBalance    = "wallet.GetBalance"
+	SpanWalletCreditWallet  = "wallet.CreditWallet"
+	SpanWalletLockFunds     = "wallet.LockFunds"
+	SpanWalletUnlockFunds   = "wallet.UnlockFunds"
 	SpanWalletFinalizeDebit = "wallet.FinalizeDebit"
 
 	// Database operations
-	SpanDatabaseQuery    = "database.query"
-	SpanDatabaseInsert   = "database.insert"
-	SpanDatabaseUpdate   = "database.update"
-	SpanDatabaseSelect   = "database.select"
+	SpanDatabaseQuery  = "database.query"
+	SpanDatabaseInsert = "database.insert"
+	SpanDatabaseUpdate = "database.update"
+	SpanDatabaseSelect = "database.select"
 
 	// Payment service operations
-	SpanPaymentInitiateDeposit   = "payment.initiate_deposit"
+	SpanPaymentInitiateDeposit    = "payment.initiate_deposit"
 	SpanPaymentInitiateWithdrawal = "payment.initiate_withdrawal"
-	SpanPaymentGetPayment        = "payment.get_payment"
-	SpanPaymentListPayments      = "payment.list_payments"
+	SpanPaymentGetPayment         = "payment.get_payment"
+	SpanPaymentListPayments       = "payment.list_payments"
 
 	// Webhook operations
 	SpanWebhookProcess = "webhook.process"
@@ -395,9 +395,9 @@ func GRPCStreamClientInterceptor() grpc.StreamClientInterceptor {
 type SpanOption func(*spanConfig)
 
 type spanConfig struct {
-	attrs     []attribute.KeyValue
-	kind      trace.SpanKind
-	links     []trace.Link
+	attrs []attribute.KeyValue
+	kind  trace.SpanKind
+	links []trace.Link
 }
 
 // WithAttributes returns a SpanOption that sets attributes on the span.

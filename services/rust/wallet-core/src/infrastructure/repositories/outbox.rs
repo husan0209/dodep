@@ -14,18 +14,18 @@ impl OutboxRepository {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
-    
+
     /// Insert an outbox event
     pub async fn insert(&self, event: &OutboxEvent) -> Result<(), sqlx::Error> {
         let mut tx = self.pool.begin().await?;
-        
+
         self.insert_internal(&mut tx, event).await?;
-        
+
         tx.commit().await?;
-        
+
         Ok(())
     }
-    
+
     /// Insert an outbox event within a transaction
     pub async fn insert_internal(
         &self,
@@ -44,10 +44,10 @@ impl OutboxRepository {
         )
         .execute(&mut **tx)
         .await?;
-        
+
         Ok(())
     }
-    
+
     /// Get unsent events for worker
     pub async fn get_unsent(&self, limit: i64) -> Result<Vec<OutboxEvent>, sqlx::Error> {
         let events = sqlx::query_as!(
@@ -67,10 +67,10 @@ impl OutboxRepository {
         )
         .fetch_all(&self.pool)
         .await?;
-        
+
         Ok(events)
     }
-    
+
     /// Mark event as sent
     pub async fn mark_sent(&self, id: i64) -> Result<(), sqlx::Error> {
         sqlx::query!(
@@ -83,10 +83,10 @@ impl OutboxRepository {
         )
         .execute(&self.pool)
         .await?;
-        
+
         Ok(())
     }
-    
+
     /// Increment retry count
     pub async fn increment_retry(&self, id: i64, error: &str) -> Result<(), sqlx::Error> {
         sqlx::query!(
@@ -100,10 +100,10 @@ impl OutboxRepository {
         )
         .execute(&self.pool)
         .await?;
-        
+
         Ok(())
     }
-    
+
     /// Get events with too many retries (dead letter candidates)
     pub async fn get_dead_letter(&self, max_retries: i32) -> Result<Vec<OutboxEvent>, sqlx::Error> {
         let events = sqlx::query_as!(
@@ -121,7 +121,7 @@ impl OutboxRepository {
         )
         .fetch_all(&self.pool)
         .await?;
-        
+
         Ok(events)
     }
 }

@@ -98,7 +98,7 @@ func extractUserID(token, secretKey, env string) (int64, error) {
 		if err != nil {
 			return 0, errBadToken
 		}
-		var expected []byte = mac.Sum(nil)
+		expected := mac.Sum(nil)
 		if subtle.ConstantTimeCompare(expected, sig) != 1 {
 			return 0, errBadToken
 		}

@@ -34,4 +34,3 @@ type NOWPaymentsAPI interface {
 	// Withdrawal flow
 	CreatePayout(ctx context.Context, req CreatePayoutRequest) (*CreatePayoutResponse, error)
 }
-
