@@ -71,16 +71,23 @@ jobs:
           npm ci
 
       - name: Run unit tests
+        # `npm run test -- --coverage` silently drops the flag: npm parses
+        # --coverage as its own config, so jest runs without coverage and the
+        # upload below finds nothing. The flag lives in the script instead.
         run: |
           cd apps/web
-          npm run test -- --coverage
+          npm run test:coverage
 
       - name: Upload coverage
-        uses: codecov/codecov-action@v3
+        # Coverage upload is telemetry, not a gate, so a codecov outage must not
+        # fail the job. v3 of the action runs the retired bash uploader; v5 is
+        # the supported one and takes the same `files` input.
+        uses: codecov/codecov-action@v5
         with:
           files: apps/web/coverage/coverage-final.json
           flags: web
           name: web-coverage
+          fail_ci_if_error: false
 
   build:
     name: Build & Push Docker Image
