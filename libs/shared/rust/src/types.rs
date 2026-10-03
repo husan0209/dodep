@@ -44,11 +44,11 @@ impl Money {
         let amount = amount
             .parse::<Decimal>()
             .map_err(|e| format!("Invalid amount: {}", e))?;
-        
+
         if amount < Decimal::ZERO {
             return Err("Amount cannot be negative".to_string());
         }
-        
+
         Ok(Self {
             amount,
             currency: currency.to_uppercase(),
