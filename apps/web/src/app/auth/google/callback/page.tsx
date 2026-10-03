@@ -1,10 +1,10 @@
 'use client'
 
-import { useEffect } from 'react'
+import { Suspense, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuthStore } from '@/stores/auth-store'
 
-export default function GoogleCallbackPage() {
+function GoogleCallback() {
   const router = useRouter()
   const params = useSearchParams()
   const { setTokens, fetchUser } = useAuthStore()
@@ -38,5 +38,17 @@ export default function GoogleCallbackPage() {
         <p className="mt-2 text-gray-400">Google authorization complete, redirecting to sportsbook.</p>
       </div>
     </div>
+  )
+}
+
+// useSearchParams opts the segment out of static prerendering, so Next.js
+// refuses to export the page unless the component that reads the query string
+// sits behind a Suspense boundary. Without it `next build` fails with
+// "Error occurred prerendering page /auth/google/callback".
+export default function GoogleCallbackPage() {
+  return (
+    <Suspense fallback={<div className="min-h-[calc(100vh-4rem)] flex items-center justify-center">Загрузка...</div>}>
+      <GoogleCallback />
+    </Suspense>
   )
 }

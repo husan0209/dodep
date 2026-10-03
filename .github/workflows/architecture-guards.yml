@@ -65,16 +65,36 @@ jobs:
 
       # ──────────────────────────────────────────────────────────────
       # G3: Запрет захардкоженных секретов
+      #
+      # Сканируются только отслеживаемые git файлы (git grep), а не весь
+      # рабочий каталог. Два исключения, оба осознанные:
+      #
+      #   1. Вендорённые skill-пакеты агентов (.claude/, .qwen/, .agents/ и
+      #      ещё девять). Это сторонняя документация, вложенная в репозиторий
+      #      двенадцатью одинаковыми копиями. В
+      #      skills/kubernetes-specialist/references/configuration.md приведён
+      #      обрезанный учебный пример (`b3BlbnNzaC1rZXktdjEAAAAABG5vbmUA...`),
+      #      а не секрет, и он не принадлежит коду продукта.
+      #   2. Сам этот файл: литералы шаблонов поиска сами являются совпадением.
+      #
+      # Раньше шаг делал `grep -rn ... . | grep -v ".git"`. Подстрока ".git"
+      # попутно исключала весь .github/, поэтому файл с шаблонами проходил
+      # случайно, а совпадения в вендорённых docs валили проверку на каждом
+      # запуске.
       # ──────────────────────────────────────────────────────────────
       - name: "G3: No hardcoded secrets or private keys"
         run: |
           echo "Проверка G3: отсутствие захардкоженных приватных ключей..."
-          if grep -rn "BEGIN RSA PRIVATE KEY" . 2>/dev/null | grep -v ".git"; then
-            echo "❌ Обнаружен приватный ключ в репозитории!"
-            exit 1
-          fi
-          if grep -rn "BEGIN OPENSSH PRIVATE KEY" . 2>/dev/null | grep -v ".git"; then
-            echo "❌ Обнаружен SSH приватный ключ в репозитории!"
+          VENDORED_AGENT_SKILLS='^\.(agents|claude|continue|factory|junie|kiro|openhands|qoder|qwen|trae|vibe|windsurf)/'
+          SELF='^\.github/workflows/architecture-guards\.yml:'
+
+          MATCHES=$(git grep -n -I -E 'BEGIN (RSA|DSA|EC|OPENSSH|PGP) PRIVATE KEY' -- . \
+            | grep -v -E "$VENDORED_AGENT_SKILLS" \
+            | grep -v -E "$SELF" || true)
+
+          if [ -n "$MATCHES" ]; then
+            echo "❌ Обнаружен приватный ключ в репозитории:"
+            echo "$MATCHES"
             exit 1
           fi
           echo "✅ G3 пройден: приватные ключи не обнаружены."

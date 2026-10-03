@@ -182,8 +182,12 @@ jobs:
     - name: Build
       run: npm run build
     
+    # Not `npm run test -- --run`: `--run` is a vitest flag and jest rejects it
+    # with 'Unrecognized option "run"'. Each app exposes a `test:ci` script that
+    # already runs its runner once and exits - vitest for admin, plain jest for
+    # web - so a single matrix step serves both.
     - name: Test
-      run: npm run test -- --run
+      run: npm run test:ci
 
   # Security scanning
   security-scan:
