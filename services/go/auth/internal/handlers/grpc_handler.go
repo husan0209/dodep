@@ -300,6 +300,12 @@ func (h *AuthGRPCHandler) InitiatePasswordReset(ctx context.Context, req *pb.Ini
 
 // ResetPassword completes password reset
 func (h *AuthGRPCHandler) ResetPassword(ctx context.Context, req *pb.ResetPasswordRequest) (*pb.ResetPasswordResponse, error) {
+	// AuthService.ResetPassword is still a stub that unconditionally returns an
+	// error, so staticcheck can prove the nil branch below is unreachable today.
+	// The check has to stay: it is the correct handling once the stub is
+	// implemented, and removing it would silently report success for a reset
+	// that never happened.
+	//nolint:staticcheck // SA4023 -- required for the implemented ResetPassword
 	err := h.service.ResetPassword(ctx, req.Token, req.NewPassword)
 	if err != nil {
 		h.log.Error("ResetPassword failed", zap.Error(err))

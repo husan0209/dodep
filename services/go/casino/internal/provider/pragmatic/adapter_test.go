@@ -200,12 +200,13 @@ func computePragmaticHash(params map[string]interface{}, secret string) string {
 
 	var sb strings.Builder
 	for _, k := range keys {
-		sb.WriteString(fmt.Sprintf("%v", params[k]))
+		fmt.Fprintf(&sb, "%v", params[k])
 	}
 	sb.WriteString(secret)
 
-	//nolint:gosec
-	return fmt.Sprintf("%x", md5.Sum([]byte(sb.String())))
+	// MD5 is fixed by the Pragmatic Play callback spec; this mirrors the
+	// production signer in adapter.go.
+	return fmt.Sprintf("%x", md5.Sum([]byte(sb.String()))) // #nosec G401 -- mandated by the Pragmatic Play API
 }
 
 func timeNowMillis() int64 {

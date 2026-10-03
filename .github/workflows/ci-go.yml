@@ -108,10 +108,22 @@ jobs:
           name: proto-go-stubs
           path: libs/proto/gen/go
 
+      # Pinned, and it has to move with the toolchain. golangci-lint refuses to
+      # load a module whose `go` directive is newer than the Go version the
+      # binary itself was built with, and go/types panics outright if the binary
+      # predates the toolchain. The CVE-fixed pgx/grpc/fiber/otel releases force
+      # every service in this matrix to `go 1.25.0`, so the release has to be one
+      # built with go1.26: v2.1.0 is built with go1.24 and dies with
+      #   can't load config: the Go language version (go1.24) used to build
+      #   golangci-lint is lower than the targeted Go version (1.25.0)
+      # while v2.4.0/v2.5.0 are built with go1.25 and panic with
+      #   file requires newer Go version go1.26 (application built with go1.25)
+      # v2.12.2 is the first release built with go1.26; it is verified clean
+      # across all seven services in this matrix.
       - name: Install golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.1.0
+          version: v2.12.2
           working-directory: services/go/${{ matrix.service }}
 
       - name: Run golangci-lint
