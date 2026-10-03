@@ -52,12 +52,8 @@ impl CashoutService {
         // For now, use a simplified calculation: assume odds dropped by 20%
         let current_odds = bet.combined_odds * Decimal::try_from("0.80").unwrap();
 
-        let cashout_value = calculate_cashout_value(
-            current_odds,
-            bet.combined_odds,
-            bet.stake,
-            margin,
-        );
+        let cashout_value =
+            calculate_cashout_value(current_odds, bet.combined_odds, bet.stake, margin);
 
         if cashout_value <= Decimal::ZERO {
             return Err(AppError::CashoutUnavailable);

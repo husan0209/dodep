@@ -3,7 +3,9 @@ import { ProfilePage } from '@components/pages/profile'
 
 export default function Profile() {
   return (
-    <Suspense fallback={<div className="flex items-center justify-center h-screen">Загрузка...</div>}>
+    <Suspense
+      fallback={<div className="flex h-screen items-center justify-center">Загрузка...</div>}
+    >
       <ProfilePage />
     </Suspense>
   )

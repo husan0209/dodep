@@ -24,6 +24,6 @@ export const useFavoritesStore = create<FavoritesState>()(
     }),
     {
       name: 'dod-favorites',
-    }
-  )
+    },
+  ),
 )

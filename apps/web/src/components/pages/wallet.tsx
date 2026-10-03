@@ -8,9 +8,33 @@ import { TransactionHistory } from '@components/wallet/transaction-history'
 import { trackEvent } from '@lib/telemetry'
 
 const mockTransactions = [
-  { id: '1', type: 'deposit' as const, amount: 1000, currency: 'RUB', status: 'completed' as const, method: 'Card', createdAt: '2024-03-24T10:00:00Z' },
-  { id: '2', type: 'withdraw' as const, amount: 500, currency: 'RUB', status: 'pending' as const, method: 'Bank Transfer', createdAt: '2024-03-23T15:30:00Z' },
-  { id: '3', type: 'bet' as const, amount: -100, currency: 'RUB', status: 'completed' as const, method: 'Bet', createdAt: '2024-03-23T12:00:00Z' },
+  {
+    id: '1',
+    type: 'deposit' as const,
+    amount: 1000,
+    currency: 'RUB',
+    status: 'completed' as const,
+    method: 'Card',
+    createdAt: '2024-03-24T10:00:00Z',
+  },
+  {
+    id: '2',
+    type: 'withdraw' as const,
+    amount: 500,
+    currency: 'RUB',
+    status: 'pending' as const,
+    method: 'Bank Transfer',
+    createdAt: '2024-03-23T15:30:00Z',
+  },
+  {
+    id: '3',
+    type: 'bet' as const,
+    amount: -100,
+    currency: 'RUB',
+    status: 'completed' as const,
+    method: 'Bet',
+    createdAt: '2024-03-23T12:00:00Z',
+  },
 ]
 
 export function WalletPage() {
@@ -22,9 +46,9 @@ export function WalletPage() {
 
   return (
     <div className="section max-w-2xl">
-      <h1 className="text-sm font-bold text-white mb-4">Кошелёк</h1>
+      <h1 className="mb-4 text-sm font-bold text-white">Кошелёк</h1>
 
-      <div className="card p-2 mb-3">
+      <div className="card mb-3 p-2">
         <p className="text-[10px] text-gray-400">
           Статусы выплат видны в истории. Для ускоренного вывода пройдите KYC Level 2.
         </p>
@@ -35,18 +59,20 @@ export function WalletPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-0.5 mb-3 bg-[rgb(var(--bg-primary))] p-0.5 rounded">
-        {([
-          { id: 'deposit', label: 'Пополнить' },
-          { id: 'withdraw', label: 'Вывести' },
-          { id: 'history', label: 'История' },
-        ] as const).map((tab) => (
+      <div className="mb-3 flex gap-0.5 rounded bg-[rgb(var(--bg-primary))] p-0.5">
+        {(
+          [
+            { id: 'deposit', label: 'Пополнить' },
+            { id: 'withdraw', label: 'Вывести' },
+            { id: 'history', label: 'История' },
+          ] as const
+        ).map((tab) => (
           <button
             key={tab.id}
             onClick={() => {
               setActiveTab(tab.id)
             }}
-            className={`flex-1 py-1.5 text-xs font-medium rounded transition-colors ${
+            className={`flex-1 rounded py-1.5 text-xs font-medium transition-colors ${
               activeTab === tab.id ? 'bg-blue-600 text-white' : 'text-gray-500 hover:text-gray-300'
             }`}
           >
@@ -55,7 +81,7 @@ export function WalletPage() {
         ))}
       </div>
 
-      <div className="card p-3 fade-in">
+      <div className="card fade-in p-3">
         {activeTab === 'deposit' && <DepositForm />}
         {activeTab === 'withdraw' && <WithdrawForm />}
         {activeTab === 'history' && <TransactionHistory transactions={mockTransactions} />}

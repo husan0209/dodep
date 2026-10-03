@@ -1,8 +1,7 @@
 use axum::{
-    Extension,
     extract::{Path, Query, State},
     http::StatusCode,
-    Json,
+    Extension, Json,
 };
 use serde::Deserialize;
 use validator::Validate;
@@ -35,12 +34,11 @@ pub async fn place_bet(
     Json(req): Json<PlaceBetRequest>,
 ) -> Result<(StatusCode, Json<BetResponse>), AppError> {
     if user.id != user_id {
-        return Err(AppError::Forbidden { reason: "forbidden".into() });
+        return Err(AppError::Forbidden {
+            reason: "forbidden".into(),
+        });
     }
-    let bet = state
-        .bet_service()
-        .place_bet(UserId(user_id), req)
-        .await?;
+    let bet = state.bet_service().place_bet(UserId(user_id), req).await?;
     Ok((StatusCode::CREATED, Json(BetResponse::from(bet))))
 }
 
@@ -51,7 +49,9 @@ pub async fn get_bet(
     Path((user_id, bet_id)): Path<(i64, i64)>,
 ) -> Result<Json<BetResponse>, AppError> {
     if user.id != user_id {
-        return Err(AppError::Forbidden { reason: "forbidden".into() });
+        return Err(AppError::Forbidden {
+            reason: "forbidden".into(),
+        });
     }
     let bet = state
         .bet_service()
@@ -68,7 +68,9 @@ pub async fn get_history(
     Query(query): Query<HistoryQuery>,
 ) -> Result<Json<PaginatedResponse<BetResponse>>, AppError> {
     if user.id != user_id {
-        return Err(AppError::Forbidden { reason: "forbidden".into() });
+        return Err(AppError::Forbidden {
+            reason: "forbidden".into(),
+        });
     }
     let limit = query.limit.unwrap_or(20).clamp(1, 100);
     let status_filter = query.status.as_deref().and_then(|s| match s {
@@ -95,7 +97,9 @@ pub async fn cashout_bet(
     Path((user_id, bet_id)): Path<(i64, i64)>,
 ) -> Result<Json<CashoutResponse>, AppError> {
     if user.id != user_id {
-        return Err(AppError::Forbidden { reason: "forbidden".into() });
+        return Err(AppError::Forbidden {
+            reason: "forbidden".into(),
+        });
     }
     let result = state
         .cashout_service()
@@ -111,7 +115,9 @@ pub async fn settle_bet(
     Path(bet_id): Path<i64>,
     Json(req): Json<SettleRequest>,
 ) -> Result<Json<BetResponse>, AppError> {
-    require_admin(&user).map_err(|_| AppError::Forbidden { reason: "forbidden".into() })?;
+    require_admin(&user).map_err(|_| AppError::Forbidden {
+        reason: "forbidden".into(),
+    })?;
     let bet = state
         .settlement_service()
         .settle_bet(BetId(bet_id), &req.result, req.actual_win)
@@ -125,7 +131,9 @@ pub async fn void_bet(
     Extension(user): Extension<AuthUser>,
     Path(bet_id): Path<i64>,
 ) -> Result<Json<BetResponse>, AppError> {
-    require_admin(&user).map_err(|_| AppError::Forbidden { reason: "forbidden".into() })?;
+    require_admin(&user).map_err(|_| AppError::Forbidden {
+        reason: "forbidden".into(),
+    })?;
     let bet = state.settlement_service().void_bet(BetId(bet_id)).await?;
     Ok(Json(BetResponse::from(bet)))
 }

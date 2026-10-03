@@ -3,7 +3,9 @@ import { CasinoPage } from '@components/pages/casino'
 
 export default function Casino() {
   return (
-    <Suspense fallback={<div className="flex items-center justify-center h-screen">Загрузка...</div>}>
+    <Suspense
+      fallback={<div className="flex h-screen items-center justify-center">Загрузка...</div>}
+    >
       <CasinoPage />
     </Suspense>
   )

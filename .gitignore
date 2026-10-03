@@ -95,6 +95,24 @@ tmp_*.txt
 *.test.exe
 **/integration.test.exe
 
+# Coverage output
+coverage/
+coverage.xml
+.coverage
+*.lcov
+coverage.out
+htmlcov/
+
+# Python caches
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# TypeScript build output
+libs/shared/typescript/dist/
+*.tsbuildinfo
+
 # Local environment overrides
 .env.local
 .env.production

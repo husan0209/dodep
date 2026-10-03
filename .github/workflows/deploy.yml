@@ -12,8 +12,10 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  RUST_VERSION: '1.75'
-  GO_VERSION: '1.21'
+  # Floor imposed by the committed lockfile; see the comment in ci.yaml
+  # for the 1.75 / 1.78 / 1.85 evidence. Do not lower without re-checking.
+  RUST_VERSION: "1.85"
+  GO_VERSION: '1.26'
   PYTHON_VERSION: '3.11'
   NODE_VERSION: '20'
 
@@ -37,7 +39,7 @@ jobs:
           cache: 'npm'
 
       - name: Setup Rust
-        uses: dtolnay/rust-action@stable
+        uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ env.RUST_VERSION }}
           components: clippy, rustfmt
@@ -52,31 +54,56 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
+      # tonic-build shells out to protoc during cargo clippy/test/build.
+      - name: Install protoc
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+
       - name: Install dependencies
         run: |
-          npm install
+          npm --prefix apps/web ci
+          npm --prefix apps/admin ci
           cd services/rust && cargo fetch
           cd ../go/auth && go mod download
           cd ../../python/fraud-ml && pip install -r requirements.txt
 
+      - name: Install buf and generate protobuf stubs
+        run: |
+          BUF_VERSION=1.73.0
+          curl -fsSL -o /tmp/buf.tar.gz \
+            "https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/buf-Linux-x86_64.tar.gz"
+          sudo tar -xzf /tmp/buf.tar.gz -C /tmp
+          sudo install -m 0755 /tmp/buf/bin/buf /usr/local/bin/buf
+          make -C libs/proto gen-go
+
+      - name: Install lint tools
+        run: |
+          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0
+          pip install ruff black
+
       - name: Run linters
         run: |
-          npm run lint
-          cd services/rust && cargo clippy -- -D warnings
+          cd apps/web && npm run lint
+          cd ../admin && npm run lint
+          cd ../../services/rust && cargo clippy --all-targets -- -D warnings
           cd ../go/auth && golangci-lint run
           cd ../../python/fraud-ml && ruff check .
+          cd ../../python/fraud-ml && black --check .
 
       - name: Run tests
         run: |
-          npm run test
-          cd services/rust && cargo test
+          cd apps/web && npm test
+          cd ../admin && npm test
+          cd ../../services/rust && cargo test
           cd ../go/auth && go test ./...
           cd ../../python/fraud-ml && pytest
 
       - name: Build
         run: |
-          npm run build
-          cd services/rust && cargo build --release
+          cd apps/web && npm run build
+          cd ../admin && npm run build
+          cd ../../services/rust && cargo build --release
 
   # ==========================================================================
   # Deploy to Vercel (Web Frontend)
@@ -181,10 +208,23 @@ jobs:
     timeout-minutes: 5
     needs: [deploy-web, deploy-backend, deploy-admin]
     if: always()
-    
+
+    # action-slack exits 1 with "Specify secrets.SLACK_WEBHOOK_URL" when the
+    # webhook is absent, which failed this job on every run - including
+    # pull_request runs, where secrets are not exposed by default at all. An
+    # unconfigured notification channel must not be able to fail a build.
+    #
+    # The secret is surfaced through env because the secrets context is not
+    # permitted in a step-level if:. The contexts allowed there are env, github,
+    # inputs, job, matrix, needs, runner, steps, strategy and vars - a guard
+    # written as "if: secrets.X != ''" makes the whole workflow invalid and
+    # GitHub then creates zero jobs for the run.
+    env:
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+
     steps:
       - name: Notify Slack
-        if: always()
+        if: always() && env.SLACK_WEBHOOK_URL != ''
         uses: 8398a7/action-slack@v3
         with:
           status: ${{ job.status }}
@@ -194,7 +234,12 @@ jobs:
             Backend: ${{ needs.deploy-backend.result }}
             Admin: ${{ needs.deploy-admin.result }}
         env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+          SLACK_WEBHOOK_URL: ${{ env.SLACK_WEBHOOK_URL }}
+
+      - name: Notify Slack skipped
+        if: always() && env.SLACK_WEBHOOK_URL == ''
+        run: |
+          echo "::notice title=Deployment notification::SLACK_WEBHOOK is not configured; skipping the Slack notification."
 
       - name: Notify Success
         if: success()

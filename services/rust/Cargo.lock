@@ -2189,17 +2189,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "io-uring"
-version = "0.7.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4d09b98f7eace8982db770e4408e7470b028ce513ac28fecdc6bf4c30fe92b62"
-dependencies = [
- "bitflags 2.11.1",
- "cfg-if",
- "libc",
-]
-
-[[package]]
 name = "ipnet"
 version = "2.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4647,13 +4636,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b67dee974fe86fd92cc45b7a95fdd2f99a36a6d7b0d431a231178d3d670bbcc6"
 dependencies = [
  "bytes",
- "io-uring",
  "libc",
  "mio",
  "parking_lot",
  "pin-project-lite",
  "signal-hook-registry",
- "slab",
  "socket2 0.6.3",
  "tokio-macros",
  "windows-sys 0.61.2",
@@ -5572,9 +5559,13 @@ dependencies = [
  "anyhow",
  "axum 0.7.9",
  "chrono",
+ "config",
  "dashmap",
+ "dotenvy",
+ "futures",
  "governor",
  "prost 0.12.6",
+ "protoc-bin-vendored",
  "rdkafka",
  "redis",
  "rkyv",
@@ -5584,8 +5575,8 @@ dependencies = [
  "tokio",
  "tokio-test",
  "tokio-tungstenite 0.21.0",
- "tonic 0.10.2",
- "tonic-build 0.10.2",
+ "tonic 0.11.0",
+ "tonic-build 0.11.0",
  "tower 0.4.13",
  "tower-http",
  "tracing",

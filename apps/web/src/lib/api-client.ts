@@ -23,7 +23,7 @@ apiClient.interceptors.request.use(
   },
   (error) => {
     return Promise.reject(error)
-  }
+  },
 )
 
 // Response interceptor for error handling
@@ -35,15 +35,14 @@ apiClient.interceptors.response.use(
       window.location.href = '/login'
     }
     return Promise.reject(error)
-  }
+  },
 )
 
 // API endpoints
 export const api = {
   // Auth
   auth: {
-    login: (data: { email: string; password: string }) =>
-      apiClient.post('/v1/auth/login', data),
+    login: (data: { email: string; password: string }) => apiClient.post('/v1/auth/login', data),
     register: (data: { email: string; password: string; username: string }) =>
       apiClient.post('/v1/auth/register', data),
     logout: () => apiClient.post('/v1/auth/logout'),
@@ -54,21 +53,17 @@ export const api = {
   // User
   user: {
     get: (userId: string) => apiClient.get(`/v1/users/${userId}`),
-    update: (userId: string, data: any) =>
-      apiClient.put(`/v1/users/${userId}`, data),
-    getPreferences: (userId: string) =>
-      apiClient.get(`/v1/users/${userId}/preferences`),
+    update: (userId: string, data: any) => apiClient.put(`/v1/users/${userId}`, data),
+    getPreferences: (userId: string) => apiClient.get(`/v1/users/${userId}/preferences`),
     updatePreferences: (userId: string, data: any) =>
       apiClient.put(`/v1/users/${userId}/preferences`, data),
-    getKycStatus: (userId: string) =>
-      apiClient.get(`/v1/users/${userId}/kyc-status`),
+    getKycStatus: (userId: string) => apiClient.get(`/v1/users/${userId}/kyc-status`),
   },
 
   // Wallet (Rust wallet-core — balances, transactions)
   wallet: {
     getBalances: () => apiClient.get('/v1/wallet/balances'),
-    getTransactions: (params?: any) =>
-      apiClient.get('/v1/wallet/transactions', { params }),
+    getTransactions: (params?: any) => apiClient.get('/v1/wallet/transactions', { params }),
   },
 
   // Payments (Go payment-service — crypto deposit/withdrawal via NOWPayments)
@@ -76,13 +71,12 @@ export const api = {
     // Create crypto deposit — returns pay_address + pay_amount
     initiateDeposit: (data: {
       amount: number
-      currency: string  // e.g. "BTC", "ETH", "USDT", "USDC"
+      currency: string // e.g. "BTC", "ETH", "USDT", "USDC"
       idempotency_key: string
     }) => apiClient.post('/v1/payments/deposit', data),
 
     // Get deposit status
-    getDeposit: (paymentUUID: string) =>
-      apiClient.get(`/v1/payments/${paymentUUID}`),
+    getDeposit: (paymentUUID: string) => apiClient.get(`/v1/payments/${paymentUUID}`),
 
     // Payment history
     getHistory: (params?: { limit?: number; cursor?: string; status?: string }) =>
@@ -100,8 +94,7 @@ export const api = {
     }) => apiClient.post('/v1/payments/withdraw', data),
 
     // Get withdrawal status
-    getWithdrawal: (uuid: string) =>
-      apiClient.get(`/v1/payments/withdrawals/${uuid}`),
+    getWithdrawal: (uuid: string) => apiClient.get(`/v1/payments/withdrawals/${uuid}`),
 
     // Withdrawal history
     getWithdrawalHistory: (params?: { limit?: number; cursor?: string }) =>
@@ -110,18 +103,13 @@ export const api = {
 
   // Casino
   casino: {
-    getGames: (params?: any) =>
-      apiClient.get('/v1/casino/games', { params }),
-    getGame: (gameId: string) =>
-      apiClient.get(`/v1/casino/games/${gameId}`),
+    getGames: (params?: any) => apiClient.get('/v1/casino/games', { params }),
+    getGame: (gameId: string) => apiClient.get(`/v1/casino/games/${gameId}`),
     launchGame: (data: { game_id: string; device_type: string; lobby_url?: string }) =>
       apiClient.post('/v1/casino/games/launch', data),
-    getGameSession: (sessionId: string) =>
-      apiClient.get(`/v1/casino/sessions/${sessionId}`),
-    endGameSession: (sessionId: string) =>
-      apiClient.post(`/v1/casino/sessions/${sessionId}/end`),
-    getGameHistory: (params?: any) =>
-      apiClient.get('/v1/casino/history', { params }),
+    getGameSession: (sessionId: string) => apiClient.get(`/v1/casino/sessions/${sessionId}`),
+    endGameSession: (sessionId: string) => apiClient.post(`/v1/casino/sessions/${sessionId}/end`),
+    getGameHistory: (params?: any) => apiClient.get('/v1/casino/history', { params }),
     getProviders: () => apiClient.get('/v1/casino/providers'),
   },
 
@@ -129,10 +117,8 @@ export const api = {
   sportsbook: {
     getEvents: (params?: { sport?: string; live?: boolean; limit?: number }) =>
       apiClient.get('/v1/sports/events', { params }),
-    getEvent: (eventId: string) =>
-      apiClient.get(`/v1/sports/events/${eventId}`),
-    getMarkets: (eventId: string) =>
-      apiClient.get(`/v1/sports/events/${eventId}/markets`),
+    getEvent: (eventId: string) => apiClient.get(`/v1/sports/events/${eventId}`),
+    getMarkets: (eventId: string) => apiClient.get(`/v1/sports/events/${eventId}/markets`),
     placeBet: (data: {
       selections: Array<{ event_id: string; market_id: string; outcome_id: string; odds: number }>
       stake: number
@@ -149,20 +135,17 @@ export const api = {
     getList: (params?: { limit?: number; offset?: number }) =>
       apiClient.get('/v1/bonuses', { params }),
     getActive: () => apiClient.get('/v1/bonuses/active'),
-    activate: (bonusId: string) =>
-      apiClient.post(`/v1/bonuses/${bonusId}/activate`),
+    activate: (bonusId: string) => apiClient.post(`/v1/bonuses/${bonusId}/activate`),
   },
 
   // Notifications
   notifications: {
-    getList: (params?: any) =>
-      apiClient.get('/v1/notifications', { params }),
+    getList: (params?: any) => apiClient.get('/v1/notifications', { params }),
     markAsRead: (notificationId: string) =>
       apiClient.post(`/v1/notifications/${notificationId}/read`),
     markAllAsRead: () => apiClient.post('/v1/notifications/read-all'),
     getSettings: () => apiClient.get('/v1/notifications/settings'),
-    updateSettings: (data: any) =>
-      apiClient.put('/v1/notifications/settings', data),
+    updateSettings: (data: any) => apiClient.put('/v1/notifications/settings', data),
   },
 
   // Support
@@ -170,8 +153,7 @@ export const api = {
     getTickets: () => apiClient.get('/v1/support/tickets'),
     createTicket: (data: { subject: string; message: string }) =>
       apiClient.post('/v1/support/tickets', data),
-    getTicket: (ticketId: string) =>
-      apiClient.get(`/v1/support/tickets/${ticketId}`),
+    getTicket: (ticketId: string) => apiClient.get(`/v1/support/tickets/${ticketId}`),
     sendMessage: (ticketId: string, message: string) =>
       apiClient.post(`/v1/support/tickets/${ticketId}/messages`, { message }),
   },

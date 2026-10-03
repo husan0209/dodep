@@ -22,7 +22,9 @@ export default function LoginPage() {
 
     try {
       const cleanIdentifier = identifier.replace(/\s/g, '')
-      trackEvent('auth_login_submitted', { identifierType: cleanIdentifier.includes('@') ? 'email' : 'username' })
+      trackEvent('auth_login_submitted', {
+        identifierType: cleanIdentifier.includes('@') ? 'email' : 'username',
+      })
       await login(cleanIdentifier, password)
       router.replace('/sportsbook')
     } catch (err: any) {
@@ -44,20 +46,20 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
-      <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-600/10 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
-      
-      <div className="w-full max-w-md relative z-10 card !p-8">
+    <div className="relative flex min-h-[calc(100vh-4rem)] items-center justify-center overflow-hidden px-4 py-12 sm:px-6 lg:px-8">
+      <div className="pointer-events-none absolute left-1/4 top-1/4 h-96 w-96 rounded-full bg-blue-600/10 blur-3xl" />
+      <div className="pointer-events-none absolute bottom-1/4 right-1/4 h-96 w-96 rounded-full bg-cyan-500/10 blur-3xl" />
+
+      <div className="card relative z-10 w-full max-w-md !p-8">
         <div>
-          <h2 className="mt-2 text-center text-3xl font-bold font-display text-white">
+          <h2 className="mt-2 text-center font-display text-3xl font-bold text-white">
             Вход в аккаунт
           </h2>
           <p className="mt-4 text-center text-sm font-medium text-gray-400">
             Или{' '}
             <Link
               href="/register"
-              className="font-bold text-blue-400 hover:text-blue-300 transition-colors"
+              className="font-bold text-blue-400 transition-colors hover:text-blue-300"
             >
               создайте новый аккаунт
             </Link>
@@ -66,14 +68,17 @@ export default function LoginPage() {
 
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           {error && (
-            <div className="rounded-xl bg-red-900/40 border border-red-500/30 p-4">
+            <div className="rounded-xl border border-red-500/30 bg-red-900/40 p-4">
               <p className="text-sm font-medium text-red-200">{error}</p>
             </div>
           )}
 
           <div className="space-y-5">
             <div>
-              <label htmlFor="email" className="block text-sm font-semibold text-gray-300 mb-1 pl-1">
+              <label
+                htmlFor="email"
+                className="mb-1 block pl-1 text-sm font-semibold text-gray-300"
+              >
                 Email или Username
               </label>
               <input
@@ -91,7 +96,10 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-semibold text-gray-300 mb-1 pl-1">
+              <label
+                htmlFor="password"
+                className="mb-1 block pl-1 text-sm font-semibold text-gray-300"
+              >
                 Пароль
               </label>
               <input
@@ -118,7 +126,10 @@ export default function LoginPage() {
                 suppressHydrationWarning
                 className="h-4 w-4 rounded border-[rgb(var(--border))] bg-[rgb(var(--bg-primary))] text-blue-600 focus:ring-blue-500/50"
               />
-              <label htmlFor="remember-me" className="ml-2 block text-sm font-medium text-gray-400 cursor-pointer hover:text-white transition-colors">
+              <label
+                htmlFor="remember-me"
+                className="ml-2 block cursor-pointer text-sm font-medium text-gray-400 transition-colors hover:text-white"
+              >
                 Запомнить меня
               </label>
             </div>
@@ -126,7 +137,7 @@ export default function LoginPage() {
             <div className="text-sm font-medium">
               <Link
                 href="/forgot-password"
-                className="text-gray-400 hover:text-blue-400 transition-colors"
+                className="text-gray-400 transition-colors hover:text-blue-400"
               >
                 Забыли пароль?
               </Link>
@@ -136,7 +147,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={isLoading}
-            className="btn-primary w-full py-3 text-lg disabled:opacity-50 mt-4"
+            className="btn-primary mt-4 w-full py-3 text-lg disabled:opacity-50"
           >
             {isLoading ? 'Выполняем вход...' : 'Войти'}
           </button>
@@ -144,7 +155,7 @@ export default function LoginPage() {
           <button
             type="button"
             onClick={handleGoogleLogin}
-            className="w-full py-3 text-lg rounded-xl border border-white/20 text-white hover:bg-white/10 transition-colors"
+            className="w-full rounded-xl border border-white/20 py-3 text-lg text-white transition-colors hover:bg-white/10"
           >
             Continue with Google
           </button>

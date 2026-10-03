@@ -13,7 +13,7 @@ interface NotificationState {
   notifications: Notification[]
   unreadCount: number
   isLoading: boolean
-  
+
   // Actions
   setNotifications: (notifications: Notification[]) => void
   addNotification: (notification: Notification) => void
@@ -35,15 +35,13 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
 
   addNotification: (notification: Notification) => {
     const newNotifications = [notification, ...get().notifications]
-    const unreadCount = notification.isRead
-      ? get().unreadCount
-      : get().unreadCount + 1
+    const unreadCount = notification.isRead ? get().unreadCount : get().unreadCount + 1
     set({ notifications: newNotifications, unreadCount })
   },
 
   markAsRead: (notificationId: string) => {
     const newNotifications = get().notifications.map((n) =>
-      n.id === notificationId ? { ...n, isRead: true } : n
+      n.id === notificationId ? { ...n, isRead: true } : n,
     )
     const unreadCount = Math.max(0, get().unreadCount - 1)
     set({ notifications: newNotifications, unreadCount })

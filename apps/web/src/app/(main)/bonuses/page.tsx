@@ -3,7 +3,9 @@ import { BonusesPage } from '@components/pages/bonuses'
 
 export default function Bonuses() {
   return (
-    <Suspense fallback={<div className="flex items-center justify-center h-screen">Загрузка...</div>}>
+    <Suspense
+      fallback={<div className="flex h-screen items-center justify-center">Загрузка...</div>}
+    >
       <BonusesPage />
     </Suspense>
   )

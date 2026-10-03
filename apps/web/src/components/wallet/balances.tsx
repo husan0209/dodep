@@ -8,10 +8,10 @@ const mockBalances = [
 
 export function Balances() {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+    <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
       {mockBalances.map((wallet) => (
         <div key={wallet.currency} className="card p-4">
-          <div className="flex items-center justify-between mb-2">
+          <div className="mb-2 flex items-center justify-between">
             <span className="text-2xl">
               {wallet.currency === 'RUB' && '🇷🇺'}
               {wallet.currency === 'USD' && '🇺🇸'}
@@ -21,11 +21,9 @@ export function Balances() {
               {wallet.currency}
             </span>
           </div>
-          <p className="text-2xl font-bold text-white">
-            {wallet.balance.toLocaleString('ru-RU')}
-          </p>
+          <p className="text-2xl font-bold text-white">{wallet.balance.toLocaleString('ru-RU')}</p>
           {wallet.locked > 0 && (
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
               В ставках: {wallet.locked.toLocaleString('ru-RU')}
             </p>
           )}

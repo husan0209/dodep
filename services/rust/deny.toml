@@ -1,0 +1,55 @@
+# cargo-deny configuration for the services/rust workspace.
+#
+# `cargo deny check` exits non-zero when it cannot find a config, so this file is
+# required for the Security Scan job to run at all. The policy below is
+# deliberately conservative on licences (the platform is proprietary, so
+# copyleft deps are rejected) and advisory-only on advisories: the blocking
+# vulnerability gate is `cargo audit`, which runs immediately before this.
+#
+# Run locally with: cargo deny check
+
+[graph]
+all-features = true
+no-default-features = false
+
+[output]
+feature-depth = 1
+
+[advisories]
+version = 2
+# Report advisories but do not fail the build on them; `cargo audit` in the
+# same job is the gate that blocks on a known vulnerability.
+ignore = []
+
+[bans]
+# Multiple versions of a crate are tolerated while the workspace is being
+# unified (tonic 0.10/0.11 still coexist across the three services).
+multiple-versions = "warn"
+wildcards = "deny"
+highlight = "all"
+skip = []
+skip-tree = []
+
+[licenses]
+version = 2
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-DFS-2016",
+    "Zlib",
+    "MPL-2.0",
+    "OpenSSL",
+]
+# The platform is proprietary: no copyleft, and no "source-available" licences
+# that would impose distribution obligations.
+confidence-threshold = 0.8
+exceptions = []
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
