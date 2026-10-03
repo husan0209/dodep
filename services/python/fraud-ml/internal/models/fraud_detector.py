@@ -158,7 +158,7 @@ class BonusAbuseDetector:
             raise ValueError("Model not fitted")
 
         x_scaled = self.scaler.transform(features)
-        return self.model.predict_proba(x_scaled)[:, 1]
+        return np.asarray(self.model.predict_proba(x_scaled)[:, 1])
 
     def get_feature_importance(self) -> dict[str, float]:
         """Get feature importance scores"""
@@ -248,7 +248,7 @@ class PaymentFraudDetector:
             raise ValueError("Model not fitted")
 
         x_scaled = self.scaler.transform(features)
-        return self.model.predict_proba(x_scaled)[:, 1]
+        return np.asarray(self.model.predict_proba(x_scaled)[:, 1])
 
     def save(self, path: Path):
         """Save model to disk"""
@@ -327,7 +327,7 @@ class AccountTakeoverDetector:
             raise ValueError("Model not fitted")
 
         x_scaled = self.scaler.transform(features)
-        return self.model.predict_proba(x_scaled)[:, 1]
+        return np.asarray(self.model.predict_proba(x_scaled)[:, 1])
 
     def save(self, path: Path):
         """Save model to disk"""

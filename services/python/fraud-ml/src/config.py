@@ -10,7 +10,10 @@ class Settings(BaseSettings):
 
     # Server
     http_port: int = 8000
-    http_host: str = "0.0.0.0"
+    # 0.0.0.0 is required for the container/pod to be reachable from outside
+    # its network namespace; the Service/ingress is what limits who can reach
+    # it. Override with HTTP_HOST to bind to loopback only.
+    http_host: str = "0.0.0.0"  # nosec B104
 
     # Environment
     app_env: str = "development"

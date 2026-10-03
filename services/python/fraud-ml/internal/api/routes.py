@@ -98,7 +98,7 @@ async def detect_bet_anomaly(bets: list[BetData]):
     """
     from fastapi import Request
 
-    request: Request = globals().get("request")
+    request: Request | None = globals().get("request")
 
     if not bets:
         raise HTTPException(status_code=400, detail="No bets provided")
@@ -142,7 +142,7 @@ async def detect_bonus_abuse(user_data: UserData):
     """
     from fastapi import Request
 
-    request: Request = globals().get("request")
+    request: Request | None = globals().get("request")
     fraud_detector = request.app.state.fraud_detector if request else None
     if not fraud_detector:
         raise HTTPException(status_code=503, detail="Fraud detector not available")
@@ -173,7 +173,7 @@ async def detect_payment_fraud(transactions: list[TransactionData]):
     """
     from fastapi import Request
 
-    request: Request = globals().get("request")
+    request: Request | None = globals().get("request")
     fraud_detector = request.app.state.fraud_detector if request else None
     if not fraud_detector:
         raise HTTPException(status_code=503, detail="Fraud detector not available")
@@ -211,7 +211,7 @@ async def detect_account_takeover(login_data: LoginData):
     """
     from fastapi import Request
 
-    request: Request = globals().get("request")
+    request: Request | None = globals().get("request")
     fraud_detector = request.app.state.fraud_detector if request else None
     if not fraud_detector:
         raise HTTPException(status_code=503, detail="Fraud detector not available")
@@ -236,7 +236,7 @@ async def detect_account_takeover(login_data: LoginData):
 async def detect_batch(
     bets: list[BetData] | None = None,
     transactions: list[TransactionData] | None = None,
-    background_tasks: BackgroundTasks = None,
+    background_tasks: BackgroundTasks | None = None,
 ):
     """
     Batch fraud detection for multiple data types
@@ -247,7 +247,7 @@ async def detect_batch(
 
     from fastapi import Request
 
-    request: Request = globals().get("request")
+    request: Request | None = globals().get("request")
     start_time = time.time()
 
     fraud_detector = request.app.state.fraud_detector if request else None
@@ -325,7 +325,7 @@ async def get_models_status():
     """Get status of all ML models"""
     from fastapi import Request
 
-    request: Request = globals().get("request")
+    request: Request | None = globals().get("request")
     fraud_detector = request.app.state.fraud_detector if request else None
     if not fraud_detector:
         raise HTTPException(status_code=503, detail="Fraud detector not available")
@@ -343,7 +343,7 @@ async def reload_models():
     """Reload all ML models from disk"""
     from fastapi import Request
 
-    request: Request = globals().get("request")
+    request: Request | None = globals().get("request")
     fraud_detector = request.app.state.fraud_detector if request else None
     if not fraud_detector:
         raise HTTPException(status_code=503, detail="Fraud detector not available")

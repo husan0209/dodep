@@ -2,6 +2,8 @@
 ClickHouse data access with Polars integration.
 """
 
+from typing import cast
+
 import clickhouse_connect
 import polars as pl
 import structlog
@@ -18,7 +20,10 @@ class ClickHouseClient:
         port: int,
         database: str,
         user: str = "default",
-        password: str = "",
+        # Empty means "no password", which is how the local ClickHouse
+        # container is provisioned. Real credentials come from Settings /
+        # the environment, never from this default.
+        password: str = "",  # nosec B107
     ):
         self.client = clickhouse_connect.get_client(
             host=host,
@@ -41,12 +46,17 @@ class ClickHouseClient:
     def query_to_polars(self, query: str, params: dict | None = None) -> pl.DataFrame:
         """Execute query and return Polars DataFrame."""
         try:
-            result = self.client.query(query, parameters=params)
-            df = pl.from_arrow(result.to_arrow())
+            # query_arrow returns a pyarrow.Table, which Polars consumes with
+            # zero-copy semantics. It also replaced a call to
+            # `QueryResult.to_arrow()`, a method that does not exist on
+            # clickhouse_connect 0.7.x - this path raised AttributeError on
+            # every call before.
+            table = self.client.query_arrow(query, parameters=params)
+            df = cast(pl.DataFrame, pl.from_arrow(table))
             logger.debug(
                 "clickhouse.query_executed",
-                rows=len(df) if df is not None else 0,
-                columns=len(df.columns) if df is not None else 0,
+                rows=len(df),
+                columns=len(df.columns),
             )
             return df
         except Exception as e:

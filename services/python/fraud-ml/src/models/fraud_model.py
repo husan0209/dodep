@@ -125,7 +125,7 @@ class FraudModel:
         """Predict fraud probability."""
         if self.model is None:
             raise ValueError("Model not trained")
-        return self.model.predict_proba(x)[:, 1]
+        return np.asarray(self.model.predict_proba(x)[:, 1])
 
     def predict_with_threshold(self, x: np.ndarray, threshold: float = 0.5) -> np.ndarray:
         """Predict fraud class with custom threshold."""
@@ -149,12 +149,18 @@ class FraudModel:
 
     def export_onnx(self, path: Path) -> Path:
         """Export to ONNX for serving in Rust."""
-        from skl2onnx import convert_sklearn
-        from skl2onnx.common.data_types import FloatTensorType
+        # onnxmltools, not skl2onnx.convert_sklearn: this is an XGBClassifier, and
+        # skl2onnx ships no XGBoost converter, so convert_sklearn aborted with
+        # "Unable to find a shape calculator for type
+        # <class 'xgboost.sklearn.XGBClassifier'>". onnxmltools is the maintained
+        # converter for XGBoost/LightGBM and produces the same TensorFlow-free
+        # graph the Rust serving side loads.
+        from onnxmltools import convert_xgboost
+        from onnxmltools.convert.common.data_types import FloatTensorType
 
         initial_type = [("features", FloatTensorType([None, len(self.FEATURE_COLUMNS)]))]
 
-        onnx_model = convert_sklearn(self.model, initial_types=initial_type)
+        onnx_model = convert_xgboost(self.model, initial_types=initial_type)
 
         onnx_path = path / "fraud_model.onnx"
         with open(onnx_path, "wb") as f:
