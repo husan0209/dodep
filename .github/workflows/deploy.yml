@@ -4,9 +4,20 @@
 name: Deploy
 
 on:
+  # No `pull_request` trigger. This workflow deploys: it pushes to
+  # Vercel/Railway and posts to Slack. Running it for pull requests meant every
+  # PR opened two extra checks, both of which were red for reasons that had
+  # nothing to do with the change under review:
+  #   - "Build and Test" duplicates the CI Pipeline's own build/test jobs, and
+  #     calls npm/golangci-lint/ruff/pytest without installing any of them. It
+  #     was killed at job startup.
+  #   - "Notify Deployment Status" posts to ${{ secrets.SLACK_WEBHOOK }}, which
+  #     GitHub does not expose to pull-request runs, so action-slack always
+  #     errored with "WebHook URL is not specified".
+  # Branch protection then blocked every PR on deployment checks that can only
+  # pass on a push to main. Verification belongs in CI; the actual rollout is
+  # already driven by .github/workflows/cd.yaml once CI Pipeline succeeds.
   push:
-    branches: [main]
-  pull_request:
     branches: [main]
   workflow_dispatch:
 
@@ -16,6 +27,11 @@ env:
   GO_VERSION: '1.21'
   PYTHON_VERSION: '3.11'
   NODE_VERSION: '20'
+  # Surfaced as a job-level env because a step-level `if:` cannot read the
+  # secrets context, and so that the Slack step can be skipped when the webhook
+  # is not configured. Without the guard, a missing secret turns a successful
+  # deploy into a failed job.
+  SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
 
 jobs:
   # ==========================================================================
@@ -184,7 +200,7 @@ jobs:
     
     steps:
       - name: Notify Slack
-        if: always()
+        if: always() && env.SLACK_WEBHOOK_URL != ''
         uses: 8398a7/action-slack@v3
         with:
           status: ${{ job.status }}
@@ -193,8 +209,6 @@ jobs:
             Web: ${{ needs.deploy-web.result }}
             Backend: ${{ needs.deploy-backend.result }}
             Admin: ${{ needs.deploy-admin.result }}
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
 
       - name: Notify Success
         if: success()
