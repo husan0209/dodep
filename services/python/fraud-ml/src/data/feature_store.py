@@ -17,18 +17,24 @@ class FeatureStore:
     """Feature store with parquet-based caching."""
 
     def __init__(self, cache_dir: str | None = None):
-        # Resolved from the platform temp dir rather than hardcoded to /tmp,
-        # which does not exist on Windows and is not writable in some images.
-        self.cache_dir = Path(cache_dir) if cache_dir else Path(tempfile.gettempdir()) / "features"
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        # Default to a private subdirectory of the OS temp dir rather than
+        # the shared /tmp: predictable world-writable paths let another local
+        # user pre-create or swap cache entries.
+        if cache_dir is None:
+            cache_dir = str(Path(tempfile.gettempdir()) / "fraud-ml-features")
+        self.cache_dir = Path(cache_dir)
+        self.cache_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
         logger.info("feature_store.initialized", cache_dir=str(self.cache_dir))
 
     def _compute_cache_key(self, user_ids: list[int], as_of: datetime) -> str:
-        """Compute cache key from user IDs and timestamp."""
+        """
+        Compute cache key from user IDs and timestamp.
+
+        Uses sha256 (cache keys are derived from user IDs, so collisions are
+        a correctness concern, not just a security one).
+        """
         key_str = f"{sorted(user_ids)}_{as_of.isoformat()}"
-        # A cache key, not an integrity check: there is no attacker-controlled
-        # secret here, so MD5 is fine and only needs to be stable and fast.
-        return hashlib.md5(key_str.encode(), usedforsecurity=False).hexdigest()
+        return hashlib.sha256(key_str.encode()).hexdigest()
 
     def get_cached(
         self, user_ids: list[int], as_of: datetime, ttl_hours: int = 24

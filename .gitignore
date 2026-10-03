@@ -43,11 +43,12 @@ pnpm-debug.log*
 
 # Testing
 coverage/
-# pytest-cov writes a dotfile, not the coverage/ directory above.
 .coverage
 .coverage.*
 htmlcov/
 junit.xml
+bandit-results.json
+safety-results.json
 *.lcov
 .nyc_output/
 

@@ -8,19 +8,13 @@ import structlog
 logger = structlog.get_logger()
 
 
-# Feature registry - defines all features used by the model
+# Feature registry - defines all features used by the model.
+# Order matters: it is the model input order (training, ONNX metadata and
+# the Rust serving side all consume features in exactly this sequence).
 FEATURE_REGISTRY = {
     # Betting behavior
-    "bets_7d": {
-        "type": "numeric",
-        "source": "extraction",
-        "description": "Bets in last 7 days",
-    },
-    "bets_24h": {
-        "type": "numeric",
-        "source": "extraction",
-        "description": "Bets in last 24 hours",
-    },
+    "bets_7d": {"type": "numeric", "source": "extraction", "description": "Bets in last 7 days"},
+    "bets_24h": {"type": "numeric", "source": "extraction", "description": "Bets in last 24 hours"},
     "avg_bet_30d": {
         "type": "numeric",
         "source": "extraction",
@@ -53,27 +47,15 @@ FEATURE_REGISTRY = {
         "source": "extraction",
         "description": "Unique devices (30d)",
     },
-    "ip_count_30d": {
-        "type": "numeric",
-        "source": "extraction",
-        "description": "Unique IPs (30d)",
-    },
+    "ip_count_30d": {"type": "numeric", "source": "extraction", "description": "Unique IPs (30d)"},
     "country_count_30d": {
         "type": "numeric",
         "source": "extraction",
         "description": "Unique countries (30d)",
     },
     # Win rate
-    "wins_7d": {
-        "type": "numeric",
-        "source": "extraction",
-        "description": "Wins in last 7 days",
-    },
-    "settled_7d": {
-        "type": "numeric",
-        "source": "extraction",
-        "description": "Settled bets (7d)",
-    },
+    "wins_7d": {"type": "numeric", "source": "extraction", "description": "Wins in last 7 days"},
+    "settled_7d": {"type": "numeric", "source": "extraction", "description": "Settled bets (7d)"},
     # Account
     "account_age_days": {
         "type": "numeric",
@@ -81,11 +63,7 @@ FEATURE_REGISTRY = {
         "description": "Account age in days",
     },
     # Derived features
-    "win_rate_7d": {
-        "type": "numeric",
-        "source": "derived",
-        "description": "Win rate (7d)",
-    },
+    "win_rate_7d": {"type": "numeric", "source": "derived", "description": "Win rate (7d)"},
     "bet_cv_30d": {
         "type": "numeric",
         "source": "derived",
@@ -101,16 +79,8 @@ FEATURE_REGISTRY = {
         "source": "derived",
         "description": "Multi-device indicator (>3)",
     },
-    "multi_ip": {
-        "type": "binary",
-        "source": "derived",
-        "description": "Multi-IP indicator (>10)",
-    },
-    "high_roller": {
-        "type": "binary",
-        "source": "derived",
-        "description": "High roller indicator",
-    },
+    "multi_ip": {"type": "binary", "source": "derived", "description": "Multi-IP indicator (>10)"},
+    "high_roller": {"type": "binary", "source": "derived", "description": "High roller indicator"},
     "rapid_bettor": {
         "type": "binary",
         "source": "derived",

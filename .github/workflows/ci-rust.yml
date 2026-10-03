@@ -21,9 +21,8 @@ on:
 env:
   CARGO_TERM_COLOR: always
   # Floor imposed by the committed lockfile; see the comment in ci.yaml
-  # for the 1.75 / 1.78 / 1.85 / 1.88 evidence. Do not lower without
-  # re-checking.
-  RUST_VERSION: "1.88"
+  # for the 1.75 / 1.78 / 1.85 evidence. Do not lower without re-checking.
+  RUST_VERSION: "1.85"
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
@@ -70,12 +69,12 @@ jobs:
       - name: Install native build dependencies
         run: |
           sudo apt-get update
-          # Every crate's build.rs runs tonic-build/prost-build, which shells out
-          # to protoc. The hosted runner image does not ship it, so without this
-          # the job dies in the build script with
-          #   Could not find `protoc`. If `protoc` is installed, try setting the
-          #   `PROTOC` environment variable
-          # before clippy ever runs. Same step as .github/workflows/ci.yaml.
+          # Every crate build.rs runs tonic-build/prost-build, which shells
+          # out to protoc. The hosted runner image does not ship it, so
+          # without this the job dies in the build script with
+          #   Could not find `protoc`. If `protoc` is installed, try setting
+          #   the `PROTOC` environment variable
+          # before clippy or the tests ever run.
           sudo apt-get install -y pkg-config libssl-dev protobuf-compiler
 
       - name: Run rustfmt
@@ -151,7 +150,12 @@ jobs:
       - name: Install native build dependencies
         run: |
           sudo apt-get update
-          # protoc is required by the tonic-build/prost-build build scripts.
+          # Every crate build.rs runs tonic-build/prost-build, which shells
+          # out to protoc. The hosted runner image does not ship it, so
+          # without this the job dies in the build script with
+          #   Could not find `protoc`. If `protoc` is installed, try setting
+          #   the `PROTOC` environment variable
+          # before clippy or the tests ever run.
           sudo apt-get install -y pkg-config libssl-dev protobuf-compiler
 
       - name: Run unit tests
@@ -197,37 +201,19 @@ jobs:
         with:
           toolchain: ${{ env.RUST_VERSION }}
 
-      # `--locked` installs the tool with the dependency tree its own
-      # Cargo.lock pins, instead of resolving the newest compatible versions.
-      # Without it, `cargo install cargo-audit` picked up kstring 2.0.5, which
-      # requires rustc 1.96, and the install step died before cargo-audit ever
-      # ran:
-      #
-      #   rustc 1.88.0 is not supported by the following packages:
-      #   kstring@2.0.5 requires rustc 1.96.0
-      #   Try re-running `cargo install` with `--locked`
-      #
-      # The tool's MSRV then tracks the version we asked for, not whatever its
-      # dependencies happen to require that week.
       - name: Install cargo-audit
-        # Both a version and --locked: --locked keeps the tool's dependency
-        # tree on what its own Cargo.lock pins, and the version pin keeps the
-        # tool itself from drifting.
-        run: cargo install cargo-audit --version 0.21.2 --locked
+        run: cargo install cargo-audit
 
       - name: Run cargo audit
-        # From the workspace root, not the member directory: Cargo.lock lives
-        # in services/rust, so running this in services/rust/<service> found no
-        # lockfile at all. `--deny warnings` also turns unmaintained/unsound
-        # advisories into failures rather than notes.
-        working-directory: services/rust
+        working-directory: services/rust/${{ matrix.service }}
         run: cargo audit --deny warnings
 
-      # cargo-deny is intentionally absent: there is no deny.toml anywhere in
-      # the repository, so `cargo deny check` could only ever exit non-zero.
-      # Reinstating it means adding services/rust/deny.toml first, which needs
-      # an explicit licence allow-list - a policy decision for the maintainers.
-      # cargo-audit above already covers advisories and needs no config.
+      - name: Install cargo-deny
+        run: cargo install cargo-deny
+
+      - name: Run cargo deny
+        working-directory: services/rust
+        run: cargo deny check
 
   # ==========================================================================
   # Build

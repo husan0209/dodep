@@ -192,7 +192,8 @@ class FeatureExtractor:
 
             -- Win rate
             countIf(ue.event_type = 'bet_settled' AND
-                    JSONExtractString(ue.properties, 'result') = 'won') OVER w_7d as wins_7d,
+                    JSONExtractString(ue.properties, 'result') = 'won')
+                OVER w_7d as wins_7d,
             countIf(ue.event_type = 'bet_settled') OVER w_7d as settled_7d,
 
             -- Account age

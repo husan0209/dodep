@@ -18,10 +18,11 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /build
 
 # Copy requirements first for caching.
-# Each service's file must land in its own subdirectory: copying both to "."
-# made the second COPY overwrite the first, and left the
-# `fraud-ml/requirements.txt` / `analytics/requirements.txt` paths that the
-# pip install steps below refer to nonexistent.
+# Each service keeps its own requirements.txt under a directory named after the
+# service: the install steps below address them as `fraud-ml/requirements.txt` and
+# `analytics/requirements.txt`. Copying both to `.` gave a single
+# ./requirements.txt that the second COPY overwrote, so `pip install -r
+# fraud-ml/requirements.txt` could never resolve.
 COPY services/python/fraud-ml/requirements.txt fraud-ml/requirements.txt
 COPY services/python/analytics/requirements.txt analytics/requirements.txt
 
@@ -102,8 +103,6 @@ RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 # Install development dependencies
-# Same overwrite trap as the builder stage above: keep the two requirement
-# files in separate subdirectories so the paths below resolve.
 COPY services/python/fraud-ml/requirements.txt fraud-ml/requirements.txt
 COPY services/python/analytics/requirements.txt analytics/requirements.txt
 

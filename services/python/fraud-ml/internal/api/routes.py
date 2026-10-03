@@ -1,11 +1,19 @@
 """
-API Routes for Fraud ML Service
+API Routes for Fraud ML Service.
+
+Detectors live in `app.state.fraud_detector` (wired in main.py lifespan);
+handlers access it through FastAPI's injected `Request` — the previous
+`globals().get('request')` pattern always resolved to None, making every
+endpoint return 503.
 """
 
+import time
 from datetime import datetime
+from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException
-from pydantic import BaseModel
+import pandas as pd
+from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel, Field
 
 router = APIRouter()
 
@@ -66,9 +74,9 @@ class FraudPredictionResponse(BaseModel):
 
     user_id: int
     fraud_type: str
-    risk_score: float
+    risk_score: float = Field(ge=0.0, le=100.0)
     is_fraud: bool
-    confidence: float
+    confidence: float = Field(ge=0.0, le=1.0)
     timestamp: datetime
     explanation: str | None = None
 
@@ -82,13 +90,42 @@ class BatchFraudResponse(BaseModel):
     processing_time_ms: float
 
 
+# ============ Helpers ============
+
+
+def _get_detector(request: Request):
+    """Resolve the fraud detector from app state or fail with 503."""
+    detector = getattr(request.app.state, "fraud_detector", None)
+    if detector is None:
+        raise HTTPException(status_code=503, detail="Fraud detector not available")
+    return detector
+
+
+def _to_response(prediction: Any) -> FraudPredictionResponse:
+    """Map a FraudPrediction dataclass to the API response model."""
+    return FraudPredictionResponse(
+        user_id=prediction.user_id,
+        fraud_type=prediction.fraud_type,
+        risk_score=prediction.risk_score,
+        is_fraud=prediction.is_fraud,
+        confidence=prediction.confidence,
+        timestamp=prediction.timestamp,
+        explanation=prediction.explanation,
+    )
+
+
+def _require_non_empty(items: list, detail: str) -> None:
+    if not items:
+        raise HTTPException(status_code=400, detail=detail)
+
+
 # ============ Fraud Detection Endpoints ============
 
 
 @router.post("/detect/bet-anomaly", response_model=FraudPredictionResponse)
-async def detect_bet_anomaly(bets: list[BetData]):
+async def detect_bet_anomaly(request: Request, bets: list[BetData]):
     """
-    Detect anomalous betting patterns
+    Detect anomalous betting patterns.
 
     Analyzes betting history for suspicious patterns including:
     - Unusual bet amounts
@@ -96,43 +133,21 @@ async def detect_bet_anomaly(bets: list[BetData]):
     - Night betting patterns
     - Abnormal win rates
     """
-    from fastapi import Request
-
-    request: Request | None = globals().get("request")
-
-    if not bets:
-        raise HTTPException(status_code=400, detail="No bets provided")
-
-    # Get fraud detector from app state
-    fraud_detector = request.app.state.fraud_detector if request else None
-    if not fraud_detector:
-        raise HTTPException(status_code=503, detail="Fraud detector not available")
-
-    # Convert to DataFrame
-    import pandas as pd
+    _require_non_empty(bets, "No bets provided")
+    fraud_detector = _get_detector(request)
 
     bets_df = pd.DataFrame([b.model_dump() for b in bets])
     bets_df["placed_at"] = pd.to_datetime(bets_df["placed_at"])
 
-    # Detect anomaly
     user_id = bets[0].user_id
     prediction = fraud_detector.detect_bet_anomaly(user_id, bets_df)
-
-    return FraudPredictionResponse(
-        user_id=prediction.user_id,
-        fraud_type=prediction.fraud_type,
-        risk_score=prediction.risk_score,
-        is_fraud=prediction.is_fraud,
-        confidence=prediction.confidence,
-        timestamp=prediction.timestamp,
-        explanation=prediction.explanation,
-    )
+    return _to_response(prediction)
 
 
 @router.post("/detect/bonus-abuse", response_model=FraudPredictionResponse)
-async def detect_bonus_abuse(user_data: UserData):
+async def detect_bonus_abuse(request: Request, user_data: UserData):
     """
-    Detect bonus abuse patterns
+    Detect bonus abuse patterns.
 
     Analyzes user behavior for bonus abuse including:
     - Multiple bonus claims
@@ -140,30 +155,15 @@ async def detect_bonus_abuse(user_data: UserData):
     - Immediate withdrawal after bonus
     - New account with high bonus activity
     """
-    from fastapi import Request
-
-    request: Request | None = globals().get("request")
-    fraud_detector = request.app.state.fraud_detector if request else None
-    if not fraud_detector:
-        raise HTTPException(status_code=503, detail="Fraud detector not available")
-
+    fraud_detector = _get_detector(request)
     prediction = fraud_detector.detect_bonus_abuse(user_data.user_id, user_data.model_dump())
-
-    return FraudPredictionResponse(
-        user_id=prediction.user_id,
-        fraud_type=prediction.fraud_type,
-        risk_score=prediction.risk_score,
-        is_fraud=prediction.is_fraud,
-        confidence=prediction.confidence,
-        timestamp=prediction.timestamp,
-        explanation=prediction.explanation,
-    )
+    return _to_response(prediction)
 
 
 @router.post("/detect/payment-fraud", response_model=FraudPredictionResponse)
-async def detect_payment_fraud(transactions: list[TransactionData]):
+async def detect_payment_fraud(request: Request, transactions: list[TransactionData]):
     """
-    Detect payment fraud patterns
+    Detect payment fraud patterns.
 
     Analyzes transaction history for fraud including:
     - Rapid transactions
@@ -171,37 +171,21 @@ async def detect_payment_fraud(transactions: list[TransactionData]):
     - High failed transaction ratio
     - Unusual transaction amounts
     """
-    from fastapi import Request
-
-    request: Request | None = globals().get("request")
-    fraud_detector = request.app.state.fraud_detector if request else None
-    if not fraud_detector:
-        raise HTTPException(status_code=503, detail="Fraud detector not available")
-
-    # Convert to DataFrame
-    import pandas as pd
+    _require_non_empty(transactions, "No transactions provided")
+    fraud_detector = _get_detector(request)
 
     tx_df = pd.DataFrame([t.model_dump() for t in transactions])
     tx_df["created_at"] = pd.to_datetime(tx_df["created_at"])
 
     user_id = transactions[0].user_id
     prediction = fraud_detector.detect_payment_fraud(user_id, tx_df)
-
-    return FraudPredictionResponse(
-        user_id=prediction.user_id,
-        fraud_type=prediction.fraud_type,
-        risk_score=prediction.risk_score,
-        is_fraud=prediction.is_fraud,
-        confidence=prediction.confidence,
-        timestamp=prediction.timestamp,
-        explanation=prediction.explanation,
-    )
+    return _to_response(prediction)
 
 
 @router.post("/detect/account-takeover", response_model=FraudPredictionResponse)
-async def detect_account_takeover(login_data: LoginData):
+async def detect_account_takeover(request: Request, login_data: LoginData):
     """
-    Detect account takeover attempts
+    Detect account takeover attempts.
 
     Analyzes login patterns for takeover attempts including:
     - New location/device
@@ -209,24 +193,9 @@ async def detect_account_takeover(login_data: LoginData):
     - Multiple failed attempts
     - Logins from multiple locations
     """
-    from fastapi import Request
-
-    request: Request | None = globals().get("request")
-    fraud_detector = request.app.state.fraud_detector if request else None
-    if not fraud_detector:
-        raise HTTPException(status_code=503, detail="Fraud detector not available")
-
+    fraud_detector = _get_detector(request)
     prediction = fraud_detector.detect_account_takeover(login_data.user_id, login_data.model_dump())
-
-    return FraudPredictionResponse(
-        user_id=prediction.user_id,
-        fraud_type=prediction.fraud_type,
-        risk_score=prediction.risk_score,
-        is_fraud=prediction.is_fraud,
-        confidence=prediction.confidence,
-        timestamp=prediction.timestamp,
-        explanation=prediction.explanation,
-    )
+    return _to_response(prediction)
 
 
 # ============ Batch Detection ============
@@ -234,78 +203,42 @@ async def detect_account_takeover(login_data: LoginData):
 
 @router.post("/detect/batch", response_model=BatchFraudResponse)
 async def detect_batch(
+    request: Request,
     bets: list[BetData] | None = None,
     transactions: list[TransactionData] | None = None,
-    background_tasks: BackgroundTasks | None = None,
 ):
     """
-    Batch fraud detection for multiple data types
+    Batch fraud detection for multiple data types.
 
-    Processes bets and transactions in batch for efficiency
+    Processes bets and transactions in batch for efficiency.
     """
-    import time
-
-    from fastapi import Request
-
-    request: Request | None = globals().get("request")
+    fraud_detector = _get_detector(request)
     start_time = time.time()
 
-    fraud_detector = request.app.state.fraud_detector if request else None
-    if not fraud_detector:
-        raise HTTPException(status_code=503, detail="Fraud detector not available")
-
-    predictions = []
+    predictions: list[FraudPredictionResponse] = []
     fraud_count = 0
 
-    # Process bets
     if bets:
-        import pandas as pd
-
         bets_df = pd.DataFrame([b.model_dump() for b in bets])
         bets_df["placed_at"] = pd.to_datetime(bets_df["placed_at"])
 
-        user_ids = bets_df["user_id"].unique()
-        for user_id in user_ids:
+        for user_id in bets_df["user_id"].unique():
             user_bets = bets_df[bets_df["user_id"] == user_id]
             pred = fraud_detector.detect_bet_anomaly(user_id, user_bets)
             if pred.is_fraud:
                 fraud_count += 1
-            predictions.append(
-                FraudPredictionResponse(
-                    user_id=pred.user_id,
-                    fraud_type=pred.fraud_type,
-                    risk_score=pred.risk_score,
-                    is_fraud=pred.is_fraud,
-                    confidence=pred.confidence,
-                    timestamp=pred.timestamp,
-                    explanation=pred.explanation,
-                )
-            )
+            predictions.append(_to_response(pred))
 
-    # Process transactions
     if transactions:
-        import pandas as pd
-
         tx_df = pd.DataFrame([t.model_dump() for t in transactions])
         tx_df["created_at"] = pd.to_datetime(tx_df["created_at"])
 
-        user_ids = tx_df["user_id"].unique()
-        for user_id in user_ids:
+        for user_id in tx_df["user_id"].unique():
             user_txs = tx_df[tx_df["user_id"] == user_id]
             pred = fraud_detector.detect_payment_fraud(user_id, user_txs)
             if pred.is_fraud:
                 fraud_count += 1
-            predictions.append(
-                FraudPredictionResponse(
-                    user_id=pred.user_id,
-                    fraud_type=pred.fraud_type,
-                    risk_score=pred.risk_score,
-                    is_fraud=pred.is_fraud,
-                    confidence=pred.confidence,
-                    timestamp=pred.timestamp,
-                    explanation=pred.explanation,
-                )
-            )
+            predictions.append(_to_response(pred))
 
     processing_time = (time.time() - start_time) * 1000
 
@@ -321,35 +254,17 @@ async def detect_batch(
 
 
 @router.get("/models/status")
-async def get_models_status():
+async def get_models_status(request: Request):
     """Get status of all ML models"""
-    from fastapi import Request
-
-    request: Request | None = globals().get("request")
-    fraud_detector = request.app.state.fraud_detector if request else None
-    if not fraud_detector:
-        raise HTTPException(status_code=503, detail="Fraud detector not available")
-
-    return {
-        "bet_anomaly": {"loaded": fraud_detector.bet_anomaly_detector.is_fitted},
-        "bonus_abuse": {"loaded": fraud_detector.bonus_abuse_detector.is_fitted},
-        "payment_fraud": {"loaded": fraud_detector.payment_fraud_detector.is_fitted},
-        "account_takeover": {"loaded": fraud_detector.account_takeover_detector.is_fitted},
-    }
+    fraud_detector = _get_detector(request)
+    return fraud_detector.get_status()
 
 
 @router.post("/models/reload")
-async def reload_models():
+async def reload_models(request: Request):
     """Reload all ML models from disk"""
-    from fastapi import Request
-
-    request: Request | None = globals().get("request")
-    fraud_detector = request.app.state.fraud_detector if request else None
-    if not fraud_detector:
-        raise HTTPException(status_code=503, detail="Fraud detector not available")
-
+    fraud_detector = _get_detector(request)
     fraud_detector.load_models()
-
     return {"status": "models reloaded"}
 
 
