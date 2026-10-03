@@ -15,9 +15,16 @@ dependencies = [
     "imbalanced-learn>=0.12.0",
     
     # Model Export
-    "onnx>=1.15.0",
+    # onnx/skl2onnx are pinned to a compatible pair on purpose. skl2onnx still
+    # does `from onnx import mapping`, and onnx dropped that module in 1.18, so
+    # an unbounded "onnx>=1.15.0" resolved to 1.22 and every ONNX test failed at
+    # import time with
+    #   ImportError: cannot import name 'mapping' from 'onnx'
+    "onnx>=1.16.0,<1.18",
     "onnxruntime>=1.17.0",
-    "skl2onnx>=1.17.0",
+    "skl2onnx>=1.17.0,<1.18",
+    # Imported directly by FraudModel.export_onnx for the XGBoost converter.
+    "onnxmltools>=1.12.0",
     
     # Database
     "clickhouse-connect>=0.7.1",

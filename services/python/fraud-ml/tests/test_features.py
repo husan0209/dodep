@@ -30,6 +30,9 @@ class TestFeatureExtractor:
 
     def test_compute_derived_features(self, extractor):
         """Test derived feature computation."""
+        # compute_derived_features reads bets_7d, bets_24h, total_deposit_30d
+        # and max_bet_30d as well; the fixture omitted them and polars aborted
+        # with 'unable to find column "total_deposit_30d"'.
         df = pl.DataFrame(
             {
                 "user_id": [1, 2],
@@ -37,6 +40,10 @@ class TestFeatureExtractor:
                 "settled_7d": [10, 20],
                 "std_bet_30d": [50.0, 100.0],
                 "avg_bet_30d": [100.0, 200.0],
+                "max_bet_30d": [900.0, 250.0],
+                "bets_7d": [30, 20],
+                "bets_24h": [2, 1],
+                "total_deposit_30d": [3000.0, 500.0],
                 "device_count_30d": [5, 2],
                 "ip_count_30d": [15, 5],
             }
@@ -58,9 +65,8 @@ class TestFeatureExtractor:
         assert derived["multi_device"][1] == 0  # 2 <= 3
 
     def test_extract_training_data(self, extractor):
-        """Test training data extraction."""
-        # This would require a real ClickHouse connection
-        # df = extractor.extract_training_data(lookback_days=90)
-        # assert len(df) > 0
-        # assert "is_fraud" in df.columns
-        pass
+        """Training data extraction needs a live ClickHouse."""
+        # extract_training_data runs the same user_events / fraud_signals join as
+        # extract_user_features. Skipped rather than left as commented-out
+        # asserts reporting a pass.
+        pytest.skip("extract_training_data requires a live ClickHouse connection")

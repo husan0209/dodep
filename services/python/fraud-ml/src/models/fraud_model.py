@@ -125,7 +125,8 @@ class FraudModel:
         """Predict fraud probability."""
         if self.model is None:
             raise ValueError("Model not trained")
-        return self.model.predict_proba(x)[:, 1]
+        proba: np.ndarray = self.model.predict_proba(x)
+        return proba[:, 1]
 
     def predict_with_threshold(self, x: np.ndarray, threshold: float = 0.5) -> np.ndarray:
         """Predict fraud class with custom threshold."""
@@ -149,12 +150,23 @@ class FraudModel:
 
     def export_onnx(self, path: Path) -> Path:
         """Export to ONNX for serving in Rust."""
-        from skl2onnx import convert_sklearn
-        from skl2onnx.common.data_types import FloatTensorType
+        # onnxmltools, not skl2onnx.convert_sklearn: XGBClassifier only borrows
+        # the sklearn estimator API, it is not a sklearn estimator, and
+        # convert_sklearn rejects it with "Unable to find a shape calculator for
+        # type '<class 'xgboost.sklearn.XGBClassifier'>'". onnxmltools ships the
+        # XGBoost converter that skl2onnx delegates to.
+        from onnxmltools.convert import convert_xgboost
+
+        # The tensor type has to come from onnxmltools, not skl2onnx: the
+        # converter compares classes by identity and raises "got an input
+        # features with a wrong type ... Only [...] are allowed" otherwise.
+        from onnxmltools.convert.common.data_types import FloatTensorType
+
+        path.mkdir(parents=True, exist_ok=True)
 
         initial_type = [("features", FloatTensorType([None, len(self.FEATURE_COLUMNS)]))]
 
-        onnx_model = convert_sklearn(self.model, initial_types=initial_type)
+        onnx_model = convert_xgboost(self.model, initial_types=initial_type)
 
         onnx_path = path / "fraud_model.onnx"
         with open(onnx_path, "wb") as f:

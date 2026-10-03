@@ -70,9 +70,15 @@ class TestOnnxExport:
         session = ort.InferenceSession(str(onnx_path))
         input_name = session.get_inputs()[0].name
 
-        # Test inference
-        test_input = np.random.randn(5, 18).astype(np.float32)
-        output = session.run(None, {input_name: test_input})
+        # Test inference. The width comes from the model: FEATURE_COLUMNS is the
+        # registry's 20 entries, and the hardcoded 18 here no longer matched the
+        # exported graph.
+        n_features = len(trained_model.FEATURE_COLUMNS)
+        test_input = np.random.randn(5, n_features).astype(np.float32)
+        label_output, probabilities = session.run(None, {input_name: test_input})
 
-        assert len(output) == 1
-        assert output[0].shape == (5, 2)  # 5 samples, 2 classes
+        # The exported XGBoost graph emits two outputs: the predicted label and
+        # the per-class probabilities.
+        assert label_output.shape == (5,)
+        assert probabilities.shape == (5, 2)
+        assert np.allclose(probabilities.sum(axis=1), 1.0, atol=1e-5)

@@ -2,6 +2,8 @@
 Model evaluation metrics for fraud detection.
 """
 
+from typing import Any
+
 import numpy as np
 import structlog
 from sklearn.metrics import (
@@ -50,12 +52,21 @@ def calculate_metrics(
     # ROC curve points (for plotting)
     fpr, tpr, roc_thresholds = roc_curve(y_true, y_pred_proba)
 
-    metrics = {
+    # Values are heterogeneous (floats, ints, a nested roc_curve dict), so say
+    # so explicitly - mypy otherwise infers dict[str, object] and every
+    # `metrics[key]` read below becomes an unusable `object`.
+    #
+    # The key is built from an int, not from target_recall * 100: interpolating
+    # a float produced "precision_at_90.00000000000001_recall", so
+    # validate_quality_gates' lookup of "precision_at_90_recall" raised KeyError.
+    precision_key = f"precision_at_{int(round(target_recall * 100))}_recall"
+
+    metrics: dict[str, Any] = {
         # Discrimination
         "auc_roc": float(auc),
         "avg_precision": float(ap),
         # Threshold-based
-        f"precision_at_{target_recall * 100}_recall": float(precision_at_recall),
+        precision_key: float(precision_at_recall),
         "threshold": float(threshold),
         # Confusion matrix
         "true_positives": int(cm[1, 1]),
@@ -83,7 +94,7 @@ def calculate_metrics(
         "metrics.calculated",
         auc=round(auc, 4),
         precision_at_recall=round(precision_at_recall, 4),
-        f1_score=round(metrics["f1_score"], 4),
+        f1_score=round(float(metrics["f1_score"]), 4),
     )
 
     return metrics

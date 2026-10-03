@@ -22,10 +22,19 @@ class TestMetrics:
         # Create imbalanced data (5% fraud)
         y_true = np.random.choice([0, 1], n_samples, p=[0.95, 0.05])
 
-        # Create predictions with some signal
-        y_pred_proba = np.random.uniform(0, 1, n_samples)
-        y_pred_proba[y_true == 1] += 0.3  # Fraud tends to have higher scores
-        y_pred_proba = np.clip(y_pred_proba, 0, 1)
+        # Predictions with clear but imperfect separation: fraud scores high,
+        # honest players score low, with enough overlap that precision at a 90%
+        # recall target lands between the 0.1 threshold the passing case asserts
+        # and the 0.99 threshold the failing case asserts.
+        #
+        # The old `y_pred_proba[y_true == 1] += 0.3` shift left the two
+        # populations interleaved, so precision@90R came out at 0.066 and
+        # test_quality_gates_pass failed on its own fixture.
+        y_pred_proba = np.where(
+            y_true == 1,
+            np.random.uniform(0.5, 1.0, n_samples),
+            np.random.uniform(0.0, 0.6, n_samples),
+        )
 
         return y_true, y_pred_proba
 

@@ -7,7 +7,11 @@ from datetime import datetime, timedelta
 import polars as pl
 import structlog
 
-from .clickhouse import ClickHouseClient
+# ClickHouseClient lives in src/data, not next to this module: the old
+# `from .clickhouse import ClickHouseClient` pointed at src/features/clickhouse.py,
+# which does not exist. ignore_missing_imports hid the breakage from mypy, and
+# importing this module at runtime raised ImportError.
+from ..data.clickhouse import ClickHouseClient
 
 logger = structlog.get_logger()
 

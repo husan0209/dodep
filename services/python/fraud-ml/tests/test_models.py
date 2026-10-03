@@ -4,6 +4,7 @@ import numpy as np
 import polars as pl
 import pytest
 
+from src.features.transformation import FEATURE_REGISTRY
 from src.models.fraud_model import FraudModel
 
 
@@ -15,6 +16,10 @@ class TestFraudModel:
         """Create sample training data."""
         np.random.seed(42)
         n_samples = 1000
+
+        labels = np.random.choice([0, 1], n_samples, p=[0.95, 0.05])
+        fraud = labels == 1
+        n_fraud = int(fraud.sum())
 
         data = {
             "bets_7d": np.random.randint(0, 50, n_samples),
@@ -37,8 +42,26 @@ class TestFraudModel:
             "multi_ip": np.random.randint(0, 2, n_samples),
             "high_roller": np.random.randint(0, 2, n_samples),
             "rapid_bettor": np.random.randint(0, 2, n_samples),
-            "is_fraud": np.random.choice([0, 1], n_samples, p=[0.95, 0.05]),
+            "is_fraud": labels,
         }
+
+        # Give the fraud rows a behavioural signature: brand-new accounts,
+        # bursts of bets, many devices and IPs, erratic stake sizes, almost no
+        # wins.
+        #
+        # Without this the label was drawn independently of every feature, so
+        # there was nothing to learn and `auc_roc > 0.5` in
+        # test_model_training was unreachable - XGBoost returned 0.47.
+        data["account_age_days"][fraud] = np.random.randint(1, 30, n_fraud)
+        data["bets_24h"][fraud] = np.random.randint(20, 40, n_fraud)
+        data["bets_7d"][fraud] = np.random.randint(45, 80, n_fraud)
+        data["device_count_30d"][fraud] = np.random.randint(8, 20, n_fraud)
+        data["ip_count_30d"][fraud] = np.random.randint(30, 80, n_fraud)
+        data["bet_cv_30d"][fraud] = np.random.uniform(3, 5, n_fraud)
+        data["win_rate_7d"][fraud] = np.random.uniform(0, 0.2, n_fraud)
+        data["multi_device"][fraud] = 1
+        data["multi_ip"][fraud] = 1
+        data["rapid_bettor"][fraud] = 1
 
         return pl.DataFrame(data)
 
@@ -50,8 +73,13 @@ class TestFraudModel:
     def test_model_initialization(self, model):
         """Test model initializes correctly."""
         assert model.model is None
-        assert len(model.FEATURE_COLUMNS) == 18
+        # Derived from the registry instead of a hardcoded count: FEATURE_COLUMNS
+        # is MODEL_FEATURES, and the registry grew to 20 entries while this spec
+        # still expected 18.
+        assert model.FEATURE_COLUMNS == list(FEATURE_REGISTRY)
+        assert len(set(model.FEATURE_COLUMNS)) == len(model.FEATURE_COLUMNS)
         assert model.TARGET_COLUMN == "is_fraud"
+        assert model.TARGET_COLUMN not in model.FEATURE_COLUMNS
 
     def test_model_training(self, model, sample_data):
         """Test model training."""
