@@ -8,7 +8,12 @@ jest.mock("@/stores/auth-store", () => ({
   },
 }));
 
-import { ApiClientError, createApiClient, resolveApiBaseUrl, resolveAuthApiBaseUrl } from "./client";
+import {
+  ApiClientError,
+  createApiClient,
+  resolveApiBaseUrl,
+  resolveAuthApiBaseUrl,
+} from "./client";
 
 describe("api client configuration", () => {
   test("prefers explicit auth API url when provided", () => {
@@ -40,7 +45,9 @@ describe("network diagnostics", () => {
 
     let error: unknown;
     try {
-      await client.post("/api/v1/auth/register", { email: "broken@example.com" });
+      await client.post("/api/v1/auth/register", {
+        email: "broken@example.com",
+      });
     } catch (caught) {
       error = caught;
     } finally {
@@ -51,6 +58,8 @@ describe("network diagnostics", () => {
     const apiError = error as ApiClientError;
     expect(apiError.status).toBe(0);
     expect(apiError.error.code).toBe("NETWORK_CONNECTION_REFUSED");
-    expect(apiError.error.message).toContain("http://localhost:8080/api/v1/auth/register");
+    expect(apiError.error.message).toContain(
+      "http://localhost:8080/api/v1/auth/register",
+    );
   });
 });

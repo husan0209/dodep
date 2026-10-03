@@ -22,7 +22,8 @@ export const queryKeys = {
   wallet: {
     all: ["wallet"] as const,
     balances: () => [...queryKeys.wallet.all, "balances"] as const,
-    balance: (currency: string) => [...queryKeys.wallet.all, "balance", currency] as const,
+    balance: (currency: string) =>
+      [...queryKeys.wallet.all, "balance", currency] as const,
     transactions: (filters?: Record<string, string>) =>
       [...queryKeys.wallet.all, "transactions", filters] as const,
   },
@@ -34,7 +35,8 @@ export const queryKeys = {
     history: (filters?: Record<string, string>) =>
       [...queryKeys.bets.all, "history", filters] as const,
     detail: (id: number) => [...queryKeys.bets.all, "detail", id] as const,
-    cashoutValue: (id: number) => [...queryKeys.bets.all, "cashout", id] as const,
+    cashoutValue: (id: number) =>
+      [...queryKeys.bets.all, "cashout", id] as const,
   },
 
   // Casino

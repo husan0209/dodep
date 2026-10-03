@@ -37,10 +37,11 @@ export function CurrencyAmount({
         "tabular-nums font-medium",
         colorize && num > 0 && "text-green-500",
         colorize && num < 0 && "text-red-500",
-        className
+        className,
       )}
     >
-      {sign}{formatted}
+      {sign}
+      {formatted}
     </span>
   );
 }

@@ -12,7 +12,14 @@ export interface Transaction {
   id: number;
   user_id: number;
   wallet_id: number;
-  type: "deposit" | "withdrawal" | "bet_place" | "bet_win" | "bet_refund" | "bonus" | "adjustment";
+  type:
+    | "deposit"
+    | "withdrawal"
+    | "bet_place"
+    | "bet_win"
+    | "bet_refund"
+    | "bonus"
+    | "adjustment";
   amount: string;
   balance_before: string;
   balance_after: string;
@@ -45,17 +52,22 @@ export interface TransactionFilters {
 }
 
 export const walletApi = {
-  getBalances: () =>
-    api.get<WalletBalance[]>("/api/v1/wallet/balances"),
+  getBalances: () => api.get<WalletBalance[]>("/api/v1/wallet/balances"),
 
   getBalance: (currency: string) =>
     api.get<WalletBalance>(`/api/v1/wallet/balances/${currency}`),
 
   getTransactions: (filters?: TransactionFilters) =>
-    api.get<Transaction[]>("/api/v1/wallet/transactions", filters as Record<string, string>),
+    api.get<Transaction[]>(
+      "/api/v1/wallet/transactions",
+      filters as Record<string, string>,
+    ),
 
   deposit: (data: DepositRequest) =>
-    api.post<{ deposit_id: string; url?: string }>("/api/v1/wallet/deposit", data),
+    api.post<{ deposit_id: string; url?: string }>(
+      "/api/v1/wallet/deposit",
+      data,
+    ),
 
   withdraw: (data: WithdrawRequest) =>
     api.post<{ withdrawal_id: string }>("/api/v1/wallet/withdraw", data),

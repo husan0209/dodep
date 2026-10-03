@@ -24,7 +24,8 @@ class WebSocketManager {
   private token: string | null = null;
 
   constructor(options: WsClientOptions = {}) {
-    this.url = options.url || process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8080";
+    this.url =
+      options.url || process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8080";
     this.reconnectDelay = options.reconnectDelay || 1000;
     this.maxReconnectAttempts = options.maxReconnectAttempts || 10;
   }
@@ -69,7 +70,10 @@ class WebSocketManager {
     };
   }
 
-  subscribe<T = unknown>(channel: string, handler: (data: T) => void): () => void {
+  subscribe<T = unknown>(
+    channel: string,
+    handler: (data: T) => void,
+  ): () => void {
     if (!this.subscriptions.has(channel)) {
       this.subscriptions.set(channel, new Set());
       if (this.ws?.readyState === WebSocket.OPEN) {
@@ -119,7 +123,10 @@ class WebSocketManager {
       return;
     }
 
-    const delay = Math.min(this.reconnectDelay * Math.pow(2, this.reconnectAttempts), 30000);
+    const delay = Math.min(
+      this.reconnectDelay * Math.pow(2, this.reconnectAttempts),
+      30000,
+    );
     this.reconnectAttempts++;
 
     setTimeout(() => {
@@ -154,7 +161,7 @@ export function getWebSocketManager(): WebSocketManager {
 export function useWebSocket<T = unknown>(
   channel: string,
   onMessage: (data: T) => void,
-  enabled: boolean = true
+  enabled: boolean = true,
 ) {
   const wsRef = useRef<WebSocketManager | null>(null);
   const unsubscribeRef = useRef<(() => void) | null>(null);

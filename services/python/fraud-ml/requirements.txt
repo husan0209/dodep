@@ -34,12 +34,20 @@ structlog==24.1.0
 python-json-logger==2.0.7
 
 # Testing
-pytest==8.0.0
-pytest-asyncio==0.23.4
-pytest-cov==4.1.0
-httpx==0.26.0
+# Not pinned to exact versions: pytest==8.0.0 together with
+# pytest-asyncio==0.23.4 (which requires pytest<8) is unsatisfiable, so every
+# job that does `pip install -r requirements.txt` died with
+#   ERROR: Cannot install -r requirements.txt (line 38) and pytest==8.0.0
+#   because these package versions have conflicting dependencies.
+# Same lower bounds as pyproject.toml, which resolves cleanly.
+pytest>=8.0.0
+pytest-asyncio>=0.23.4
+pytest-cov>=4.1.0
+httpx>=0.26.0
 
 # Utils
-python-dotenv==1.0.0
-joblib==1.3.2
-pickle5==0.0.11
+python-dotenv>=1.0.0
+joblib>=1.3.2
+# pickle5 dropped: it is a backport of the stdlib pickle module for Python
+# < 3.8, this service requires >= 3.11, and its sdist does not build on modern
+# toolchains.

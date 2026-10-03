@@ -10,7 +10,11 @@ export function resolveApiBaseUrl(env: PublicEnv = process.env): string {
 }
 
 export function resolveAuthApiBaseUrl(env: PublicEnv = process.env): string {
-  return env.NEXT_PUBLIC_AUTH_API_URL || env.NEXT_PUBLIC_API_URL || DEFAULT_AUTH_API_BASE;
+  return (
+    env.NEXT_PUBLIC_AUTH_API_URL ||
+    env.NEXT_PUBLIC_API_URL ||
+    DEFAULT_AUTH_API_BASE
+  );
 }
 
 export interface ApiResponse<T> {
@@ -36,32 +40,31 @@ function normalizeApiError(raw: unknown, fallbackMessage: string): ApiError {
       payload.error && typeof payload.error === "object"
         ? (payload.error as Record<string, unknown>)
         : null;
-    const legacyError = typeof payload.error === "string" ? payload.error : null;
+    const legacyError =
+      typeof payload.error === "string" ? payload.error : null;
     const message =
       typeof nestedError?.message === "string"
         ? nestedError.message
         : typeof payload.message === "string"
-        ? payload.message
-        : legacyError ?? fallbackMessage;
+          ? payload.message
+          : (legacyError ?? fallbackMessage);
 
     return {
       code:
         typeof nestedError?.code === "string"
           ? nestedError.code
           : typeof payload.code === "string"
-          ? payload.code
-          : "UNKNOWN_ERROR",
+            ? payload.code
+            : "UNKNOWN_ERROR",
       message,
       details:
         nestedError?.details && typeof nestedError.details === "object"
           ? (nestedError.details as Record<string, unknown>)
           : payload.details && typeof payload.details === "object"
-          ? (payload.details as Record<string, unknown>)
-          : undefined,
+            ? (payload.details as Record<string, unknown>)
+            : undefined,
       request_id:
-        typeof payload.request_id === "string"
-          ? payload.request_id
-          : "unknown",
+        typeof payload.request_id === "string" ? payload.request_id : "unknown",
     };
   }
 
@@ -75,17 +78,27 @@ function normalizeApiError(raw: unknown, fallbackMessage: string): ApiError {
 export class ApiClientError extends Error {
   constructor(
     public status: number,
-    public error: ApiError
+    public error: ApiError,
   ) {
     super(error.message);
     this.name = "ApiClientError";
   }
 
-  get isNotFound() { return this.status === 404; }
-  get isUnauthorized() { return this.status === 401; }
-  get isForbidden() { return this.status === 403; }
-  get isValidation() { return this.status === 422; }
-  get isRateLimited() { return this.status === 429; }
+  get isNotFound() {
+    return this.status === 404;
+  }
+  get isUnauthorized() {
+    return this.status === 401;
+  }
+  get isForbidden() {
+    return this.status === 403;
+  }
+  get isValidation() {
+    return this.status === 422;
+  }
+  get isRateLimited() {
+    return this.status === 429;
+  }
 }
 
 class ApiClient {
@@ -102,17 +115,16 @@ class ApiClient {
       body?: unknown;
       params?: Record<string, string>;
       headers?: Record<string, string>;
-    } = {}
+    } = {},
   ): Promise<T> {
     const url = new URL(`${this.baseUrl}${path}`);
     if (options.params) {
       Object.entries(options.params).forEach(([k, v]) =>
-        url.searchParams.set(k, v)
+        url.searchParams.set(k, v),
       );
     }
 
-    const { accessToken, refreshTokens, logout } =
-      useAuthStore.getState();
+    const { accessToken, refreshTokens, logout } = useAuthStore.getState();
 
     let token = accessToken;
 
@@ -153,13 +165,13 @@ class ApiClient {
           request_id: requestId,
         });
       }
-      
+
       if (!response.ok) {
         const payload = await response.json().catch(() => null);
         const error = normalizeApiError(payload, response.statusText);
         throw new ApiClientError(response.status, error);
       }
-      
+
       return response.json();
     };
 

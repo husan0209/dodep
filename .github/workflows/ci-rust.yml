@@ -20,9 +20,10 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  # Floor imposed by the committed lockfile; see the comment in ci.yaml
-  # for the 1.75 / 1.78 / 1.85 evidence. Do not lower without re-checking.
-  RUST_VERSION: "1.85"
+  # Floor imposed by the committed lockfile; see the comment in ci.yaml for
+  # the per-crate rust-version evidence (highest is home 0.5.12 -> 1.88).
+  # Do not lower without re-checking.
+  RUST_VERSION: "1.88"
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 

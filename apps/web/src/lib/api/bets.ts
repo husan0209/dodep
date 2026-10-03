@@ -41,20 +41,16 @@ export interface BetFilters {
 }
 
 export const betsApi = {
-  placeBet: (data: PlaceBetRequest) =>
-    api.post<Bet>("/api/v1/bets", data),
+  placeBet: (data: PlaceBetRequest) => api.post<Bet>("/api/v1/bets", data),
 
-  getActive: () =>
-    api.get<Bet[]>("/api/v1/bets/active"),
+  getActive: () => api.get<Bet[]>("/api/v1/bets/active"),
 
   getHistory: (filters?: BetFilters) =>
     api.get<Bet[]>("/api/v1/bets/history", filters as Record<string, string>),
 
-  getById: (betId: number) =>
-    api.get<Bet>(`/api/v1/bets/${betId}`),
+  getById: (betId: number) => api.get<Bet>(`/api/v1/bets/${betId}`),
 
-  cashout: (betId: number) =>
-    api.post<Bet>(`/api/v1/bets/${betId}/cashout`),
+  cashout: (betId: number) => api.post<Bet>(`/api/v1/bets/${betId}/cashout`),
 
   getCashoutValue: (betId: number) =>
     api.get<{ amount: string }>(`/api/v1/bets/${betId}/cashout-value`),
