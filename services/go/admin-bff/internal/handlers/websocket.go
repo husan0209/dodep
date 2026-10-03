@@ -258,12 +258,16 @@ func RegisterWSRoutes(router fiber.Router, hub *WSHub, log *zap.Logger) {
 					if !ok {
 						return
 					}
-					fmt.Fprintf(w, "data: %s\n\n", data)
+					if _, err := fmt.Fprintf(w, "data: %s\n\n", data); err != nil {
+						return
+					}
 					if err := w.Flush(); err != nil {
 						return
 					}
 				case <-ticker.C:
-					fmt.Fprint(w, ": keepalive\n\n")
+					if _, err := fmt.Fprint(w, ": keepalive\n\n"); err != nil {
+						return
+					}
 					if err := w.Flush(); err != nil {
 						return
 					}

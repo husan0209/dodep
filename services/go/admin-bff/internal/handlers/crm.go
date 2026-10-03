@@ -78,7 +78,11 @@ func (CRMTemplate) TableName() string { return "crm_templates" }
 
 // RegisterCRMRoutes mounts all CRM endpoints.
 func RegisterCRMRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger, auditSvc *service.AuditService) {
-	db.AutoMigrate(&CRMSegment{}, &CRMTrigger{}, &CRMCampaign{}, &CRMTemplate{})
+	// A failed auto-migration means every endpoint below would hit a missing table,
+	// so the error has to be visible instead of being swallowed at registration time.
+	if err := db.AutoMigrate(&CRMSegment{}, &CRMTrigger{}, &CRMCampaign{}, &CRMTemplate{}); err != nil {
+		log.Error("CRM auto-migration failed", zap.Error(err))
+	}
 
 	crm := router.Group("/crm")
 

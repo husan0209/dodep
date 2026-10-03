@@ -49,7 +49,9 @@ func (PlayerMergeRecord) TableName() string { return "player_merge_records" }
 // It may be nil in tests; endpoints degrade to audit-only with 502 on failure.
 func RegisterPlayerRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger, auditSvc *service.AuditService, usersSvc *service.UsersService) {
 	// Auto-migrate the local tables managed by this handler.
-	db.AutoMigrate(&PlayerNote{}, &PlayerMergeRecord{})
+	if err := db.AutoMigrate(&PlayerNote{}, &PlayerMergeRecord{}); err != nil {
+		log.Error("player auto-migration failed", zap.Error(err))
+	}
 
 	players := router.Group("/players")
 

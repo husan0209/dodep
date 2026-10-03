@@ -315,7 +315,7 @@ func RegisterRegulatoryRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger)
 		db.Raw(`SELECT COALESCE(SUM(balance::numeric), 0) FROM crypto_wallets`).Scan(&segregatedFunds)
 
 		liabilities := playerBalances
-		var ratio float64 = 1.0
+		ratio := 1.0
 		if liabilities > 0 {
 			ratio = segregatedFunds / liabilities
 		}

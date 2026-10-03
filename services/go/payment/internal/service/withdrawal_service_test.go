@@ -14,13 +14,13 @@ import (
 
 // MockWithdrawalRepository is a mock implementation of WithdrawalRepository
 type MockWithdrawalRepository struct {
-	CreateFunc             func(ctx context.Context, withdrawal *domain.Withdrawal) error
-	GetByIDFunc            func(ctx context.Context, id int64) (*domain.Withdrawal, error)
-	GetByWithdrawalIDFunc  func(ctx context.Context, withdrawalID string) (*domain.Withdrawal, error)
+	CreateFunc              func(ctx context.Context, withdrawal *domain.Withdrawal) error
+	GetByIDFunc             func(ctx context.Context, id int64) (*domain.Withdrawal, error)
+	GetByWithdrawalIDFunc   func(ctx context.Context, withdrawalID string) (*domain.Withdrawal, error)
 	GetByIDempotencyKeyFunc func(ctx context.Context, key string) (*domain.Withdrawal, error)
-	GetByUUIDFunc          func(ctx context.Context, uuid string) (*domain.Withdrawal, error)
-	UpdateStatusFunc       func(ctx context.Context, id int64, fromStatus, toStatus domain.WithdrawalStatus) error
-	ListByUserIDFunc       func(ctx context.Context, userID int64, filter repository.ListFilter) (*repository.ListResult[domain.Withdrawal], error)
+	GetByUUIDFunc           func(ctx context.Context, uuid string) (*domain.Withdrawal, error)
+	UpdateStatusFunc        func(ctx context.Context, id int64, fromStatus, toStatus domain.WithdrawalStatus) error
+	ListByUserIDFunc        func(ctx context.Context, userID int64, filter repository.ListFilter) (*repository.ListResult[domain.Withdrawal], error)
 	CountByUserIDStatusFunc func(ctx context.Context, userID int64, statuses []domain.WithdrawalStatus) (int64, error)
 }
 
@@ -80,30 +80,9 @@ func (m *MockWithdrawalRepository) CountByUserIDStatus(ctx context.Context, user
 	return 0, nil
 }
 
-// Helper function to create a test withdrawal service
-func newTestWithdrawalService(
-	withdrawalRepo repository.WithdrawalRepository,
-	idempotencyRepo repository.IdempotencyRepository,
-	exchangeRateRepo repository.ExchangeRateRepository,
-	dailyLimitsRepo repository.DailyLimitsRepository,
-) *WithdrawalService {
-	return NewWithdrawalService(
-		withdrawalRepo,
-		idempotencyRepo,
-		exchangeRateRepo,
-		dailyLimitsRepo,
-		nil, // nowpayments
-		nil, // wallet
-		nil, // user
-		nil, // producer
-		nil, // tracer
-		"https://test.com/webhook", // ipnCallbackURL
-	)
-}
-
 func TestWithdrawalService_InitiateWithdrawal_Success(t *testing.T) {
 	ctx := context.Background()
-	
+
 	withdrawalRepo := &MockWithdrawalRepository{
 		GetByIDempotencyKeyFunc: func(ctx context.Context, key string) (*domain.Withdrawal, error) {
 			return nil, nil // No existing withdrawal
@@ -113,28 +92,28 @@ func TestWithdrawalService_InitiateWithdrawal_Success(t *testing.T) {
 			return nil
 		},
 	}
-	
+
 	idempotencyRepo := &MockIdempotencyRepository{}
-	
+
 	exchangeRateRepo := &MockExchangeRateRepository{
 		GetFunc: func(ctx context.Context, fromCurrency, toCurrency string) (*decimal.Decimal, error) {
 			rate := decimal.NewFromFloat(45000.0)
 			return &rate, nil
 		},
 	}
-	
+
 	dailyLimitsRepo := &MockDailyLimitsRepository{
 		GetFunc: func(ctx context.Context, userID int64, operationType string) (decimal.Decimal, error) {
 			return decimal.Zero, nil
 		},
 	}
-	
+
 	user := &MockUserClient{
 		GetKYCLevelFunc: func(ctx context.Context, userID int64) (int, error) {
 			return 2, nil // KYC level 2 required for withdrawals
 		},
 	}
-	
+
 	wallet := &MockWalletClient{
 		GetBalanceFunc: func(ctx context.Context, userID int64, currency string) (*client.Balance, error) {
 			return &client.Balance{
@@ -150,7 +129,7 @@ func TestWithdrawalService_InitiateWithdrawal_Success(t *testing.T) {
 			}, nil
 		},
 	}
-	
+
 	nowpayments := &MockNOWPaymentsClient{
 		CreatePayoutFunc: func(ctx context.Context, req client.CreatePayoutRequest) (*client.CreatePayoutResponse, error) {
 			return &client.CreatePayoutResponse{
@@ -162,7 +141,7 @@ func TestWithdrawalService_InitiateWithdrawal_Success(t *testing.T) {
 			}, nil
 		},
 	}
-	
+
 	// Test request
 	req := InitiateWithdrawalRequest{
 		UserID:         12345,
@@ -173,7 +152,7 @@ func TestWithdrawalService_InitiateWithdrawal_Success(t *testing.T) {
 		IPAddress:      "192.168.1.1",
 		UserAgent:      "test-agent",
 	}
-	
+
 	// Verify request is valid
 	if req.UserID != 12345 {
 		t.Errorf("expected user ID 12345, got %d", req.UserID)
@@ -184,7 +163,7 @@ func TestWithdrawalService_InitiateWithdrawal_Success(t *testing.T) {
 	if !req.Currency.IsWithdrawalSupported() {
 		t.Error("expected BTC to be supported for withdrawal")
 	}
-	
+
 	// Verify mock setup
 	_ = ctx
 	_ = withdrawalRepo
@@ -198,22 +177,22 @@ func TestWithdrawalService_InitiateWithdrawal_Success(t *testing.T) {
 
 func TestWithdrawalService_InitiateWithdrawal_KYCRequired(t *testing.T) {
 	ctx := context.Background()
-	
+
 	user := &MockUserClient{
 		GetKYCLevelFunc: func(ctx context.Context, userID int64) (int, error) {
 			return 1, nil // KYC level 1 (below required level 2)
 		},
 	}
-	
+
 	kycLevel, err := user.GetKYCLevel(ctx, 12345)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	
+
 	if kycLevel >= 2 {
 		t.Error("expected KYC level to be below 2")
 	}
-	
+
 	// Verify error would be returned
 	if kycLevel < 2 {
 		err := domain.ErrorKYCRequiredLevel(kycLevel)
@@ -225,7 +204,7 @@ func TestWithdrawalService_InitiateWithdrawal_KYCRequired(t *testing.T) {
 
 func TestWithdrawalService_InitiateWithdrawal_Idempotency(t *testing.T) {
 	ctx := context.Background()
-	
+
 	existingWithdrawal := &domain.Withdrawal{
 		ID:             1,
 		UUID:           uuid.New(),
@@ -239,7 +218,7 @@ func TestWithdrawalService_InitiateWithdrawal_Idempotency(t *testing.T) {
 		Address:        "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
 		Status:         domain.WithdrawalStatusProcessing,
 	}
-	
+
 	withdrawalRepo := &MockWithdrawalRepository{
 		GetByIDempotencyKeyFunc: func(ctx context.Context, key string) (*domain.Withdrawal, error) {
 			if key == "idem-key-existing" {
@@ -248,16 +227,16 @@ func TestWithdrawalService_InitiateWithdrawal_Idempotency(t *testing.T) {
 			return nil, nil
 		},
 	}
-	
+
 	withdrawal, err := withdrawalRepo.GetByIDempotencyKey(ctx, "idem-key-existing")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	
+
 	if withdrawal == nil {
 		t.Fatal("expected existing withdrawal to be returned")
 	}
-	
+
 	if withdrawal.WithdrawalID != "np-withdrawal-existing" {
 		t.Errorf("expected withdrawal ID np-withdrawal-existing, got %s", withdrawal.WithdrawalID)
 	}
@@ -271,7 +250,7 @@ func TestWithdrawalService_InitiateWithdrawal_CurrencyNotSupported(t *testing.T)
 		Address:        "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
 		IdempotencyKey: "idem-key-123",
 	}
-	
+
 	if domain.CryptoCurrency(req.Currency).IsWithdrawalSupported() {
 		t.Error("expected unsupported currency to fail validation")
 	}
@@ -279,27 +258,27 @@ func TestWithdrawalService_InitiateWithdrawal_CurrencyNotSupported(t *testing.T)
 
 func TestWithdrawalService_InitiateWithdrawal_DailyLimitExceeded(t *testing.T) {
 	ctx := context.Background()
-	
+
 	dailyLimitsRepo := &MockDailyLimitsRepository{
 		GetFunc: func(ctx context.Context, userID int64, operationType string) (decimal.Decimal, error) {
 			// User already withdrew $4500 today (limit for KYC level 2 is $5000)
 			return decimal.NewFromFloat(4500.0), nil
 		},
 	}
-	
+
 	user := &MockUserClient{
 		GetKYCLevelFunc: func(ctx context.Context, userID int64) (int, error) {
 			return 2, nil
 		},
 	}
-	
+
 	kycLevel, _ := user.GetKYCLevel(ctx, 12345)
 	_ = kycLevel
 	used, _ := dailyLimitsRepo.Get(ctx, 12345, "withdrawal")
-	
+
 	limit := 5000.0 // KYC level 2 withdrawal limit
 	requested := decimal.NewFromFloat(1000.0)
-	
+
 	if used.Add(requested).GreaterThan(decimal.NewFromFloat(limit)) {
 		t.Log("Daily withdrawal limit exceeded correctly detected")
 	}
@@ -307,7 +286,7 @@ func TestWithdrawalService_InitiateWithdrawal_DailyLimitExceeded(t *testing.T) {
 
 func TestWithdrawalService_InitiateWithdrawal_ProviderError_Compensation(t *testing.T) {
 	ctx := context.Background()
-	
+
 	wallet := &MockWalletClient{
 		GetBalanceFunc: func(ctx context.Context, userID int64, currency string) (*client.Balance, error) {
 			return &client.Balance{
@@ -327,13 +306,13 @@ func TestWithdrawalService_InitiateWithdrawal_ProviderError_Compensation(t *test
 			return nil
 		},
 	}
-	
+
 	nowpayments := &MockNOWPaymentsClient{
 		CreatePayoutFunc: func(ctx context.Context, req client.CreatePayoutRequest) (*client.CreatePayoutResponse, error) {
 			return nil, errors.New("provider unavailable")
 		},
 	}
-	
+
 	// Simulate the flow
 	lockResult, err := wallet.LockFunds(ctx, client.LockRequest{
 		UserID:         12345,
@@ -344,7 +323,7 @@ func TestWithdrawalService_InitiateWithdrawal_ProviderError_Compensation(t *test
 	if err != nil {
 		t.Fatalf("unexpected error locking funds: %v", err)
 	}
-	
+
 	_, err = nowpayments.CreatePayout(ctx, client.CreatePayoutRequest{
 		WithdrawalID: uuid.New().String(),
 		Address:      "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
@@ -354,7 +333,7 @@ func TestWithdrawalService_InitiateWithdrawal_ProviderError_Compensation(t *test
 	if err == nil {
 		t.Error("expected error from provider")
 	}
-	
+
 	// Compensation: unlock funds
 	err = wallet.UnlockFunds(ctx, lockResult.LockID, "idem-key-123_unlock")
 	if err != nil {
@@ -364,7 +343,7 @@ func TestWithdrawalService_InitiateWithdrawal_ProviderError_Compensation(t *test
 
 func TestWithdrawalService_GetWithdrawal_Success(t *testing.T) {
 	ctx := context.Background()
-	
+
 	testUUID := uuid.New()
 	existingWithdrawal := &domain.Withdrawal{
 		ID:             1,
@@ -379,22 +358,22 @@ func TestWithdrawalService_GetWithdrawal_Success(t *testing.T) {
 		Address:        "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
 		Status:         domain.WithdrawalStatusProcessing,
 	}
-	
+
 	withdrawalRepo := &MockWithdrawalRepository{
 		GetByUUIDFunc: func(ctx context.Context, uuid string) (*domain.Withdrawal, error) {
 			return existingWithdrawal, nil
 		},
 	}
-	
+
 	withdrawal, err := withdrawalRepo.GetByUUID(ctx, testUUID.String())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	
+
 	if withdrawal == nil {
 		t.Fatal("expected withdrawal to be returned")
 	}
-	
+
 	if withdrawal.WithdrawalID != "np-withdrawal-123" {
 		t.Errorf("expected withdrawal ID np-withdrawal-123, got %s", withdrawal.WithdrawalID)
 	}
@@ -402,26 +381,26 @@ func TestWithdrawalService_GetWithdrawal_Success(t *testing.T) {
 
 func TestWithdrawalService_ListWithdrawals_Success(t *testing.T) {
 	ctx := context.Background()
-	
+
 	withdrawals := []domain.Withdrawal{
 		{
-			ID:             1,
-			UUID:           uuid.New(),
-			UserID:         12345,
-			WithdrawalID:   "np-withdrawal-1",
-			Amount:         decimal.NewFromFloat(0.001),
-			Status:         domain.WithdrawalStatusFinished,
+			ID:           1,
+			UUID:         uuid.New(),
+			UserID:       12345,
+			WithdrawalID: "np-withdrawal-1",
+			Amount:       decimal.NewFromFloat(0.001),
+			Status:       domain.WithdrawalStatusFinished,
 		},
 		{
-			ID:             2,
-			UUID:           uuid.New(),
-			UserID:         12345,
-			WithdrawalID:   "np-withdrawal-2",
-			Amount:         decimal.NewFromFloat(0.002),
-			Status:         domain.WithdrawalStatusProcessing,
+			ID:           2,
+			UUID:         uuid.New(),
+			UserID:       12345,
+			WithdrawalID: "np-withdrawal-2",
+			Amount:       decimal.NewFromFloat(0.002),
+			Status:       domain.WithdrawalStatusProcessing,
 		},
 	}
-	
+
 	withdrawalRepo := &MockWithdrawalRepository{
 		ListByUserIDFunc: func(ctx context.Context, userID int64, filter repository.ListFilter) (*repository.ListResult[domain.Withdrawal], error) {
 			return &repository.ListResult[domain.Withdrawal]{
@@ -431,16 +410,16 @@ func TestWithdrawalService_ListWithdrawals_Success(t *testing.T) {
 			}, nil
 		},
 	}
-	
+
 	result, err := withdrawalRepo.ListByUserID(ctx, 12345, repository.ListFilter{Limit: 10})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	
+
 	if len(result.Items) != 2 {
 		t.Errorf("expected 2 withdrawals, got %d", len(result.Items))
 	}
-	
+
 	if !result.HasMore {
 		t.Error("expected HasMore to be true")
 	}
@@ -490,22 +469,22 @@ func TestWithdrawalService_ValidateWithdrawalLimits(t *testing.T) {
 			shouldExceed:  false, // 10000 + 10000 = 20000 < 25000
 		},
 	}
-	
+
 	limits := map[int]float64{
 		0: 0,
 		1: 500,
 		2: 5000,
 		3: 25000,
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			limit := limits[tt.kycLevel]
 			used := decimal.NewFromFloat(tt.usedToday)
 			requested := decimal.NewFromFloat(tt.requestAmount)
-			
+
 			exceeds := used.Add(requested).GreaterThan(decimal.NewFromFloat(limit))
-			
+
 			if exceeds != tt.shouldExceed {
 				t.Errorf("expected exceeds=%v, got %v", tt.shouldExceed, exceeds)
 			}
@@ -515,7 +494,7 @@ func TestWithdrawalService_ValidateWithdrawalLimits(t *testing.T) {
 
 func TestWithdrawalService_GetWithdrawalLimit(t *testing.T) {
 	service := &WithdrawalService{}
-	
+
 	tests := []struct {
 		kycLevel      int
 		expectedLimit float64
@@ -526,7 +505,7 @@ func TestWithdrawalService_GetWithdrawalLimit(t *testing.T) {
 		{kycLevel: 3, expectedLimit: 25000},
 		{kycLevel: 99, expectedLimit: 0}, // Unknown level defaults to 0
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(string(rune(tt.kycLevel)), func(t *testing.T) {
 			limit := service.getWithdrawalLimit(tt.kycLevel)
@@ -548,7 +527,7 @@ func TestWithdrawalService_ValidateKYCLevel(t *testing.T) {
 		{"KYC 2 - allowed", 2, false},
 		{"KYC 3 - allowed", 3, false},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			shouldFail := tt.kycLevel < 2
@@ -561,7 +540,7 @@ func TestWithdrawalService_ValidateKYCLevel(t *testing.T) {
 
 func TestWithdrawalService_ToResponse(t *testing.T) {
 	service := &WithdrawalService{}
-	
+
 	withdrawal := &domain.Withdrawal{
 		ID:             1,
 		UUID:           uuid.New(),
@@ -575,17 +554,17 @@ func TestWithdrawalService_ToResponse(t *testing.T) {
 		Address:        "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
 		Status:         domain.WithdrawalStatusProcessing,
 	}
-	
+
 	response := service.toResponse(withdrawal)
-	
+
 	if response.WithdrawalID != withdrawal.WithdrawalID {
 		t.Errorf("expected withdrawal ID %s, got %s", withdrawal.WithdrawalID, response.WithdrawalID)
 	}
-	
+
 	if response.Status != string(withdrawal.Status) {
 		t.Errorf("expected status %s, got %s", withdrawal.Status, response.Status)
 	}
-	
+
 	if !response.Amount.Equal(withdrawal.Amount) {
 		t.Errorf("expected amount %s, got %s", withdrawal.Amount.String(), response.Amount.String())
 	}

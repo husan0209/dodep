@@ -1,0 +1,51 @@
+# Shared golangci-lint configuration for all Go services in services/go/**.
+#
+# golangci-lint v2 walks up from the working directory, so this single file at the
+# repository root covers `cd services/go/<service> && golangci-lint run` as well as
+# `golangci-lint run ./...` used by the extra services (rg, admin-bff, affiliate).
+#
+# The linter set is left at the v2 `standard` default (errcheck, govet, ineffassign,
+# staticcheck, unused). Nothing is disabled here. errcheck stays on; the only carve-out
+# is the list of deliberate best-effort "we are exiting anyway" cleanup calls below.
+# Genuine unchecked errors (failed writes, parse failures) are handled in code.
+version: "2"
+
+linters:
+  default: standard
+  settings:
+    errcheck:
+      # Every entry below states that the returned error cannot be acted upon by the
+      # caller (resource release / logger flush / shutdown on process exit). Keep the
+      # list tight: a new entry hides a new bug.
+      #
+      # Note on the spelling: errcheck matches the receiver's *method expression*, so a
+      # pointer-receiver method is written `(*pkg/path.Type).Method` and a value-receiver
+      # method is written `pkg.Type.Method`. Promoted methods must use the type that
+      # actually declares them (go-redis' Close lives on the embedded *baseClient).
+      exclude-functions:
+        # io / net closers: `defer resp.Body.Close()`, `defer reader.Close()`
+        - (io.Closer).Close
+        - (io.ReadCloser).Close
+        - (net/http.Response.Body).Close
+        # database/sql: `defer rows.Close()`, `defer sqlDB.Close()`
+        - (*database/sql.DB).Close
+        - (*database/sql.Rows).Close
+        - (*database/sql.Stmt).Close
+        - (*database/sql.Tx).Close
+        # pgx: `defer dbPool.Close()`
+        - (*github.com/jackc/pgx/v5/pgxpool.Pool).Close
+        - (*github.com/jackc/pgx/v5.Rows).Close
+        # go-redis: `defer rdb.Close()`, `defer pubsub.Close()`. Close is promoted from
+        # the embedded *baseClient, so that is the receiver errcheck reports.
+        - (*github.com/redis/go-redis/v9.baseClient).Close
+        - (*github.com/redis/go-redis/v9.PubSub).Close
+        # grpc client connections: `defer conn.Close()`
+        - (*google.golang.org/grpc.ClientConn).Close
+        # kafka consumer: `defer reader.Close()`
+        - (*github.com/segmentio/kafka-go.Reader).Close
+        # kafka producer wrapper: `defer producer.Close()`
+        - (*github.com/opus-casino/payment/internal/event.Producer).Close
+        # zap logger flush: `defer log.Sync()`, `defer zapLogger.Sync()`
+        - (*go.uber.org/zap.Logger).Sync
+        # fiber graceful shutdown: `app.Shutdown()`
+        - (*github.com/gofiber/fiber/v2.App).Shutdown

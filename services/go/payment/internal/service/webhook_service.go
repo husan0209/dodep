@@ -117,8 +117,14 @@ func (s *WebhookService) ProcessDepositWebhook(ctx context.Context, req ProcessW
 		}
 	}
 
-	// Mark as processed
-	s.idempotencyRepo.Set(ctx, idempotencyKey, []byte("processed"), 86400)
+	// Mark as processed. If this write fails the same webhook would be processed
+	// again, so it is logged rather than dropped - the provider retries until it
+	// gets a 2xx, and operators need to see the broken idempotency store.
+	if err := s.idempotencyRepo.Set(ctx, idempotencyKey, []byte("processed"), 86400); err != nil {
+		log.Error().Err(err).
+			Str("idempotency_key", idempotencyKey).
+			Msg("Failed to mark deposit webhook as processed")
+	}
 
 	// Log audit
 	var outcomeAmount *decimal.Decimal
@@ -183,8 +189,13 @@ func (s *WebhookService) ProcessWithdrawalWebhook(ctx context.Context, req Proce
 		}
 	}
 
-	// Mark as processed
-	s.idempotencyRepo.Set(ctx, idempotencyKey, []byte("processed"), 86400)
+	// Mark as processed. Same reasoning as the deposit path: a lost idempotency
+	// write means the withdrawal callback can be applied twice.
+	if err := s.idempotencyRepo.Set(ctx, idempotencyKey, []byte("processed"), 86400); err != nil {
+		log.Error().Err(err).
+			Str("idempotency_key", idempotencyKey).
+			Msg("Failed to mark withdrawal webhook as processed")
+	}
 
 	// Log audit
 	s.logAudit(ctx, withdrawal.UserID, "withdrawal", withdrawal.ID, withdrawal.WithdrawalID, string(withdrawal.Status), string(newStatus), nil)
@@ -219,9 +230,15 @@ func (s *WebhookService) handleDepositFinished(ctx context.Context, payment *dom
 		return err
 	}
 
-	// Update actual amount if different
+	// Update actual amount if different. This is a reconciliation write only; the
+	// wallet has already been credited and the payment already marked finished, so
+	// a failure is logged instead of turning a completed deposit into an error.
 	if !payload.OutcomeAmount.IsZero() && !payload.OutcomeAmount.Equal(payment.RequestedAmount) {
-		s.paymentRepo.UpdateActualAmount(ctx, payment.ID, payload.OutcomeAmount)
+		if err := s.paymentRepo.UpdateActualAmount(ctx, payment.ID, payload.OutcomeAmount); err != nil {
+			log.Error().Err(err).
+				Int64("payment_id", payment.ID).
+				Msg("Failed to update actual amount")
+		}
 	}
 
 	log.Info().
@@ -300,15 +317,15 @@ func (s *WebhookService) handleWithdrawalFailed(ctx context.Context, withdrawal 
 // mapPaymentStatus maps NOWPayments status to domain status
 func (s *WebhookService) mapPaymentStatus(status string) domain.PaymentStatus {
 	statusMap := map[string]domain.PaymentStatus{
-		"waiting":       domain.PaymentStatusWaiting,
-		"confirming":    domain.PaymentStatusConfirming,
-		"confirmed":     domain.PaymentStatusConfirmed,
-		"sending":       domain.PaymentStatusSending,
+		"waiting":        domain.PaymentStatusWaiting,
+		"confirming":     domain.PaymentStatusConfirming,
+		"confirmed":      domain.PaymentStatusConfirmed,
+		"sending":        domain.PaymentStatusSending,
 		"partially_paid": domain.PaymentStatusPartiallyPaid,
-		"finished":      domain.PaymentStatusFinished,
-		"failed":        domain.PaymentStatusFailed,
-		"expired":       domain.PaymentStatusExpired,
-		"refunded":      domain.PaymentStatusRefunded,
+		"finished":       domain.PaymentStatusFinished,
+		"failed":         domain.PaymentStatusFailed,
+		"expired":        domain.PaymentStatusExpired,
+		"refunded":       domain.PaymentStatusRefunded,
 	}
 	if s, ok := statusMap[status]; ok {
 		return s

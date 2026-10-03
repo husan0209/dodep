@@ -33,7 +33,10 @@ type walletGRPCClient struct {
 
 // NewWalletClient creates a new gRPC wallet client.
 func NewWalletClient(cfg WalletClientConfig, log *zap.Logger) (service.WalletClient, error) {
-	conn, err := grpc.Dial(
+	// grpc.NewClient is the non-deprecated replacement for grpc.Dial: it performs no
+	// I/O here and connects lazily on the first RPC, which is what this long-lived
+	// client wants (grpc.Dial's blocking behaviour was never relied upon).
+	conn, err := grpc.NewClient(
 		cfg.Address,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithKeepaliveParams(keepalive.ClientParameters{

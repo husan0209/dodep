@@ -36,7 +36,10 @@ type userGRPCClient struct {
 
 // NewUserClient creates a gRPC user client.
 func NewUserClient(cfg UserClientConfig, log *zap.Logger) (UserServiceClient, error) {
-	conn, err := grpc.Dial(
+	// grpc.NewClient is the non-deprecated replacement for grpc.Dial: it performs no
+	// I/O here and connects lazily on the first RPC, which is what this long-lived
+	// client wants (grpc.Dial's blocking behaviour was never relied upon).
+	conn, err := grpc.NewClient(
 		cfg.Address,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithKeepaliveParams(keepalive.ClientParameters{
