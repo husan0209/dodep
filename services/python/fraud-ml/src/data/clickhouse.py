@@ -17,8 +17,13 @@ class ClickHouseClient:
         host: str,
         port: int,
         database: str,
+        # No default: an empty credential baked into the signature is what
+        # bandit B107 flags, and it silently authenticates as "no password"
+        # when a caller forgets to pass one. Declared before `user` so it can
+        # stay required without breaking positional order. Callers pass the
+        # value from settings, which reads it from the environment.
+        password: str,
         user: str = "default",
-        password: str = "",
     ):
         self.client = clickhouse_connect.get_client(
             host=host,

@@ -3,6 +3,8 @@ Feature store for caching computed features.
 """
 
 import hashlib
+import os
+import tempfile
 from datetime import datetime
 from pathlib import Path
 
@@ -15,15 +17,25 @@ logger = structlog.get_logger()
 class FeatureStore:
     """Feature store with parquet-based caching."""
 
-    def __init__(self, cache_dir: str = "/tmp/features"):
-        self.cache_dir = Path(cache_dir)
+    def __init__(self, cache_dir: str | None = None):
+        # Resolved from the platform temp dir rather than a hardcoded "/tmp",
+        # which is not the temp location on every platform and is flagged by
+        # bandit B108. Callers (and the FEATURE_CACHE_DIR env var) still win.
+        base = (
+            cache_dir
+            or os.environ.get("FEATURE_CACHE_DIR")
+            or str(Path(tempfile.gettempdir()) / "features")
+        )
+        self.cache_dir = Path(base)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         logger.info("feature_store.initialized", cache_dir=str(self.cache_dir))
 
     def _compute_cache_key(self, user_ids: list[int], as_of: datetime) -> str:
         """Compute cache key from user IDs and timestamp."""
         key_str = f"{sorted(user_ids)}_{as_of.isoformat()}"
-        return hashlib.md5(key_str.encode()).hexdigest()
+        # Non-security use: this only needs a stable, collision-resistant
+        # digest for a cache filename (bandit B324).
+        return hashlib.sha256(key_str.encode()).hexdigest()[:32]
 
     def get_cached(
         self, user_ids: list[int], as_of: datetime, ttl_hours: int = 24

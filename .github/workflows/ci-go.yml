@@ -20,7 +20,7 @@ on:
       - '.github/workflows/ci-go.yml'
 
 env:
-  GO_VERSION: '1.21'
+  GO_VERSION: '1.26'
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
@@ -50,23 +50,28 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: services/go/${{ matrix.service }}/go.sum
 
+      - name: Generate protobuf stubs
+        working-directory: .
+        run: |
+          BUF_VERSION=1.73.0
+          curl -fsSL -o /tmp/buf.tar.gz \
+            "https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/buf-Linux-x86_64.tar.gz"
+          sudo tar -xzf /tmp/buf.tar.gz -C /tmp
+          sudo install -m 0755 /tmp/buf/bin/buf /usr/local/bin/buf
+          make -C libs/proto gen-go
+
       # golangci-lint-action@v4 installs golangci-lint v1, which is built with
-        # go1.24 and cannot type-check a module whose `go` directive is newer
-        # (every service here declares go >= 1.24). It failed at install time
-        # with "file requires newer Go version go1.26". v2.14.0 is built with
-        # go1.27 and handles this matrix. Pinned rather than `latest` so the
-        # gate cannot change under us.
-      - name: Install golangci-lint
+      # go1.24 and cannot type-check a module whose `go` directive is newer
+      # (every service here declares go >= 1.24). It failed with
+      # "file requires newer Go version go1.26". v2.14.0 is built with go1.27
+      # and handles this matrix. Pinned rather than `latest` so the gate
+      # cannot change under us. The action runs the linter itself, so there is
+      # no separate run step.
+      - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
           version: v2.14.0
           working-directory: services/go/${{ matrix.service }}
-
-      # v2 removed --out-format; --output.text.path=stdout keeps the findings
-      # on the console (and therefore in the log).
-      - name: Run golangci-lint
-        working-directory: services/go/${{ matrix.service }}
-        run: golangci-lint run --output.text.path=stdout
 
   # ==========================================================================
   # Test
@@ -114,6 +119,16 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: services/go/${{ matrix.service }}/go.sum
 
+      - name: Generate protobuf stubs
+        working-directory: .
+        run: |
+          BUF_VERSION=1.73.0
+          curl -fsSL -o /tmp/buf.tar.gz \
+            "https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/buf-Linux-x86_64.tar.gz"
+          sudo tar -xzf /tmp/buf.tar.gz -C /tmp
+          sudo install -m 0755 /tmp/buf/bin/buf /usr/local/bin/buf
+          make -C libs/proto gen-go
+
       - name: Install gotestsum
         run: go install gotest.tools/gotestsum@latest
 
@@ -159,6 +174,16 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
+
+      - name: Generate protobuf stubs
+        working-directory: .
+        run: |
+          BUF_VERSION=1.73.0
+          curl -fsSL -o /tmp/buf.tar.gz \
+            "https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/buf-Linux-x86_64.tar.gz"
+          sudo tar -xzf /tmp/buf.tar.gz -C /tmp
+          sudo install -m 0755 /tmp/buf/bin/buf /usr/local/bin/buf
+          make -C libs/proto gen-go
 
       - name: Install gosec
         run: go install github.com/securego/gosec/v2/cmd/gosec@latest

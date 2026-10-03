@@ -76,3 +76,8 @@ ignore_missing_imports = true
 asyncio_mode = "auto"
 testpaths = ["tests"]
 python_files = "test_*.py"
+
+[tool.bandit]
+# B101 (assert_used) fires on every pytest assertion. Test files are not
+# production code and are excluded explicitly rather than blanket-skipped.
+exclude_dirs = ["tests"]

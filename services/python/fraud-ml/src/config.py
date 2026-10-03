@@ -10,7 +10,10 @@ class Settings(BaseSettings):
 
     # Server
     http_port: int = 8000
-    http_host: str = "0.0.0.0"
+    # Deliberate: the service runs in a container behind the mesh ingress,
+    # so it must listen on all interfaces for kubelet probes and the
+    # sidecar to reach it. Override with HTTP_HOST to restrict it.
+    http_host: str = "0.0.0.0"  # nosec B104
 
     # Environment
     app_env: str = "development"

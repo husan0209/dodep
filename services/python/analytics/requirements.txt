@@ -24,7 +24,9 @@ redis==5.0.1
 confluent-kafka==2.3.0
 
 # Orchestration
-apache-airflow==2.8.0
+# apache-airflow is intentionally absent: Airflow 2.8 pins sqlalchemy<2.0
+# while this service needs sqlalchemy>=2.0, so including both made the file
+# unresolvable (ResolutionImpossible). Nothing in src/ imports airflow.
 
 # Logging / monitoring
 structlog==24.1.0

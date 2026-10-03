@@ -21,7 +21,12 @@ dependencies = [
     "opentelemetry-api>=1.22.0",
     "opentelemetry-sdk>=1.22.0",
     "opentelemetry-exporter-otlp>=1.22.0",
-    "apache-airflow>=2.8.0",
+    # apache-airflow was removed here deliberately. Airflow 2.8 pins
+    # sqlalchemy<2.0 while this service requires sqlalchemy>=2.0, so the two
+    # were mutually unsatisfiable and every `pip install -e ".[dev]"` failed
+    # with ResolutionImpossible. Nothing in src/ imports airflow; if an
+    # orchestrator is genuinely needed it belongs in its own service with a
+    # compatible pin set.
 ]
 
 [project.optional-dependencies]
@@ -64,3 +69,8 @@ mypy_path = "."
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+
+[tool.bandit]
+# B101 (assert_used) fires on every pytest assertion. Test files are not
+# production code and are excluded explicitly rather than blanket-skipped.
+exclude_dirs = ["tests"]

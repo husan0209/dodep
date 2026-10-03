@@ -47,6 +47,20 @@ pub enum WalletError {
 
     #[error("Lock reference not found: {0}")]
     LockReferenceNotFound(String),
+
+    // The three variants below are constructed by the repository and service
+    // layers but had no declaration, so the crate did not compile:
+    //   error[E0599]: no variant or associated item named `DatabaseError`
+    // 38 call sites across repositories/ and wallet_service.rs.
+    #[error("Database error: {0}")]
+    DatabaseError(String),
+
+    /// Optimistic-concurrency / row-lock contention. Retried by the caller.
+    #[error("Concurrency conflict")]
+    ConcurrencyConflict,
+
+    #[error("Transaction not found: {0}")]
+    TransactionNotFound(String),
 }
 
 impl From<WalletError> for AppError {
@@ -69,6 +83,11 @@ impl From<WalletError> for AppError {
             }
             WalletError::LockReferenceExists(_) => AppError::AlreadyExists(err.to_string()),
             WalletError::LockReferenceNotFound(_) => AppError::NotFound(err.to_string()),
+            WalletError::TransactionNotFound(_) => AppError::NotFound(err.to_string()),
+            // Row-lock / optimistic-concurrency contention: the caller is
+            // expected to retry, which AppError models as a business rule.
+            WalletError::ConcurrencyConflict => AppError::BusinessRuleViolation(err.to_string()),
+            WalletError::DatabaseError(_) => AppError::InternalError(err.to_string()),
         }
     }
 }

@@ -206,7 +206,7 @@ jobs:
 
       - name: Scan with bandit
         working-directory: services/python/${{ matrix.service }}
-        run: bandit -r . -f json -o bandit-results.json
+        run: bandit -c pyproject.toml -r . -f json -o bandit-results.json
 
       - name: Upload bandit results
         if: always()
