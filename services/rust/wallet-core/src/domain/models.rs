@@ -8,7 +8,7 @@
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
-use sqlx::Type;
+
 use uuid::Uuid;
 
 use super::{AccountType, LedgerEntryType, TransactionStatus, TransactionType, WalletType};
@@ -117,6 +117,8 @@ pub struct Transaction {
 
 impl Transaction {
     /// Create a new pending transaction
+    // constructor mirrors the transactions table columns
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         user_id: Uuid,
         wallet_id: Uuid,
@@ -213,8 +215,9 @@ impl FundLock {
 /// Ledger entry for double-entry bookkeeping
 ///
 /// CRITICAL: Every financial operation creates TWO entries:
-/// - One DEBIT (money leaves account)
-/// - One CREDIT (money enters account)
+///   - One DEBIT (money leaves account)
+///   - One CREDIT (money enters account)
+///
 /// SUM(all debits) = SUM(all credits) — ALWAYS
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LedgerEntry {
@@ -284,6 +287,8 @@ impl LedgerEntry {
     }
 
     /// Create a debit entry with reference
+    // ledger entry fields, one per column
+    #[allow(clippy::too_many_arguments)]
     pub fn debit_with_ref(
         transaction_id: Uuid,
         account_type: AccountType,
@@ -312,6 +317,8 @@ impl LedgerEntry {
     }
 
     /// Create a credit entry with reference
+    // ledger entry fields, one per column
+    #[allow(clippy::too_many_arguments)]
     pub fn credit_with_ref(
         transaction_id: Uuid,
         account_type: AccountType,

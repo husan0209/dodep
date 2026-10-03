@@ -1,0 +1,70 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT\n                wallet_id,\n                user_id,\n                wallet_type as \"wallet_type: WalletType\",\n                currency,\n                actual_balance as \"actual_balance: rust_decimal::Decimal\",\n                expected_balance as \"expected_balance: rust_decimal::Decimal\",\n                discrepancy as \"discrepancy: rust_decimal::Decimal\"\n            FROM wallet_reconciliation\n            WHERE wallet_id = $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "wallet_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "user_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "wallet_type: WalletType",
+        "type_info": {
+          "Custom": {
+            "name": "wallet_type",
+            "kind": {
+              "Enum": [
+                "main",
+                "bonus",
+                "free_spins",
+                "cashback"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "currency",
+        "type_info": "Bpchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "actual_balance: rust_decimal::Decimal",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 5,
+        "name": "expected_balance: rust_decimal::Decimal",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 6,
+        "name": "discrepancy: rust_decimal::Decimal",
+        "type_info": "Numeric"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "4d21ef49633ee9d7dc19e970084ab04ef90bbaa4189456da69cf9d6a6baf605d"
+}

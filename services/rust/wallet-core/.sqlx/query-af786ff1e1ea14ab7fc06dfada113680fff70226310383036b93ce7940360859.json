@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO wallets (id, user_id, wallet_type, currency, version, is_active)\n            VALUES ($1, $2, $3, $4, 0, true)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        {
+          "Custom": {
+            "name": "wallet_type",
+            "kind": {
+              "Enum": [
+                "main",
+                "bonus",
+                "free_spins",
+                "cashback"
+              ]
+            }
+          }
+        },
+        "Bpchar"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "af786ff1e1ea14ab7fc06dfada113680fff70226310383036b93ce7940360859"
+}

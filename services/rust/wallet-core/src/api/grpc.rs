@@ -27,7 +27,6 @@ impl WalletGrpcService {
         let wallet_repo = Arc::new(WalletRepository::new(state.db_pool.clone()));
         let transaction_repo = Arc::new(TransactionRepository::new(state.db_pool.clone()));
         let ledger_repo = Arc::new(LedgerRepository::new(state.db_pool.clone()));
-        let lock_repo = Arc::new(LockRepository::new(state.db_pool.clone()));
         let outbox_repo = Arc::new(OutboxRepository::new(state.db_pool.clone()));
         let idempotency = Arc::new(IdempotencyService::new(
             state.redis_client.clone(),
@@ -38,7 +37,6 @@ impl WalletGrpcService {
             wallet_repo,
             transaction_repo,
             ledger_repo,
-            lock_repo,
             outbox_repo,
             idempotency,
         ));
@@ -51,18 +49,21 @@ impl WalletGrpcService {
     }
 
     /// Serve gRPC server
+    ///
+    /// Returns the concrete `tonic::transport::Error` rather than
+    /// `Box<dyn Error>`: the caller spawns this future, and a bare
+    /// `Box<dyn Error>` is neither `Send` nor `Sync`, so it cannot cross the
+    /// task boundary.
     pub async fn serve(
         addr: std::net::SocketAddr,
         state: Arc<AppState>,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<(), tonic::transport::Error> {
         let service = Self::new(state);
 
         tonic::transport::Server::builder()
             .add_service(service.into_service())
             .serve(addr)
-            .await?;
-
-        Ok(())
+            .await
     }
 }
 
@@ -78,17 +79,23 @@ impl WalletCoreService for WalletGrpcService {
             parse_uuid(&req.user_id).map_err(|_| Status::invalid_argument("Invalid user_id"))?;
 
         let wallet_type = parse_wallet_type(
-            common_proto::WalletType::from_i32(req.wallet_type)
-                .ok_or_else(|| Status::invalid_argument("Invalid wallet_type"))?,
-        )?;
+            common_proto::WalletType::try_from(req.wallet_type)
+                .map_err(|_| Status::invalid_argument("Invalid wallet_type"))?,
+        );
 
         match self.wallet_service.get_balance(user_id, wallet_type).await {
             Ok(balance) => {
+                // GetBalanceResponse carries a single `balance` message
+                // (available/locked/bonus/total), not three top-level amounts.
                 let response = GetBalanceResponse {
-                    available: Some(money_from_decimal(balance.available, "USD")),
-                    locked: Some(money_from_decimal(balance.locked, "USD")),
-                    bonus: Some(money_from_decimal(balance.bonus, "USD")),
+                    balance: Some(common_proto::Balance {
+                        available: Some(money_from_decimal(balance.available, "USD")),
+                        locked: Some(money_from_decimal(balance.locked, "USD")),
+                        bonus: Some(money_from_decimal(balance.bonus, "USD")),
+                        total: Some(money_from_decimal(balance.total(), "USD")),
+                    }),
                     version: 0,
+                    updated_at: None,
                 };
                 Ok(Response::new(response))
             }
@@ -131,15 +138,24 @@ impl WalletCoreService for WalletGrpcService {
             parse_uuid(&req.user_id).map_err(|_| Status::invalid_argument("Invalid user_id"))?;
 
         let wallet_type = parse_wallet_type(
-            common_proto::WalletType::from_i32(req.wallet_type)
-                .ok_or_else(|| Status::invalid_argument("Invalid wallet_type"))?,
-        )?;
+            common_proto::WalletType::try_from(req.wallet_type)
+                .map_err(|_| Status::invalid_argument("Invalid wallet_type"))?,
+        );
 
         let amount =
             parse_money(&req.amount).map_err(|_| Status::invalid_argument("Invalid amount"))?;
 
         let reference_id = Uuid::parse_str(&req.reference_id)
             .map_err(|_| Status::invalid_argument("Invalid reference_id"))?;
+
+        // A missing idempotency key must be rejected, not defaulted to "":
+        // every keyless credit would then share one cache entry and the second
+        // one would be answered with the first one's transaction.
+        let idempotency_key = if req.idempotency_key.is_empty() {
+            return Err(Status::invalid_argument("idempotency_key is required"));
+        } else {
+            req.idempotency_key.as_str()
+        };
 
         match self
             .wallet_service
@@ -150,7 +166,7 @@ impl WalletCoreService for WalletGrpcService {
                 "USD",
                 reference_id,
                 req.reference_type.as_str(),
-                Some(req.idempotency_key),
+                idempotency_key,
             )
             .await
         {
@@ -176,15 +192,23 @@ impl WalletCoreService for WalletGrpcService {
             parse_uuid(&req.user_id).map_err(|_| Status::invalid_argument("Invalid user_id"))?;
 
         let wallet_type = parse_wallet_type(
-            common_proto::WalletType::from_i32(req.wallet_type)
-                .ok_or_else(|| Status::invalid_argument("Invalid wallet_type"))?,
-        )?;
+            common_proto::WalletType::try_from(req.wallet_type)
+                .map_err(|_| Status::invalid_argument("Invalid wallet_type"))?,
+        );
 
         let amount =
             parse_money(&req.amount).map_err(|_| Status::invalid_argument("Invalid amount"))?;
 
         let reference_id = Uuid::parse_str(&req.reference_id)
             .map_err(|_| Status::invalid_argument("Invalid reference_id"))?;
+
+        // See the note in credit(): an absent idempotency key is rejected rather
+        // than defaulted, otherwise all keyless debits collide on one entry.
+        let idempotency_key = if req.idempotency_key.is_empty() {
+            return Err(Status::invalid_argument("idempotency_key is required"));
+        } else {
+            req.idempotency_key.as_str()
+        };
 
         match self
             .wallet_service
@@ -195,7 +219,7 @@ impl WalletCoreService for WalletGrpcService {
                 "USD",
                 reference_id,
                 req.reference_type.as_str(),
-                Some(req.idempotency_key),
+                idempotency_key,
             )
             .await
         {
@@ -221,9 +245,9 @@ impl WalletCoreService for WalletGrpcService {
             parse_uuid(&req.user_id).map_err(|_| Status::invalid_argument("Invalid user_id"))?;
 
         let wallet_type = parse_wallet_type(
-            common_proto::WalletType::from_i32(req.wallet_type)
-                .ok_or_else(|| Status::invalid_argument("Invalid wallet_type"))?,
-        )?;
+            common_proto::WalletType::try_from(req.wallet_type)
+                .map_err(|_| Status::invalid_argument("Invalid wallet_type"))?,
+        );
 
         let amount =
             parse_money(&req.amount).map_err(|_| Status::invalid_argument("Invalid amount"))?;
@@ -242,7 +266,7 @@ impl WalletCoreService for WalletGrpcService {
             )
             .await
         {
-            Ok(lock) => {
+            Ok(_lock) => {
                 let response = LockResponse {
                     success: true,
                     new_available: None,
@@ -295,13 +319,13 @@ impl WalletCoreService for WalletGrpcService {
             parse_uuid(&req.user_id).map_err(|_| Status::invalid_argument("Invalid user_id"))?;
 
         let from_wallet_type = parse_wallet_type(
-            common_proto::WalletType::from_i32(req.from_wallet)
-                .ok_or_else(|| Status::invalid_argument("Invalid from_wallet"))?,
-        )?;
+            common_proto::WalletType::try_from(req.from_wallet)
+                .map_err(|_| Status::invalid_argument("Invalid from_wallet"))?,
+        );
         let to_wallet_type = parse_wallet_type(
-            common_proto::WalletType::from_i32(req.to_wallet)
-                .ok_or_else(|| Status::invalid_argument("Invalid to_wallet"))?,
-        )?;
+            common_proto::WalletType::try_from(req.to_wallet)
+                .map_err(|_| Status::invalid_argument("Invalid to_wallet"))?,
+        );
 
         let amount =
             parse_money(&req.amount).map_err(|_| Status::invalid_argument("Invalid amount"))?;
@@ -345,7 +369,7 @@ impl WalletCoreService for WalletGrpcService {
 
         let (limit, offset) = match req.pagination {
             Some(p) => {
-                let l = p.page_size.max(1).min(100) as i64;
+                let l = p.page_size.clamp(1, 100) as i64;
                 let o = p.cursor.parse::<i64>().unwrap_or(0).max(0);
                 (l, o)
             }
@@ -358,12 +382,18 @@ impl WalletCoreService for WalletGrpcService {
             .await
             .unwrap_or_default();
 
+        let has_more = transactions.len() as i64 == limit;
         let response = GetTransactionsResponse {
             transactions: transactions.iter().map(transaction_to_proto).collect(),
             pagination: Some(common_proto::PageResponse {
                 next_cursor: (offset + limit).to_string(),
-                has_more: transactions.len() as i64 == limit,
-                total_count: 0,
+                prev_cursor: offset.saturating_sub(limit).max(0).to_string(),
+                has_more,
+                // total_count is `optional int64` in the contract; leaving it
+                // unset is cheaper than counting the whole table per request.
+                total_count: None,
+                current_page: None,
+                total_pages: None,
             }),
         };
 
@@ -410,13 +440,16 @@ fn parse_uuid(proto: &Option<UserId>) -> Result<Uuid, String> {
         .ok_or_else(|| "Invalid UUID".to_string())
 }
 
-fn parse_wallet_type(proto: common_proto::WalletType) -> Result<WalletType, String> {
+/// Maps a proto wallet type onto the domain one.
+///
+/// Infallible by construction: the proto enum's variants are covered
+/// exhaustively, and an unspecified type means "the main wallet".
+fn parse_wallet_type(proto: common_proto::WalletType) -> WalletType {
     match proto {
-        common_proto::WalletType::Unspecified => Ok(WalletType::Main),
-        common_proto::WalletType::Main => Ok(WalletType::Main),
-        common_proto::WalletType::Bonus => Ok(WalletType::Bonus),
-        common_proto::WalletType::FreeSpins => Ok(WalletType::FreeSpins),
-        common_proto::WalletType::Cashback => Ok(WalletType::Cashback),
+        common_proto::WalletType::Unspecified | common_proto::WalletType::Main => WalletType::Main,
+        common_proto::WalletType::Bonus => WalletType::Bonus,
+        common_proto::WalletType::FreeSpins => WalletType::FreeSpins,
+        common_proto::WalletType::Cashback => WalletType::Cashback,
     }
 }
 
@@ -486,7 +519,7 @@ fn transaction_to_proto(txn: &Transaction) -> common_proto::Transaction {
         user_id: Some(UserId {
             value: txn.user_id.to_string(),
         }),
-        wallet_type: wallet_type_to_proto(txn.wallet_type) as i32,
+        wallet_type: wallet_type_to_proto(txn.wallet_type),
         amount: Some(money_from_decimal(txn.amount, &txn.currency)),
         r#type: transaction_type_to_proto(txn.transaction_type) as i32,
         reference_id: txn
@@ -514,12 +547,16 @@ fn transaction_type_to_proto(t: TransactionType) -> common_proto::TransactionTyp
         TransactionType::BonusDebit => common_proto::TransactionType::BonusDebit,
         TransactionType::Transfer => common_proto::TransactionType::Transfer,
         TransactionType::Adjustment => common_proto::TransactionType::Adjustment,
+        // The wire contract has no fee type, so a fee is reported as
+        // unspecified rather than being silently folded into another type.
+        TransactionType::Fee => common_proto::TransactionType::Unspecified,
     }
 }
 
 fn transaction_status_to_proto(s: &TransactionStatus) -> common_proto::TransactionStatus {
     match s {
         TransactionStatus::Pending => common_proto::TransactionStatus::Pending,
+        TransactionStatus::Processing => common_proto::TransactionStatus::Processing,
         TransactionStatus::Completed => common_proto::TransactionStatus::Completed,
         TransactionStatus::Failed => common_proto::TransactionStatus::Failed,
         TransactionStatus::Cancelled => common_proto::TransactionStatus::Cancelled,

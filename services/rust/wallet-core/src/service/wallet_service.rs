@@ -11,7 +11,7 @@
 
 use rust_decimal::Decimal;
 use std::sync::Arc;
-use tracing::{info, instrument, warn};
+use tracing::{info, instrument};
 use uuid::Uuid;
 
 use crate::domain::*;
@@ -23,7 +23,6 @@ pub struct WalletService {
     wallet_repo: Arc<WalletRepository>,
     transaction_repo: Arc<TransactionRepository>,
     ledger_repo: Arc<LedgerRepository>,
-    lock_repo: Arc<LockRepository>,
     outbox_repo: Arc<OutboxRepository>,
     idempotency: Arc<IdempotencyService>,
 }
@@ -33,15 +32,17 @@ impl WalletService {
         wallet_repo: Arc<WalletRepository>,
         transaction_repo: Arc<TransactionRepository>,
         ledger_repo: Arc<LedgerRepository>,
-        lock_repo: Arc<LockRepository>,
         outbox_repo: Arc<OutboxRepository>,
         idempotency: Arc<IdempotencyService>,
     ) -> Self {
+        // LockRepository is deliberately not held here. fund_locks is read and
+        // written with SELECT ... FOR UPDATE inside the same transaction as the
+        // balance update, and LockRepository's helpers do not accept a
+        // transaction handle, so going through it would drop that atomicity.
         Self {
             wallet_repo,
             transaction_repo,
             ledger_repo,
-            lock_repo,
             outbox_repo,
             idempotency,
         }
@@ -141,6 +142,8 @@ impl WalletService {
     /// 7. Commit transaction
     /// 8. Cache idempotency result
     #[instrument(skip(self), fields(user_id = %user_id, amount = %amount))]
+    // financial operation inputs, kept flat to mirror the ledger entry it produces
+    #[allow(clippy::too_many_arguments)]
     pub async fn credit(
         &self,
         user_id: Uuid,
@@ -310,6 +313,8 @@ impl WalletService {
     /// 8. Commit
     /// 9. Cache idempotency
     #[instrument(skip(self), fields(user_id = %user_id, amount = %amount))]
+    // financial operation inputs, kept flat to mirror the ledger entry it produces
+    #[allow(clippy::too_many_arguments)]
     pub async fn debit(
         &self,
         user_id: Uuid,
@@ -465,7 +470,11 @@ impl WalletService {
         wallet_type: WalletType,
         amount: Decimal,
         reference_id: Uuid,
-        idempotency_key: Option<String>,
+        // Deliberately unused. fund_locks.reference_id carries a UNIQUE
+        // constraint, so replaying a lock for the same business reference fails
+        // on insert instead of double-reserving the funds. The parameter is
+        // kept so lock/unlock mirror the credit/debit signature.
+        _idempotency_key: Option<String>,
     ) -> Result<FundLock, WalletError> {
         let mut tx = self
             .wallet_repo
@@ -523,12 +532,12 @@ impl WalletService {
 
         let lock = sqlx::query_as!(
             FundLock,
-            r#"SELECT id, wallet_id, user_id, amount as "Decimal: rust_decimal::Decimal", reference_id, reference_type, is_active, created_at, released_at FROM fund_locks WHERE reference_id = $1 AND is_active = true FOR UPDATE"#,
+            r#"SELECT id, wallet_id, user_id, amount as "amount: rust_decimal::Decimal", reference_id, reference_type, is_active, created_at, released_at FROM fund_locks WHERE reference_id = $1 AND is_active = true FOR UPDATE"#,
             reference_id
         ).fetch_optional(&mut *tx).await.map_err(|e| WalletError::DatabaseError(e.to_string()))?
         .ok_or(WalletError::LockReferenceNotFound(reference_id.to_string()))?;
 
-        let wallet = sqlx::query_as!(Wallet, r#"SELECT id, user_id, wallet_type as "WalletType: _", currency, balance_available as "Decimal: rust_decimal::Decimal", balance_locked as "Decimal: rust_decimal::Decimal", balance_bonus as "Decimal: rust_decimal::Decimal", version, is_active, created_at, updated_at FROM wallets WHERE id = $1 FOR UPDATE"#, lock.wallet_id)
+        let wallet = sqlx::query_as!(Wallet, r#"SELECT id, user_id, wallet_type as "wallet_type: WalletType", currency, balance_available as "balance_available: rust_decimal::Decimal", balance_locked as "balance_locked: rust_decimal::Decimal", balance_bonus as "balance_bonus: rust_decimal::Decimal", version, is_active, created_at, updated_at FROM wallets WHERE id = $1 FOR UPDATE"#, lock.wallet_id)
             .fetch_optional(&mut *tx).await.map_err(|e| WalletError::DatabaseError(e.to_string()))?.ok_or(WalletError::NotFound { user_id })?;
 
         let new_available = wallet.balance_available + lock.amount;
@@ -558,6 +567,8 @@ impl WalletService {
         Ok(())
     }
 
+    // financial operation inputs, kept flat to mirror the two ledger entries it produces
+    #[allow(clippy::too_many_arguments)]
     pub async fn transfer(
         &self,
         user_id: Uuid,
@@ -617,11 +628,11 @@ impl WalletService {
             user_id,
             from_wallet.id,
             from_wallet_type,
-            TransactionType::TransferOut,
+            TransactionType::Transfer,
             amount,
             currency.to_string(),
             Some(reference_id),
-            Some("transfer".to_string()),
+            Some("transfer_out".to_string()),
             idempotency_key.clone(),
         );
         debit_txn.complete();
@@ -632,11 +643,11 @@ impl WalletService {
             user_id,
             to_wallet.id,
             to_wallet_type,
-            TransactionType::TransferIn,
+            TransactionType::Transfer,
             amount,
             currency.to_string(),
             Some(reference_id),
-            Some("transfer".to_string()),
+            Some("transfer_in".to_string()),
             idempotency_key,
         );
         credit_txn.complete();
@@ -649,6 +660,14 @@ impl WalletService {
         Ok((debit_txn, credit_txn))
     }
 
+    pub async fn get_transaction(&self, txn_id: Uuid) -> Result<Transaction, WalletError> {
+        self.transaction_repo
+            .get_by_id(txn_id)
+            .await
+            .map_err(|e| WalletError::DatabaseError(e.to_string()))?
+            .ok_or_else(|| WalletError::TransactionNotFound(txn_id.to_string()))
+    }
+
     pub async fn get_transactions(
         &self,
         user_id: Uuid,
@@ -657,7 +676,7 @@ impl WalletService {
     ) -> Result<Vec<Transaction>, WalletError> {
         let transactions = sqlx::query_as!(
             Transaction,
-            r#"SELECT id, user_id, wallet_id, wallet_type as "WalletType: _", transaction_type as "TransactionType: _", amount as "Decimal: rust_decimal::Decimal", currency, status as "TransactionStatus: _", reference_id, reference_type, idempotency_key, description, metadata as "serde_json::Value: _", created_at, updated_at, completed_at FROM transactions WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3"#,
+            r#"SELECT id, user_id, wallet_id, wallet_type as "wallet_type: WalletType", transaction_type as "transaction_type: TransactionType", amount as "amount: rust_decimal::Decimal", currency, status as "status: TransactionStatus", reference_id, reference_type, idempotency_key, description, metadata as "metadata: serde_json::Value", created_at, updated_at, completed_at FROM transactions WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3"#,
             user_id, limit, offset
         ).fetch_all(&self.wallet_repo.pool).await.map_err(|e| WalletError::DatabaseError(e.to_string()))?;
         Ok(transactions)

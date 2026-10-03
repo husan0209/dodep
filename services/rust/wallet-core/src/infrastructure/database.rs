@@ -19,7 +19,11 @@ pub async fn create_db_pool(config: &DatabaseConfig) -> Result<DbPool, sqlx::Err
 }
 
 /// Run database migrations (centralised in libs/migrations/postgresql).
-pub async fn run_migrations(pool: &DbPool) -> Result<(), sqlx::Error> {
+///
+/// Returns `MigrateError` rather than `sqlx::Error`: that is what
+/// `Migrator::run` yields, and it carries the migration name/version that
+/// failed, which `sqlx::Error` would flatten away.
+pub async fn run_migrations(pool: &DbPool) -> Result<(), sqlx::migrate::MigrateError> {
     sqlx::migrate!("../../../libs/migrations/postgresql")
         .run(pool)
         .await

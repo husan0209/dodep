@@ -22,8 +22,14 @@ impl Default for MetricsState {
 
 /// Initialize tracing
 pub fn init_tracing(config: &Config) -> tracing::subscriber::DefaultGuard {
-    let env_filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("info,wallet_core=debug"));
+    // EnvFilter directives use `_` where the crate target uses `-`, and the
+    // service name is configurable, so build the default from it rather than
+    // hardcoding "wallet_core".
+    let service = config.tracing.service_name.replace('-', "_");
+    let default_directive = format!("info,{}=debug", service);
+
+    let env_filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(default_directive));
 
     let subscriber = tracing_subscriber::registry()
         .with(env_filter)

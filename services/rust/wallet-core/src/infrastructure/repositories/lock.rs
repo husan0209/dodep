@@ -1,6 +1,6 @@
 //! Fund lock repository
 
-use sqlx::{PgPool, Postgres, Transaction};
+use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::domain::FundLock;
@@ -48,7 +48,7 @@ impl LockRepository {
             FundLock,
             r#"
             SELECT 
-                id, wallet_id, user_id, amount as "Decimal: rust_decimal::Decimal",
+                id, wallet_id, user_id, amount as "amount: rust_decimal::Decimal",
                 reference_id, reference_type, is_active,
                 created_at, released_at
             FROM fund_locks

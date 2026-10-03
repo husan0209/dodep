@@ -1,6 +1,5 @@
 //! Wallet repository
 
-use chrono::Utc;
 use rust_decimal::Decimal;
 use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
@@ -27,10 +26,10 @@ impl WalletRepository {
             Wallet,
             r#"
             SELECT 
-                id, user_id, wallet_type as "WalletType: _",
-                currency, balance_available as "Decimal: rust_decimal::Decimal",
-                balance_locked as "Decimal: rust_decimal::Decimal",
-                balance_bonus as "Decimal: rust_decimal::Decimal",
+                id, user_id, wallet_type as "wallet_type: WalletType",
+                currency, balance_available as "balance_available: rust_decimal::Decimal",
+                balance_locked as "balance_locked: rust_decimal::Decimal",
+                balance_bonus as "balance_bonus: rust_decimal::Decimal",
                 version, is_active, created_at, updated_at
             FROM wallets
             WHERE user_id = $1 AND wallet_type = $2 AND is_active = true
@@ -56,10 +55,10 @@ impl WalletRepository {
             Wallet,
             r#"
             SELECT 
-                id, user_id, wallet_type as "WalletType: _",
-                currency, balance_available as "Decimal: rust_decimal::Decimal",
-                balance_locked as "Decimal: rust_decimal::Decimal",
-                balance_bonus as "Decimal: rust_decimal::Decimal",
+                id, user_id, wallet_type as "wallet_type: WalletType",
+                currency, balance_available as "balance_available: rust_decimal::Decimal",
+                balance_locked as "balance_locked: rust_decimal::Decimal",
+                balance_bonus as "balance_bonus: rust_decimal::Decimal",
                 version, is_active, created_at, updated_at
             FROM wallets
             WHERE user_id = $1 AND wallet_type = $2 AND is_active = true

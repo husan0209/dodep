@@ -11,8 +11,8 @@
 //! 6. UNIQUE constraint on idempotency_key in PostgreSQL (safety net)
 
 use redis::AsyncCommands;
-use std::time::Duration;
-use tracing::{debug, warn};
+
+use tracing::debug;
 use uuid::Uuid;
 
 use crate::infrastructure::RedisClient;
@@ -61,7 +61,10 @@ impl IdempotencyService {
         let full_key = format!("{}{}", self.key_prefix, key);
 
         // SET with EX (expiry) - 24 hours by default
-        conn.set_ex(&full_key, txn_id.to_string(), self.ttl_secs)
+        // The turbofish pins the reply type: `set_ex` is generic over the value
+        // it decodes, and leaving it open makes the compiler fall back to the
+        // never type, which is a hard error from edition 2024 on.
+        conn.set_ex::<_, _, ()>(&full_key, txn_id.to_string(), self.ttl_secs)
             .await?;
 
         debug!(key = %key, txn_id = %txn_id, "Set idempotency key");
@@ -82,8 +85,6 @@ impl IdempotencyService {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[tokio::test]
     async fn test_idempotency_get_set() {
         // This test requires a running Redis instance

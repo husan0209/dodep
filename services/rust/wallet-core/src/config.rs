@@ -1,7 +1,6 @@
 //! Configuration for Wallet Core Service
 
 use serde::Deserialize;
-use std::env;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {

@@ -3,7 +3,7 @@
 use sqlx::{PgPool, Postgres};
 use uuid::Uuid;
 
-use crate::domain::{Transaction, TransactionStatus};
+use crate::domain::{Transaction, TransactionStatus, TransactionType, WalletType};
 
 /// Transaction repository
 pub struct TransactionRepository {
@@ -21,12 +21,12 @@ impl TransactionRepository {
             Transaction,
             r#"
             SELECT 
-                id, user_id, wallet_id, wallet_type as "WalletType: _",
-                transaction_type as "TransactionType: _",
-                amount as "Decimal: rust_decimal::Decimal",
-                currency, status as "TransactionStatus: _",
+                id, user_id, wallet_id, wallet_type as "wallet_type: WalletType",
+                transaction_type as "transaction_type: TransactionType",
+                amount as "amount: rust_decimal::Decimal",
+                currency, status as "status: TransactionStatus",
                 reference_id, reference_type, idempotency_key,
-                description, metadata as "serde_json::Value: _",
+                description, metadata as "metadata: serde_json::Value",
                 created_at, updated_at, completed_at
             FROM transactions
             WHERE id = $1
@@ -48,12 +48,12 @@ impl TransactionRepository {
             Transaction,
             r#"
             SELECT 
-                id, user_id, wallet_id, wallet_type as "WalletType: _",
-                transaction_type as "TransactionType: _",
-                amount as "Decimal: rust_decimal::Decimal",
-                currency, status as "TransactionStatus: _",
+                id, user_id, wallet_id, wallet_type as "wallet_type: WalletType",
+                transaction_type as "transaction_type: TransactionType",
+                amount as "amount: rust_decimal::Decimal",
+                currency, status as "status: TransactionStatus",
                 reference_id, reference_type, idempotency_key,
-                description, metadata as "serde_json::Value: _",
+                description, metadata as "metadata: serde_json::Value",
                 created_at, updated_at, completed_at
             FROM transactions
             WHERE idempotency_key = $1
@@ -82,12 +82,12 @@ impl TransactionRepository {
                 $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
             )
             RETURNING 
-                id, user_id, wallet_id, wallet_type as "WalletType: _",
-                transaction_type as "TransactionType: _",
-                amount as "Decimal: rust_decimal::Decimal",
-                currency, status as "TransactionStatus: _",
+                id, user_id, wallet_id, wallet_type as "wallet_type: WalletType",
+                transaction_type as "transaction_type: TransactionType",
+                amount as "amount: rust_decimal::Decimal",
+                currency, status as "status: TransactionStatus",
                 reference_id, reference_type, idempotency_key,
-                description, metadata as "serde_json::Value: _",
+                description, metadata as "metadata: serde_json::Value",
                 created_at, updated_at, completed_at
             "#,
             transaction.id,

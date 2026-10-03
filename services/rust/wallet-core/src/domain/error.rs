@@ -47,6 +47,32 @@ pub enum WalletError {
 
     #[error("Lock reference not found: {0}")]
     LockReferenceNotFound(String),
+
+    /// A database call failed. Carries the driver message so the cause is not
+    /// lost, but is deliberately not a `#[from] sqlx::Error` because the service
+    /// annotates the failure with the statement it came from.
+    #[error("Database error: {0}")]
+    DatabaseError(String),
+
+    /// The optimistic-locking `version` check failed: the row was modified by
+    /// someone else between read and write, so the caller must retry.
+    #[error("Wallet was modified concurrently, retry the operation")]
+    ConcurrencyConflict,
+
+    #[error("Transaction not found: {0}")]
+    TransactionNotFound(String),
+}
+
+impl From<sqlx::Error> for WalletError {
+    fn from(err: sqlx::Error) -> Self {
+        WalletError::DatabaseError(err.to_string())
+    }
+}
+
+impl From<redis::RedisError> for WalletError {
+    fn from(err: redis::RedisError) -> Self {
+        WalletError::DatabaseError(err.to_string())
+    }
 }
 
 impl From<WalletError> for AppError {
@@ -69,6 +95,9 @@ impl From<WalletError> for AppError {
             }
             WalletError::LockReferenceExists(_) => AppError::AlreadyExists(err.to_string()),
             WalletError::LockReferenceNotFound(_) => AppError::NotFound(err.to_string()),
+            WalletError::DatabaseError(_) => AppError::InternalError(err.to_string()),
+            WalletError::ConcurrencyConflict => AppError::BusinessRuleViolation(err.to_string()),
+            WalletError::TransactionNotFound(_) => AppError::NotFound(err.to_string()),
         }
     }
 }

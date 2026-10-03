@@ -1,0 +1,70 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT\n                id, topic, event_key,\n                payload as \"payload: Vec<u8>\",\n                headers as \"headers: serde_json::Value\",\n                created_at, sent_at, retries, last_error\n            FROM outbox\n            WHERE sent_at IS NULL\n            ORDER BY created_at\n            LIMIT $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "topic",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "event_key",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "payload: Vec<u8>",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 4,
+        "name": "headers: serde_json::Value",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 5,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 6,
+        "name": "sent_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 7,
+        "name": "retries",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 8,
+        "name": "last_error",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "c259af302456d726f3f5a077f6c0e2e0fdc2ea89e1b8131322f7237c7d1a6c9c"
+}

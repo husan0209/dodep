@@ -1,0 +1,67 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO transactions (\n                id, user_id, wallet_id, wallet_type,\n                transaction_type, amount, currency, status,\n                reference_id, reference_type, idempotency_key\n            )\n            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        {
+          "Custom": {
+            "name": "wallet_type",
+            "kind": {
+              "Enum": [
+                "main",
+                "bonus",
+                "free_spins",
+                "cashback"
+              ]
+            }
+          }
+        },
+        {
+          "Custom": {
+            "name": "transaction_type",
+            "kind": {
+              "Enum": [
+                "deposit",
+                "withdrawal",
+                "bet_place",
+                "bet_win",
+                "bet_refund",
+                "bonus_credit",
+                "bonus_debit",
+                "transfer",
+                "adjustment",
+                "fee"
+              ]
+            }
+          }
+        },
+        "Numeric",
+        "Bpchar",
+        {
+          "Custom": {
+            "name": "transaction_status",
+            "kind": {
+              "Enum": [
+                "pending",
+                "processing",
+                "completed",
+                "failed",
+                "cancelled"
+              ]
+            }
+          }
+        },
+        "Uuid",
+        "Varchar",
+        "Varchar"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7f087810c203029e4a27ed7263a112c350fc4e2917c5e6e7ff7324a0a4ba246f"
+}

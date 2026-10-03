@@ -202,6 +202,8 @@ impl FundUnlockedEvent {
 }
 
 impl TransactionCreatedEvent {
+    // event payload mirrors the outbox row
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         transaction_id: Uuid,
         user_id: Uuid,
@@ -259,6 +261,8 @@ impl TransactionCompletedEvent {
 }
 
 impl TransactionFailedEvent {
+    // event payload mirrors the outbox row
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         transaction_id: Uuid,
         user_id: Uuid,

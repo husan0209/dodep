@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE wallets\n            SET \n                balance_available = $3,\n                balance_locked = $4,\n                balance_bonus = $5,\n                version = version + 1,\n                updated_at = NOW()\n            WHERE id = $1 AND version = $2\n            RETURNING id\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4",
+        "Numeric",
+        "Numeric",
+        "Numeric"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "9c75c7b9f5643989a9cda84eacf131a72923bf18e05f56faf2a5f1b984f07b8a"
+}

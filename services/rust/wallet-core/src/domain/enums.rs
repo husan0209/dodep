@@ -26,14 +26,25 @@ impl WalletType {
             WalletType::Cashback => "cashback",
         }
     }
+}
 
-    pub fn from_str(s: &str) -> Option<Self> {
+// Implemented as the standard trait rather than as an inherent `from_str`, so
+// the type composes with everything that expects FromStr. The error carries
+// the accepted values, which the old inherent version silently swallowed by
+// returning None.
+impl std::str::FromStr for WalletType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
-            "main" => Some(WalletType::Main),
-            "bonus" => Some(WalletType::Bonus),
-            "free_spins" => Some(WalletType::FreeSpins),
-            "cashback" => Some(WalletType::Cashback),
-            _ => None,
+            "main" => Ok(WalletType::Main),
+            "bonus" => Ok(WalletType::Bonus),
+            "free_spins" => Ok(WalletType::FreeSpins),
+            "cashback" => Ok(WalletType::Cashback),
+            other => Err(format!(
+                "unknown wallet type {other:?}; expected one of \
+                 main, bonus, free_spins, cashback"
+            )),
         }
     }
 }

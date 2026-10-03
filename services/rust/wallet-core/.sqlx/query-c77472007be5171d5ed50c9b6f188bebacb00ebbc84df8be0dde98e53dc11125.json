@@ -1,0 +1,128 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT\n                id, transaction_id,\n                account_type as \"account_type: AccountType\",\n                account_id,\n                entry_type as \"entry_type: LedgerEntryType\",\n                amount as \"amount: rust_decimal::Decimal\",\n                currency, balance_after as \"balance_after: rust_decimal::Decimal\",\n                reference_type, reference_id, idempotency_key,\n                created_at\n            FROM ledger_entries\n            WHERE account_type = $1 AND account_id = $2\n            ORDER BY created_at DESC\n            LIMIT $3\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "transaction_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "account_type: AccountType",
+        "type_info": {
+          "Custom": {
+            "name": "account_type",
+            "kind": {
+              "Enum": [
+                "user_wallet",
+                "house_revenue",
+                "house_hold",
+                "payment_gateway_transit",
+                "tax_reserve",
+                "bonus_pool"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "account_id",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "entry_type: LedgerEntryType",
+        "type_info": {
+          "Custom": {
+            "name": "ledger_entry_type",
+            "kind": {
+              "Enum": [
+                "debit",
+                "credit"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "amount: rust_decimal::Decimal",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 6,
+        "name": "currency",
+        "type_info": "Bpchar"
+      },
+      {
+        "ordinal": 7,
+        "name": "balance_after: rust_decimal::Decimal",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 8,
+        "name": "reference_type",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 9,
+        "name": "reference_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 10,
+        "name": "idempotency_key",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 11,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        {
+          "Custom": {
+            "name": "account_type",
+            "kind": {
+              "Enum": [
+                "user_wallet",
+                "house_revenue",
+                "house_hold",
+                "payment_gateway_transit",
+                "tax_reserve",
+                "bonus_pool"
+              ]
+            }
+          }
+        },
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "c77472007be5171d5ed50c9b6f188bebacb00ebbc84df8be0dde98e53dc11125"
+}

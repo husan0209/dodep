@@ -1,7 +1,6 @@
 //! Outbox repository for reliable event publishing
 
 use sqlx::{PgPool, Postgres, Transaction};
-use uuid::Uuid;
 
 use crate::domain::OutboxEvent;
 

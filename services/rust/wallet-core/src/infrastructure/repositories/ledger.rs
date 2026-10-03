@@ -3,7 +3,15 @@
 use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
-use crate::domain::{LedgerEntry, ReconciliationResult};
+use crate::domain::{AccountType, LedgerEntry, LedgerEntryType, ReconciliationResult, WalletType};
+
+/// Column of the reconciliation views that must never be NULL.
+///
+/// sqlx reports view columns as nullable because it cannot prove the join
+/// shape, so the Option has to be unwrapped explicitly.
+fn required<T>(value: Option<T>, column: &str) -> Result<T, sqlx::Error> {
+    value.ok_or_else(|| sqlx::Error::Protocol(format!("wallet_reconciliation.{column} is NULL")))
+}
 
 /// Ledger repository
 pub struct LedgerRepository {
@@ -100,11 +108,11 @@ impl LedgerRepository {
             r#"
             SELECT
                 id, transaction_id,
-                account_type as "AccountType: _",
+                account_type as "account_type: AccountType",
                 account_id,
-                entry_type as "LedgerEntryType: _",
-                amount as "Decimal: rust_decimal::Decimal",
-                currency, balance_after as "Decimal: rust_decimal::Decimal",
+                entry_type as "entry_type: LedgerEntryType",
+                amount as "amount: rust_decimal::Decimal",
+                currency, balance_after as "balance_after: rust_decimal::Decimal",
                 reference_type, reference_id, idempotency_key,
                 created_at
             FROM ledger_entries
@@ -131,11 +139,11 @@ impl LedgerRepository {
             r#"
             SELECT
                 id, transaction_id,
-                account_type as "AccountType: _",
+                account_type as "account_type: AccountType",
                 account_id,
-                entry_type as "LedgerEntryType: _",
-                amount as "Decimal: rust_decimal::Decimal",
-                currency, balance_after as "Decimal: rust_decimal::Decimal",
+                entry_type as "entry_type: LedgerEntryType",
+                amount as "amount: rust_decimal::Decimal",
+                currency, balance_after as "balance_after: rust_decimal::Decimal",
                 reference_type, reference_id, idempotency_key,
                 created_at
             FROM ledger_entries
@@ -158,9 +166,22 @@ impl LedgerRepository {
         &self,
         wallet_id: Uuid,
     ) -> Result<ReconciliationResult, sqlx::Error> {
+        // The columns are listed explicitly rather than with SELECT *: sqlx
+        // cannot infer the Rust type of an enum column that arrives through a
+        // view ("unsupported type wallet_type of column #3"), and query! hands
+        // back an anonymous struct rather than a Row, so try_get is not
+        // available on it.
         let result = sqlx::query!(
             r#"
-            SELECT * FROM wallet_reconciliation
+            SELECT
+                wallet_id,
+                user_id,
+                wallet_type as "wallet_type: WalletType",
+                currency,
+                actual_balance as "actual_balance: rust_decimal::Decimal",
+                expected_balance as "expected_balance: rust_decimal::Decimal",
+                discrepancy as "discrepancy: rust_decimal::Decimal"
+            FROM wallet_reconciliation
             WHERE wallet_id = $1
             "#,
             wallet_id
@@ -169,18 +190,17 @@ impl LedgerRepository {
         .await?;
 
         match result {
-            Some(row) => {
-                use sqlx::Row;
-                Ok(ReconciliationResult {
-                    wallet_id: row.try_get("wallet_id")?,
-                    user_id: row.try_get("user_id")?,
-                    wallet_type: row.try_get("wallet_type")?,
-                    currency: row.try_get("currency")?,
-                    actual_balance: row.try_get("actual_balance")?,
-                    expected_balance: row.try_get("expected_balance")?,
-                    discrepancy: row.try_get("discrepancy")?,
-                })
-            }
+            Some(row) => Ok(ReconciliationResult {
+                wallet_id: required(row.wallet_id, "wallet_id")?,
+                user_id: required(row.user_id, "user_id")?,
+                wallet_type: required(row.wallet_type, "wallet_type")?,
+                currency: required(row.currency, "currency")?,
+                actual_balance: required(row.actual_balance, "actual_balance")?,
+                // The view COALESCEs both aggregates to 0, so ZERO is only a
+                // safety net for the Option sqlx hands back for view columns.
+                expected_balance: row.expected_balance.unwrap_or_default(),
+                discrepancy: row.discrepancy.unwrap_or_default(),
+            }),
             None => Err(sqlx::Error::RowNotFound),
         }
     }
@@ -189,16 +209,34 @@ impl LedgerRepository {
     pub async fn get_reconciliation_alerts(
         &self,
     ) -> Result<Vec<ReconciliationResult>, sqlx::Error> {
-        let results = sqlx::query!(
+        let rows = sqlx::query!(
             r#"
-            SELECT * FROM wallet_reconciliation_alerts
+            SELECT
+                wallet_id,
+                user_id,
+                wallet_type as "wallet_type: WalletType",
+                currency,
+                actual_balance as "actual_balance: rust_decimal::Decimal",
+                expected_balance as "expected_balance: rust_decimal::Decimal",
+                discrepancy as "discrepancy: rust_decimal::Decimal"
+            FROM wallet_reconciliation_alerts
             "#
         )
         .fetch_all(&self.pool)
         .await?;
 
-        // Map to ReconciliationResult
-        // Note: This requires custom mapping since we're using a view
-        Ok(Vec::new()) // TODO: implement proper mapping
+        rows.into_iter()
+            .map(|row| {
+                Ok(ReconciliationResult {
+                    wallet_id: required(row.wallet_id, "wallet_id")?,
+                    user_id: required(row.user_id, "user_id")?,
+                    wallet_type: required(row.wallet_type, "wallet_type")?,
+                    currency: required(row.currency, "currency")?,
+                    actual_balance: required(row.actual_balance, "actual_balance")?,
+                    expected_balance: row.expected_balance.unwrap_or_default(),
+                    discrepancy: row.discrepancy.unwrap_or_default(),
+                })
+            })
+            .collect::<Result<Vec<_>, sqlx::Error>>()
     }
 }

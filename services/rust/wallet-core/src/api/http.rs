@@ -1,12 +1,6 @@
 //! HTTP API for health, metrics, and admin endpoints
 
-use axum::{
-    extract::State,
-    http::StatusCode,
-    response::IntoResponse,
-    routing::{get, post},
-    Json, Router,
-};
+use axum::{extract::State, http::StatusCode, response::IntoResponse, routing::get, Json, Router};
 use serde_json::json;
 use std::sync::Arc;
 
@@ -56,8 +50,13 @@ async fn health_check(State(state): State<Arc<AppState>>) -> impl IntoResponse {
 
 /// Readiness check handler
 async fn readiness_check(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    // Check if service is ready to accept traffic
-    let ready = state.db_pool.is_connected();
+    // Check if service is ready to accept traffic.
+    // `Pool::is_connected` was removed in sqlx 0.7, so probe the server the same
+    // way the health handler does rather than reporting a constant.
+    let ready = sqlx::query("SELECT 1")
+        .fetch_one(&state.db_pool)
+        .await
+        .is_ok();
 
     if ready {
         (StatusCode::OK, Json(json!({"ready": true})))
