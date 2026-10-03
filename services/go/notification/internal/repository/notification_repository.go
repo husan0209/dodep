@@ -10,14 +10,12 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
-	"go.uber.org/zap"
 )
 
 // NotificationRepository handles data persistence for notifications
 type NotificationRepository struct {
 	db    *pgxpool.Pool
 	redis *redis.Client
-	log   *zap.Logger
 }
 
 var errRedisUnavailable = errors.New("redis client is not initialized")
@@ -33,33 +31,33 @@ func NewNotificationRepository(db *pgxpool.Pool, rdb *redis.Client) *Notificatio
 
 // Notification represents a notification
 type Notification struct {
-	ID           string                 `json:"id"`
-	UserID       uint64                 `json:"user_id"`
-	Channel      string                 `json:"channel"`
-	Type         string                 `json:"type"`
-	Priority     string                 `json:"priority"`
-	Subject      string                 `json:"subject"`
-	Message      string                 `json:"message"`
-	Data         map[string]string      `json:"data"`
-	IsRead       bool                   `json:"is_read"`
-	CreatedAt    time.Time              `json:"created_at"`
-	ReadAt       *time.Time             `json:"read_at"`
-	SentAt       *time.Time             `json:"sent_at"`
-	Status       string                 `json:"status"`
-	ErrorMessage string                 `json:"error_message"`
-	ReferenceID  string                 `json:"reference_id"`
-	Metadata     map[string]string      `json:"metadata"`
+	ID           string            `json:"id"`
+	UserID       uint64            `json:"user_id"`
+	Channel      string            `json:"channel"`
+	Type         string            `json:"type"`
+	Priority     string            `json:"priority"`
+	Subject      string            `json:"subject"`
+	Message      string            `json:"message"`
+	Data         map[string]string `json:"data"`
+	IsRead       bool              `json:"is_read"`
+	CreatedAt    time.Time         `json:"created_at"`
+	ReadAt       *time.Time        `json:"read_at"`
+	SentAt       *time.Time        `json:"sent_at"`
+	Status       string            `json:"status"`
+	ErrorMessage string            `json:"error_message"`
+	ReferenceID  string            `json:"reference_id"`
+	Metadata     map[string]string `json:"metadata"`
 }
 
 // NotificationSettings represents user's notification settings
 type NotificationSettings struct {
-	UserID              uint64                        `json:"user_id"`
-	EmailEnabled        bool                          `json:"email_enabled"`
-	SMSEnabled          bool                          `json:"sms_enabled"`
-	PushEnabled         bool                          `json:"push_enabled"`
-	InAppEnabled        bool                          `json:"in_app_enabled"`
-	TypePreferences     map[string]ChannelPreferences `json:"type_preferences"`
-	UpdatedAt           time.Time                     `json:"updated_at"`
+	UserID          uint64                        `json:"user_id"`
+	EmailEnabled    bool                          `json:"email_enabled"`
+	SMSEnabled      bool                          `json:"sms_enabled"`
+	PushEnabled     bool                          `json:"push_enabled"`
+	InAppEnabled    bool                          `json:"in_app_enabled"`
+	TypePreferences map[string]ChannelPreferences `json:"type_preferences"`
+	UpdatedAt       time.Time                     `json:"updated_at"`
 }
 
 // ChannelPreferences represents channel preferences for a notification type
@@ -138,13 +136,13 @@ func (r *NotificationRepository) UpdateNotificationStatus(ctx context.Context, i
 func (r *NotificationRepository) GetNotificationSettings(ctx context.Context, userID uint64) (*NotificationSettings, error) {
 	// TODO: Implement database query
 	return &NotificationSettings{
-		UserID:           userID,
-		EmailEnabled:     true,
-		SMSEnabled:       false,
-		PushEnabled:      true,
-		InAppEnabled:     true,
-		TypePreferences:  make(map[string]ChannelPreferences),
-		UpdatedAt:        time.Now(),
+		UserID:          userID,
+		EmailEnabled:    true,
+		SMSEnabled:      false,
+		PushEnabled:     true,
+		InAppEnabled:    true,
+		TypePreferences: make(map[string]ChannelPreferences),
+		UpdatedAt:       time.Now(),
 	}, nil
 }
 

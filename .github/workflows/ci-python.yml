@@ -70,7 +70,9 @@ jobs:
         working-directory: services/python/${{ matrix.service }}
         run: |
           pip install --upgrade pip
-          pip install ruff black mypy
+          # black is pinned: it is a formatter, so its output changes between
+          # releases and an unpinned `black --check` breaks on its own upgrades.
+          pip install ruff mypy "black==26.5.1"
 
       - name: Run ruff
         working-directory: services/python/${{ matrix.service }}
@@ -247,7 +249,8 @@ jobs:
         # src/ only. `bandit -r .` also walks the test suite, where every
         # ordinary pytest assertion trips B101 (assert_used) and exits 1, so the
         # job could never be green regardless of the code's actual security.
-        run: bandit -r src -f json -o bandit-results.json
+        # Whole tree via each service's own [tool.bandit] (tests/ excluded).
+        run: bandit -c pyproject.toml -r . -f json -o bandit-results.json
 
       - name: Upload bandit results
         if: always()

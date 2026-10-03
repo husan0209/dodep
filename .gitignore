@@ -51,6 +51,15 @@ bandit-results.json
 safety-results.json
 *.lcov
 .nyc_output/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Helm dependency resolution output (`helm dependency update` materialises the
+# file:// service-chart dependency). Chart.lock and charts/*.tgz are
+# per-environment resolution state, not source.
+Chart.lock
+**/charts/*.tgz
 
 # Nx
 .nx/cache/

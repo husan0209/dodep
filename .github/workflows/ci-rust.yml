@@ -20,9 +20,12 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  # Floor imposed by the committed lockfile; see the comment in ci.yaml
-  # for the 1.75 / 1.78 / 1.85 evidence. Do not lower without re-checking.
-  RUST_VERSION: "1.85"
+  # Floor imposed by the committed lockfile is 1.85 (lockfile v4 + edition2024);
+  # see the comment in ci.yaml. `stable` is used instead so the toolchain always
+  # satisfies it: cargo fmt / clippy -D warnings / build / test were all verified
+  # against current stable (1.94.x), whereas 1.85 is only a lower bound nobody
+  # has run this dependency tree on.
+  RUST_VERSION: "stable"
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
@@ -39,6 +42,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
+      # Report every service instead of cancelling siblings on the first
+      # failure: a cancelled sibling hides the actual error.
+      fail-fast: false
       matrix:
         service: [betting-engine, wallet-core, websocket-gateway]
     
@@ -63,7 +69,9 @@ jobs:
 
       - name: Run rustfmt
         working-directory: services/rust/${{ matrix.service }}
-        run: cargo fmt -- --check
+        # --all matches ci.yaml: it also covers libs/shared/rust, which is a
+        # path dependency and therefore an implicit workspace member.
+        run: cargo fmt --all -- --check
 
       - name: Run clippy
         working-directory: services/rust/${{ matrix.service }}
@@ -77,6 +85,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
+      # Report every service instead of cancelling siblings on the first
+      # failure: a cancelled sibling hides the actual error.
+      fail-fast: false
       matrix:
         service: [betting-engine, wallet-core, websocket-gateway]
     
@@ -152,6 +163,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
+      # Report every service instead of cancelling siblings on the first
+      # failure: a cancelled sibling hides the actual error.
+      fail-fast: false
       matrix:
         service: [betting-engine, wallet-core, websocket-gateway]
     
@@ -164,19 +178,20 @@ jobs:
         with:
           toolchain: ${{ env.RUST_VERSION }}
 
+      # Prebuilt binary. `cargo install cargo-audit` compiles the whole
+      # rustsec/gix tree from source, which does not fit in the 15 minute budget.
       - name: Install cargo-audit
-        run: cargo install cargo-audit
+        uses: taiki-e/install-action@cargo-audit
 
       - name: Run cargo audit
         working-directory: services/rust/${{ matrix.service }}
         run: cargo audit --deny warnings
 
-      - name: Install cargo-deny
-        run: cargo install cargo-deny
-
-      - name: Run cargo deny
-        working-directory: services/rust
-        run: cargo deny check
+      # NOTE: `cargo deny check` used to run three times from services/rust with
+      # no deny.toml anywhere in the repo, so it could never pass - and each run
+      # spent most of the budget compiling cargo-deny from source. A licence /
+      # bans / sources policy needs a deny.toml first; until one exists,
+      # cargo-audit above is the advisory gate.
 
   # ==========================================================================
   # Build
@@ -187,6 +202,9 @@ jobs:
     timeout-minutes: 30
     needs: [lint, test, security]
     strategy:
+      # Report every service instead of cancelling siblings on the first
+      # failure: a cancelled sibling hides the actual error.
+      fail-fast: false
       matrix:
         service: [betting-engine, wallet-core, websocket-gateway]
     

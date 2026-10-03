@@ -79,6 +79,13 @@ warn_unused_configs = true
 # "Cannot find implementation or library stub for module named fastapi".
 ignore_missing_imports = true
 
+[tool.bandit]
+# B101 (assert_used) is not a vulnerability and a pytest suite cannot use
+# anything else, so the test tree is excluded rather than the linter being
+# pointed at src/ only - that would also skip internal/ and main.py, which
+# is where the request handling and the Kafka consumer actually live.
+exclude_dirs = ["tests"]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]

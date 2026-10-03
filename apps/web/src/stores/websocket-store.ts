@@ -19,7 +19,7 @@ interface WebSocketState {
   lastMessage: any | null
   oddsUpdates: OddsUpdate[]
   betSettlements: BetSettlement[]
-  
+
   // Actions
   connect: () => void
   disconnect: () => void
@@ -39,7 +39,7 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => ({
 
   connect: () => {
     const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8080'
-    
+
     try {
       ws = new WebSocket(wsUrl)
 
@@ -51,7 +51,7 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => ({
       ws.onmessage = (event) => {
         try {
           const message = JSON.parse(event.data)
-          
+
           set({ lastMessage: message })
 
           // Handle different message types
@@ -98,12 +98,12 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => ({
       clearTimeout(reconnectTimeout)
       reconnectTimeout = null
     }
-    
+
     if (ws) {
       ws.close()
       ws = null
     }
-    
+
     set({ isConnected: false })
   },
 

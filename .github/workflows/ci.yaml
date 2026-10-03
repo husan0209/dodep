@@ -33,7 +33,10 @@ env:
   #           0.3.0 via aes 0.9.0   (edition 2024 needs >= 1.85)
   #   1.85 -> resolves the whole workspace
   # Do not lower this without re-running that check.
-  RUST_VERSION: "1.85"
+  # The floor is 1.85; stable is used so the toolchain can only ever be
+  # newer. fmt / clippy -D warnings / build --release / test --release were
+  # all verified against current stable (1.94.x) for all three services.
+  RUST_VERSION: "stable"
   # Must satisfy the highest `go` directive in services/go/*/go.mod (>= 1.24).
   GO_VERSION: "1.26"
   PYTHON_VERSION: "3.11"
@@ -220,7 +223,9 @@ jobs:
       run: npm run build
     
     - name: Test
-      run: npm run test -- --run
+      # Plain pm run test\: -- --run is swallowed by npm >= 10 instead of
+      # reaching the runner, and both apps already use non-watch scripts.
+      run: npm run test
 
   # Security scanning
   security-scan:

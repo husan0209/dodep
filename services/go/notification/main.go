@@ -18,11 +18,11 @@ import (
 	"google.golang.org/grpc/reflection"
 
 	"github.com/opus-casino/notification/internal/config"
+	"github.com/opus-casino/notification/internal/consumer"
 	"github.com/opus-casino/notification/internal/handlers"
-	pb "github.com/opus-casino/proto/gen/go/notification/v1"
 	"github.com/opus-casino/notification/internal/repository"
 	"github.com/opus-casino/notification/internal/service"
-	"github.com/opus-casino/notification/internal/consumer"
+	pb "github.com/opus-casino/proto/gen/go/notification/v1"
 )
 
 func main() {
@@ -56,7 +56,7 @@ func main() {
 
 	// Initialize gRPC server
 	grpcServer := grpc.NewServer()
-	pb.RegisterNotificationServiceServer(grpcServer, handlers.NewNotificationGRPCHandler(notificationService))
+	pb.RegisterNotificationServiceServer(grpcServer, handlers.NewNotificationGRPCHandler(notificationService, zapLogger))
 	reflection.Register(grpcServer)
 
 	// Start gRPC server

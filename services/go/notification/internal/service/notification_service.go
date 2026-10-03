@@ -12,14 +12,33 @@ import (
 	"github.com/opus-casino/notification/internal/repository"
 )
 
+// NotificationRepository is the persistence surface NotificationService needs.
+// *repository.NotificationRepository satisfies it; tests can supply a fake so
+// business logic is exercised without a live database.
+type NotificationRepository interface {
+	CreateNotification(ctx context.Context, notif *repository.Notification) error
+	UpdateNotificationStatus(ctx context.Context, id, status, errorMessage string) error
+	MarkAsRead(ctx context.Context, id string, userID uint64) error
+	MarkAllAsRead(ctx context.Context, userID uint64, typeFilter *string) (int32, error)
+	DeleteNotification(ctx context.Context, id string, userID uint64) error
+	GetNotification(ctx context.Context, id string) (*repository.Notification, error)
+	GetUserNotifications(ctx context.Context, userID uint64, typeFilter *string, isRead *bool, dateFrom, dateTo *time.Time, limit, offset int32) ([]repository.Notification, int64, error)
+	GetUnreadCount(ctx context.Context, userID uint64) (int32, error)
+	IncrementUnreadCount(ctx context.Context, userID uint64) error
+	DecrementUnreadCount(ctx context.Context, userID uint64) error
+	SetUnreadCount(ctx context.Context, userID uint64, count int32) error
+	GetNotificationSettings(ctx context.Context, userID uint64) (*repository.NotificationSettings, error)
+	UpdateNotificationSettings(ctx context.Context, settings *repository.NotificationSettings) error
+}
+
 // NotificationService handles notification business logic
 type NotificationService struct {
-	repo *repository.NotificationRepository
+	repo NotificationRepository
 	log  *zap.Logger
 }
 
 // NewNotificationService creates a new notification service
-func NewNotificationService(repo *repository.NotificationRepository, log *zap.Logger) *NotificationService {
+func NewNotificationService(repo NotificationRepository, log *zap.Logger) *NotificationService {
 	return &NotificationService{
 		repo: repo,
 		log:  log,

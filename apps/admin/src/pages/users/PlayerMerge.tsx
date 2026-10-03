@@ -19,10 +19,8 @@ import {
 import { ArrowLeftOutlined, SafetyOutlined, MergeCellsOutlined } from "@ant-design/icons";
 import { usersService } from "@/services/users.service";
 import { formatDate } from "@/utils/format";
-import type { MergePreviewResponse } from "@/types/user";
 
 const { Title, Text } = Typography;
-const { Step } = Steps;
 
 export default function PlayerMerge() {
   const navigate = useNavigate();

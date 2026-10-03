@@ -58,6 +58,7 @@ func TestDepositFlow_Complete(t *testing.T) {
 		userClient,
 		nil, // producer
 		nil, // tracer
+		"https://test.com/webhook", // ipnCallbackURL
 	)
 	_ = paymentService
 

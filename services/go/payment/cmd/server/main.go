@@ -23,8 +23,8 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.24.0"
 	"go.opentelemetry.io/otel/trace"
-	"golang.org/x/sync/errgroup"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
@@ -78,7 +78,11 @@ func run() error {
 		if err != nil {
 			return fmt.Errorf("init tracing: %w", err)
 		}
-		defer shutdownTracing(context.Background())
+		defer func() {
+			if err := shutdownTracing(context.Background()); err != nil {
+				log.Error().Err(err).Msg("Failed to shut down tracing")
+			}
+		}()
 	}
 
 	// 4. Initialize database
@@ -176,7 +180,7 @@ func initTracing(cfg *config.Config) (func(context.Context) error, trace.Tracer,
 	if cfg.Tracing.Insecure {
 		opts = append(opts, otlptracegrpc.WithInsecure())
 	}
-	
+
 	exporter, err := otlptracegrpc.New(ctx, opts...)
 	if err != nil {
 		return nil, nil, fmt.Errorf("create trace exporter: %w", err)

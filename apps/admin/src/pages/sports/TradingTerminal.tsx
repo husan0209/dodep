@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Card, Typography, Select, Tag, Statistic, Row, Col, List, Button, message } from "antd";
+import { Card, Typography, Select, Tag, Statistic, Row, Col, Button, message } from "antd";
 import { ArrowUpOutlined, ArrowDownOutlined, ReloadOutlined } from "@ant-design/icons";
 import { sportsService } from "@/services/sports.service";
 

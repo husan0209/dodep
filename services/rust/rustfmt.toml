@@ -1,8 +1,10 @@
-[format]
-edition = "2021"
+# rustfmt settings for the Rust workspace.
+#
+# These used to live under `[format]` / `[clippy]` tables, which modern rustfmt
+# ignores entirely - it printed "Unknown configuration option `format`" on every
+# run and none of the values were applied. `[clippy]` never belonged here at
+# all; clippy reads `clippy.toml`.
+#
+# edition is passed by `cargo fmt` from each crate's Cargo.toml.
 newline_style = "unix"
 use_small_heuristics = "Default"
-
-[clippy]
-allowed-warnings = 0
-deny = ["clippy::pedantic"]

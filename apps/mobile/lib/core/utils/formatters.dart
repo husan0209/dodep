@@ -44,11 +44,11 @@ String formatOdds(num odds, String format) {
 /// Format odds as fractional
 String _formatFractional(num odds) {
   if (odds <= 1) return '0/1';
-  
+
   final profit = odds - 1;
   const denominator = 100;
   final numerator = (profit * denominator).round();
-  
+
   final gcd = _gcd(numerator, denominator);
   return '${numerator ~/ gcd}/${denominator ~/ gcd}';
 }

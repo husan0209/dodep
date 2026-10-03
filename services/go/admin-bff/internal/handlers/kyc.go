@@ -74,7 +74,12 @@ func RegisterKycRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger) {
 		var r models.KycReview
 		if err := db.Select("document_id").Where("id = ?", id).First(&r).Error; err == nil {
 			ds := "pending"
-			if st == "approved" { ds = "verified" } else if st == "rejected" { ds = "rejected" }
+			switch st {
+			case "approved":
+				ds = "verified"
+			case "rejected":
+				ds = "rejected"
+			}
 			db.Model(&models.KycDocument{}).Where("id = ?", r.DocumentID).Update("status", ds)
 		}
 		return c.JSON(fiber.Map{"success": true})
@@ -131,7 +136,12 @@ func RegisterKycRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger) {
 		var req struct { Decision string `json:"decision"`; Notes string `json:"notes"` }
 		if err := c.BodyParser(&req); err != nil { return c.Status(400).JSON(fiber.Map{"error": "invalid body"}) }
 		st := req.Decision
-		if st == "approve" { st = "approved" } else if st == "reject" { st = "rejected" }
+		switch st {
+		case "approve":
+			st = "approved"
+		case "reject":
+			st = "rejected"
+		}
 		db.Model(&models.SofRequest{}).Where("id = ?", c.Params("id")).Updates(map[string]any{
 			"status": st, "notes": req.Notes, "reviewed_at": time.Now(),
 		})
@@ -180,10 +190,14 @@ func RegisterKycRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger) {
 
 	kyc.Post("/screenings/:id/review", func(c *fiber.Ctx) error {
 		var req struct { Decision string `json:"decision"`; Notes string `json:"notes"` }
-		c.BodyParser(&req)
-		db.Model(&models.ScreeningResult{}).Where("id = ?", c.Params("id")).Updates(map[string]any{
+		if err := c.BodyParser(&req); err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": "invalid request body"})
+		}
+		if err := db.Model(&models.ScreeningResult{}).Where("id = ?", c.Params("id")).Updates(map[string]any{
 			"status": req.Decision, "review_notes": req.Notes, "reviewed_at": time.Now(),
-		})
+		}).Error; err != nil {
+			return c.Status(500).JSON(fiber.Map{"error": "database error"})
+		}
 		return c.JSON(fiber.Map{"success": true})
 	})
 

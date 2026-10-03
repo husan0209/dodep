@@ -1,4 +1,3 @@
-import '../../../core/error/exceptions.dart';
 import '../models/auth_tokens.dart';
 import '../models/user_model.dart';
 

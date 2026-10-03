@@ -8,7 +8,6 @@ import {
   Statistic,
   Row,
   Col,
-  Space,
 } from "antd";
 import { ReloadOutlined, WarningOutlined } from "@ant-design/icons";
 import { paymentsService } from "@/services/payments.service";

@@ -21,9 +21,7 @@ export function Balances() {
               {wallet.currency}
             </span>
           </div>
-          <p className="text-2xl font-bold text-white">
-            {wallet.balance.toLocaleString('ru-RU')}
-          </p>
+          <p className="text-2xl font-bold text-white">{wallet.balance.toLocaleString('ru-RU')}</p>
           {wallet.locked > 0 && (
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
               В ставках: {wallet.locked.toLocaleString('ru-RU')}

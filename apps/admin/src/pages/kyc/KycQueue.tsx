@@ -26,7 +26,7 @@ import { kycService } from "@/services/kyc.service";
 import { useAuthStore } from "@/stores/authStore";
 import type { KycReviewItem, KycReviewPayload } from "@/types/kyc";
 
-const { Title, Text } = Typography;
+const { Title } = Typography;
 const { TextArea } = Input;
 
 const PRIORITY_COLORS: Record<string, string> = {

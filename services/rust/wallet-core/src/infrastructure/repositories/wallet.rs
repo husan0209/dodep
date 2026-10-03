@@ -1,11 +1,15 @@
 //! Wallet repository
 
-use chrono::Utc;
 use rust_decimal::Decimal;
 use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
-use crate::domain::{Wallet, WalletType, WalletError};
+use crate::domain::{Wallet, WalletError, WalletType};
+
+/// Columns selected wherever a `wallets` row is loaded.
+const WALLET_COLUMNS: &str = "id, user_id, wallet_type, currency, balance_available, \
+                             balance_locked, balance_bonus, version, is_active, created_at, \
+                             updated_at";
 
 /// Wallet repository
 pub struct WalletRepository {
@@ -16,35 +20,30 @@ impl WalletRepository {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
-    
+
     /// Get wallet by user and type
     pub async fn get_by_user_and_type(
         &self,
         user_id: Uuid,
         wallet_type: WalletType,
     ) -> Result<Option<Wallet>, WalletError> {
-        let wallet = sqlx::query_as!(
-            Wallet,
+        let sql = format!(
             r#"
-            SELECT 
-                id, user_id, wallet_type as "WalletType: _",
-                currency, balance_available as "Decimal: rust_decimal::Decimal",
-                balance_locked as "Decimal: rust_decimal::Decimal",
-                balance_bonus as "Decimal: rust_decimal::Decimal",
-                version, is_active, created_at, updated_at
+            SELECT {WALLET_COLUMNS}
             FROM wallets
             WHERE user_id = $1 AND wallet_type = $2 AND is_active = true
-            "#,
-            user_id,
-            wallet_type as _
-        )
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(|e| WalletError::DatabaseError(e.to_string()))?;
-        
+            "#
+        );
+
+        let wallet = sqlx::query_as::<_, Wallet>(&sql)
+            .bind(user_id)
+            .bind(wallet_type)
+            .fetch_optional(&self.pool)
+            .await?;
+
         Ok(wallet)
     }
-    
+
     /// Get wallet by user and type within a transaction (with row lock)
     pub async fn get_by_user_and_type_internal(
         &self,
@@ -52,29 +51,24 @@ impl WalletRepository {
         wallet_type: WalletType,
         tx: &mut Transaction<'_, Postgres>,
     ) -> Result<Option<Wallet>, WalletError> {
-        let wallet = sqlx::query_as!(
-            Wallet,
+        let sql = format!(
             r#"
-            SELECT 
-                id, user_id, wallet_type as "WalletType: _",
-                currency, balance_available as "Decimal: rust_decimal::Decimal",
-                balance_locked as "Decimal: rust_decimal::Decimal",
-                balance_bonus as "Decimal: rust_decimal::Decimal",
-                version, is_active, created_at, updated_at
+            SELECT {WALLET_COLUMNS}
             FROM wallets
             WHERE user_id = $1 AND wallet_type = $2 AND is_active = true
             FOR UPDATE
-            "#,
-            user_id,
-            wallet_type as _
-        )
-        .fetch_optional(&mut **tx)
-        .await
-        .map_err(|e| WalletError::DatabaseError(e.to_string()))?;
-        
+            "#
+        );
+
+        let wallet = sqlx::query_as::<_, Wallet>(&sql)
+            .bind(user_id)
+            .bind(wallet_type)
+            .fetch_optional(&mut **tx)
+            .await?;
+
         Ok(wallet)
     }
-    
+
     /// Update wallet balance with optimistic locking
     pub async fn update_balances(
         &self,
@@ -84,7 +78,7 @@ impl WalletRepository {
         bonus: Decimal,
         version: i32,
     ) -> Result<(), WalletError> {
-        let result = sqlx::query!(
+        let result = sqlx::query(
             r#"
             UPDATE wallets
             SET 
@@ -96,20 +90,19 @@ impl WalletRepository {
             WHERE id = $1 AND version = $2
             RETURNING id
             "#,
-            id,
-            version,
-            available as _,
-            locked as _,
-            bonus as _,
         )
+        .bind(id)
+        .bind(version)
+        .bind(available)
+        .bind(locked)
+        .bind(bonus)
         .fetch_optional(&self.pool)
-        .await
-        .map_err(|e| WalletError::DatabaseError(e.to_string()))?;
-        
+        .await?;
+
         if result.is_none() {
-            return Err(WalletError::ConcurrencyConflict);
+            return Err(WalletError::concurrency_conflict());
         }
-        
+
         Ok(())
     }
 }

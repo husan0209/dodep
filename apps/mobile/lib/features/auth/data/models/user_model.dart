@@ -34,15 +34,15 @@ class UserModel extends User {
   final DateTime _createdAt;
 
   const UserModel({
-    required int id,
-    required String email,
-    required String username,
-    String? phone,
-    String? country,
-    String? currency,
-    int kycLevel = 0,
-    bool isActive = true,
-    required DateTime createdAt,
+    required super.id,
+    required super.email,
+    required super.username,
+    super.phone,
+    super.country,
+    super.currency,
+    super.kycLevel,
+    super.isActive,
+    required super.createdAt,
   })  : _id = id,
         _email = email,
         _username = username,
@@ -51,20 +51,10 @@ class UserModel extends User {
         _currency = currency,
         _kycLevel = kycLevel,
         _isActive = isActive,
-        _createdAt = createdAt,
-        super(
-          id: id,
-          email: email,
-          username: username,
-          phone: phone,
-          country: country,
-          currency: currency,
-          kycLevel: kycLevel,
-          isActive: isActive,
-          createdAt: createdAt,
-        );
+        _createdAt = createdAt;
 
-  factory UserModel.fromJson(Map<String, dynamic> json) => _$UserModelFromJson(json);
+  factory UserModel.fromJson(Map<String, dynamic> json) =>
+      _$UserModelFromJson(json);
 
   Map<String, dynamic> toJson() => _$UserModelToJson(this);
 
@@ -84,7 +74,6 @@ class UserModel extends User {
   }
 
   /// Convert to User entity
-  @override
   User toEntity() => User(
         id: _id,
         email: _email,

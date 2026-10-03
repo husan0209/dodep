@@ -125,3 +125,31 @@ func (c *UserClient) GetActivity(ctx context.Context, userID int64, pageSize int
 	}
 	return resp.Activities, resp.Pagination, nil
 }
+
+// GetLimits retrieves responsible-gambling limits for a user.
+func (c *UserClient) GetLimits(ctx context.Context, userID int64) (*userv1.UserLimits, error) {
+	ctx, cancel := context.WithTimeout(ctx, c.timeout)
+	defer cancel()
+
+	resp, err := c.client.GetLimits(ctx, &userv1.GetLimitsRequest{UserId: userIDProto(userID)})
+	if err != nil {
+		return nil, fmt.Errorf("get limits: %w", err)
+	}
+	return resp.Limits, nil
+}
+
+// SetLimits updates responsible-gambling limits for a user.
+func (c *UserClient) SetLimits(ctx context.Context, userID int64, req *userv1.SetLimitsRequest) (*userv1.UserLimits, error) {
+	ctx, cancel := context.WithTimeout(ctx, c.timeout)
+	defer cancel()
+
+	req.UserId = userIDProto(userID)
+	resp, err := c.client.SetLimits(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("set limits: %w", err)
+	}
+	if resp.Error != nil && resp.Error.ErrorMessage != "" {
+		return nil, fmt.Errorf("set limits: %s", resp.Error.ErrorMessage)
+	}
+	return resp.Limits, nil
+}

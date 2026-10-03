@@ -1,0 +1,100 @@
+# ArgoCD Applications — RG Service (standalone file, does not edit shared appsets)
+# Chart: infra/helm/charts/rg (ports 8091 HTTP / 50062 gRPC,
+#        see services/go/rg/internal/config/config.go)
+#
+# Sync policy note: RG is a compliance control on the critical path of every
+# bet / game launch / deposit. Dev auto-syncs (matches affiliate/analytics).
+# Production is manual here on purpose — a bad RG rollout can block betting,
+# so promotion stays a human decision.
+
+---
+# RG Service - Dev (auto-sync)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: dev-rg
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: rg
+    app.kubernetes.io/environment: dev
+spec:
+  project: services
+  source:
+    repoURL: https://github.com/opus-casino/infra.git
+    targetRevision: HEAD
+    path: infra/helm/charts/rg
+    helm:
+      valueFiles:
+        - values.yaml
+      values: |
+        replicaCount: 1
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: dev
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 3
+
+---
+# RG Service - Staging (manual sync)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: staging-rg
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: rg
+    app.kubernetes.io/environment: staging
+spec:
+  project: services
+  source:
+    repoURL: https://github.com/opus-casino/infra.git
+    targetRevision: HEAD
+    path: infra/helm/charts/rg
+    helm:
+      valueFiles:
+        - values.yaml
+      values: |
+        replicaCount: 2
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: staging
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 3
+
+---
+# RG Service - Production (manual sync)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: production-rg
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: rg
+    app.kubernetes.io/environment: production
+spec:
+  project: services
+  source:
+    repoURL: https://github.com/opus-casino/infra.git
+    targetRevision: HEAD
+    path: infra/helm/charts/rg
+    helm:
+      valueFiles:
+        - values-production.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: platform
+  syncPolicy:
+    # Manual sync for production: an RG regression blocks gambling.
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 3

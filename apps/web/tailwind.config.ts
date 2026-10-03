@@ -56,10 +56,11 @@ const config: Config = {
         '4xl': '1.5rem',
       },
       boxShadow: {
-        'glow-gold': '0 0 20px -5px rgb(var(--shadow-gold) / 0.3), 0 0 40px -10px rgb(var(--shadow-gold) / 0.15)',
+        'glow-gold':
+          '0 0 20px -5px rgb(var(--shadow-gold) / 0.3), 0 0 40px -10px rgb(var(--shadow-gold) / 0.15)',
         'glow-gold-sm': '0 0 12px -3px rgb(var(--shadow-gold) / 0.25)',
         'glow-cyan': '0 0 20px -5px rgb(var(--shadow-cyan) / 0.3)',
-        'card': '0 4px 24px -6px rgb(0 0 0 / 0.4), inset 0 1px 0 0 rgb(255 255 255 / 0.03)',
+        card: '0 4px 24px -6px rgb(0 0 0 / 0.4), inset 0 1px 0 0 rgb(255 255 255 / 0.03)',
         'card-hover': '0 8px 40px -8px rgb(0 0 0 / 0.5), inset 0 1px 0 0 rgb(255 255 255 / 0.05)',
       },
       animation: {
@@ -67,9 +68,9 @@ const config: Config = {
         'fade-in': 'fadeIn 0.2s ease-out forwards',
         'slide-up': 'slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards',
         'scale-in': 'scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards',
-        'shimmer': 'shimmer 2s infinite linear',
+        shimmer: 'shimmer 2s infinite linear',
         'live-pulse': 'livePulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-        'float': 'float 3s ease-in-out infinite',
+        float: 'float 3s ease-in-out infinite',
         'glow-pulse': 'glowPulse 2s ease-in-out infinite',
       },
       keyframes: {

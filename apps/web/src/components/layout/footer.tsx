@@ -32,7 +32,9 @@ export function Footer() {
               Лицензированная платформа для ставок и игр.
             </p>
             <div className="mt-3 flex items-center gap-2">
-              <span className="text-[10px] font-bold text-red-400 bg-red-500/10 px-1.5 py-0.5 rounded">18+</span>
+              <span className="text-[10px] font-bold text-red-400 bg-red-500/10 px-1.5 py-0.5 rounded">
+                18+
+              </span>
             </div>
           </div>
 
@@ -44,7 +46,10 @@ export function Footer() {
               <ul className="space-y-1">
                 {links.map((link) => (
                   <li key={link.name}>
-                    <Link href={link.href} className="text-[10px] text-gray-600 hover:text-gray-400 transition-colors">
+                    <Link
+                      href={link.href}
+                      className="text-[10px] text-gray-600 hover:text-gray-400 transition-colors"
+                    >
                       {link.name}
                     </Link>
                   </li>

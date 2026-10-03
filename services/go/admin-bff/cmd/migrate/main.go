@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -98,13 +100,19 @@ func main() {
 		}
 
 		if _, err := tx.Exec(ctx, sql); err != nil {
-			tx.Rollback(ctx)
+			// The rollback error cannot be acted on - we are aborting the process
+			// immediately - but it must be reported so a broken connection is visible.
+			if rbErr := tx.Rollback(ctx); rbErr != nil && !errors.Is(rbErr, pgx.ErrTxClosed) {
+				fmt.Fprintf(os.Stderr, "rollback after failed apply %d: %v\n", m.version, rbErr)
+			}
 			fmt.Fprintf(os.Stderr, "apply %d: %v\n", m.version, err)
 			os.Exit(1)
 		}
 
 		if _, err := tx.Exec(ctx, `INSERT INTO schema_migrations (version, dirty) VALUES ($1, FALSE)`, m.version); err != nil {
-			tx.Rollback(ctx)
+			if rbErr := tx.Rollback(ctx); rbErr != nil && !errors.Is(rbErr, pgx.ErrTxClosed) {
+				fmt.Fprintf(os.Stderr, "rollback after failed record %d: %v\n", m.version, rbErr)
+			}
 			fmt.Fprintf(os.Stderr, "record %d: %v\n", m.version, err)
 			os.Exit(1)
 		}

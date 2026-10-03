@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Form, Input, Button, Card, Typography, App as AntApp, Space, Steps } from "antd";
-import { UserOutlined, LockOutlined, SafetyOutlined } from "@ant-design/icons";
+import { UserOutlined, LockOutlined } from "@ant-design/icons";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
 import { z } from "zod";
@@ -21,15 +21,6 @@ interface CredentialsForm {
 interface TOTPForm {
   totp_code: string;
 }
-
-const credentialsSchema = z.object({
-  email: z.string().email("Please enter a valid email").min(1, "Email is required"),
-  password: z.string().min(1, "Password is required"),
-});
-
-const totpSchema = z.object({
-  totp_code: z.string().length(6, "TOTP code must be 6 digits").regex(/^\d+$/, "Only digits allowed"),
-});
 
 const loginResponseSchema = z.object({
   access_token: z.string(),

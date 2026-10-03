@@ -18,7 +18,9 @@ env:
   CARGO_TERM_COLOR: always
   # Floor imposed by the committed lockfile; see the comment in ci.yaml
   # for the 1.75 / 1.78 / 1.85 evidence. Do not lower without re-checking.
-  RUST_VERSION: "1.85"
+  # Floor is 1.85 (lockfile v4 + edition2024); stable can only ever be newer,
+  # and is what the Rust CI steps were verified against.
+  RUST_VERSION: "stable"
   # Must satisfy the highest `go` directive in services/go/*/go.mod (>= 1.24).
   GO_VERSION: '1.26'
   PYTHON_VERSION: '3.11'
@@ -27,6 +29,15 @@ env:
 jobs:
   # ==========================================================================
   # Build and Test
+  #
+  # This is the pre-deploy gate for the artifacts the jobs below publish: the
+  # Rust workspace, every Go service, apps/web and apps/admin.
+  #
+  # It deliberately does NOT re-run lint/tests. Those live in the dedicated
+  # per-language workflows and are enforced by branch protection; the previous
+  # version duplicated them with commands that could not run at all - root
+  # `npm run lint` goes through nx, which has no projects configured, and
+  # golangci-lint / ruff were never installed in the job.
   # ==========================================================================
   build-and-test:
     name: Build and Test
@@ -54,36 +65,29 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Install dependencies
+      - name: Build Go services
         run: |
-          npm install
-          cd services/rust && cargo fetch
-          cd ../go/auth && go mod download
-          cd ../../python/fraud-ml && pip install -r requirements.txt
+          set -euo pipefail
+          for dir in services/go/*/; do
+            echo "::group::go build ${dir}"
+            (cd "${dir}" && go build ./...)
+            echo "::endgroup::"
+          done
 
-      - name: Run linters
+      - name: Build Rust workspace
         run: |
-          npm run lint
-          cd services/rust && cargo clippy -- -D warnings
-          cd ../go/auth && golangci-lint run
-          cd ../../python/fraud-ml && ruff check .
+          set -euo pipefail
+          cd services/rust
+          cargo build --release
 
-      - name: Run tests
+      - name: Build web and admin
         run: |
-          npm run test
-          cd services/rust && cargo test
-          cd ../go/auth && go test ./...
-          cd ../../python/fraud-ml && pytest
-
-      - name: Build
-        run: |
-          npm run build
-          cd services/rust && cargo build --release
+          set -euo pipefail
+          for app in web admin; do
+            echo "::group::npm build apps/${app}"
+            (cd "apps/${app}" && npm ci && npm run build)
+            echo "::endgroup::"
+          done
 
   # ==========================================================================
   # Deploy to Vercel (Web Frontend)

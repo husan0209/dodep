@@ -13,7 +13,10 @@ export function ProfilePage() {
             { label: 'Имя пользователя', value: 'Player123' },
             { label: 'Страна', value: 'Россия' },
           ].map((item) => (
-            <div key={item.label} className="flex items-center justify-between py-1.5 border-b border-[rgb(var(--border))] last:border-0">
+            <div
+              key={item.label}
+              className="flex items-center justify-between py-1.5 border-b border-[rgb(var(--border))] last:border-0"
+            >
               <span className="text-[10px] text-gray-500">{item.label}</span>
               <span className="text-xs text-gray-200">{item.value}</span>
             </div>
@@ -30,9 +33,7 @@ export function ProfilePage() {
           <div className="bg-yellow-500 h-1.5 rounded-full" style={{ width: '33%' }} />
         </div>
         <p className="text-[10px] text-gray-600">Пройдите верификацию для увеличения лимитов</p>
-        <button className="btn-outline mt-3 w-full">
-          Пройти KYC сейчас
-        </button>
+        <button className="btn-outline mt-3 w-full">Пройти KYC сейчас</button>
       </div>
     </div>
   )

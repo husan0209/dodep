@@ -7,17 +7,10 @@ use std::net::SocketAddr;
 
 use tokio::signal;
 use tracing::info;
-
-mod api;
-mod config;
-mod domain;
-mod errors;
-mod infrastructure;
-mod state;
-
-use config::AppConfig;
-use infrastructure::kafka_consumer::KafkaBroadcaster;
-use state::AppState;
+use websocket_gateway::api;
+use websocket_gateway::config::AppConfig;
+use websocket_gateway::infrastructure::kafka_consumer::KafkaBroadcaster;
+use websocket_gateway::state::AppState;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

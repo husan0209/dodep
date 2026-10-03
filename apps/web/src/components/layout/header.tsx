@@ -48,13 +48,17 @@ export function Header() {
               <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-yellow-400 to-amber-500 flex items-center justify-center shadow-glow-gold-sm group-hover:shadow-glow-gold transition-shadow duration-300">
                 <CurrencyDollarIcon className="h-5 w-5 text-slate-950" />
               </div>
-              <span className="text-xl font-bold tracking-tight text-gradient-gold hidden sm:block">DOD</span>
+              <span className="text-xl font-bold tracking-tight text-gradient-gold hidden sm:block">
+                DOD
+              </span>
             </Link>
 
             {/* Main nav - pill style */}
             <nav className="hidden lg:flex items-center gap-1 bg-bg-secondary/60 rounded-2xl p-1 border border-border/40">
               {mainNav.map((item) => {
-                const isActive = pathname === item.href || (item.href !== '/' && pathname?.startsWith(item.href.split('?')[0]))
+                const isActive =
+                  pathname === item.href ||
+                  (item.href !== '/' && pathname?.startsWith(item.href.split('?')[0]))
                 return (
                   <Link
                     key={item.name}
@@ -102,14 +106,20 @@ export function Header() {
                   >
                     <WalletIcon className="h-4 w-4 text-text-muted" />
                     <span className="text-sm font-bold text-text-primary font-mono tabular-nums">
-                      {'balance' in (user || {}) && (user as unknown as { balance?: number }).balance
-                        ? (user as unknown as { balance: number }).balance.toLocaleString('ru-RU', { minimumFractionDigits: 2 })
+                      {'balance' in (user || {}) &&
+                      (user as unknown as { balance?: number }).balance
+                        ? (user as unknown as { balance: number }).balance.toLocaleString('ru-RU', {
+                            minimumFractionDigits: 2,
+                          })
                         : '0.00'}
                     </span>
                     <span className="text-xs text-text-muted">₽</span>
                   </Link>
 
-                  <Link href="/wallet" className="btn-primary text-xs px-4 py-2 shadow-glow-gold-sm hidden sm:inline-flex">
+                  <Link
+                    href="/wallet"
+                    className="btn-primary text-xs px-4 py-2 shadow-glow-gold-sm hidden sm:inline-flex"
+                  >
                     Депозит
                   </Link>
 
@@ -120,15 +130,23 @@ export function Header() {
                     <div className="w-7 h-7 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center text-white text-xs font-bold">
                       {user?.username?.charAt(0).toUpperCase() || 'U'}
                     </div>
-                    <span className="hidden lg:inline text-sm font-medium">{user?.username || 'Профиль'}</span>
+                    <span className="hidden lg:inline text-sm font-medium">
+                      {user?.username || 'Профиль'}
+                    </span>
                   </Link>
                 </div>
               ) : (
                 <div className="flex items-center gap-2">
-                  <Link href="/login" className="px-4 py-2 text-sm font-medium text-text-secondary hover:text-text-primary hover:bg-white/5 rounded-xl transition-all duration-200">
+                  <Link
+                    href="/login"
+                    className="px-4 py-2 text-sm font-medium text-text-secondary hover:text-text-primary hover:bg-white/5 rounded-xl transition-all duration-200"
+                  >
                     Войти
                   </Link>
-                  <Link href="/register" className="btn-primary text-xs px-4 py-2.5 shadow-glow-gold-sm">
+                  <Link
+                    href="/register"
+                    className="btn-primary text-xs px-4 py-2.5 shadow-glow-gold-sm"
+                  >
                     Регистрация
                   </Link>
                 </div>
@@ -139,7 +157,11 @@ export function Header() {
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
                 className="lg:hidden p-2 rounded-xl hover:bg-white/5 text-text-muted hover:text-text-primary transition-all duration-200"
               >
-                {mobileMenuOpen ? <XMarkIcon className="h-5 w-5" /> : <Bars3Icon className="h-5 w-5" />}
+                {mobileMenuOpen ? (
+                  <XMarkIcon className="h-5 w-5" />
+                ) : (
+                  <Bars3Icon className="h-5 w-5" />
+                )}
               </button>
             </div>
           </div>

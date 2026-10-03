@@ -65,4 +65,3 @@ export function trackEvent(event: TelemetryEvent, payload: TelemetryPayload = {}
     console.info('[telemetry]', event, normalizedPayload)
   }
 }
-

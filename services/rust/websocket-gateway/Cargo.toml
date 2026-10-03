@@ -6,12 +6,19 @@ description = "Real-time WebSocket gateway for Opus Casino platform"
 
 [dependencies]
 # Async runtime
-tokio = { version = "1.35", features = ["full", "rt-multi-thread", "io-uring"] }
+tokio = { version = "1.35", features = ["full", "rt-multi-thread"] }
 
 # Web framework
 axum = { version = "0.7", features = ["macros", "ws"] }
 tower = "0.4"
-tower-http = { version = "0.5", features = ["trace", "cors", "compression-gzip"] }
+tower-http = { version = "0.5", features = ["trace", "cors", "compression-gzip", "request-id"] }
+
+# Configuration
+config = "0.14"
+dotenvy = "0.15"
+
+# Async helpers (StreamExt/SinkExt for the WebSocket split halves)
+futures = "0.3"
 
 # WebSocket
 tokio-tungstenite = "0.21"
@@ -29,7 +36,7 @@ prost = "0.12"
 redis = { version = "0.24", features = ["tokio-comp", "connection-manager"] }
 
 # Message broker
-rdkafka = { version = "0.36", features = ["tokio"] }
+rdkafka = { version = "0.36", features = ["tokio", "cmake-build"] }
 
 # Logging & tracing
 tracing = "0.1"
@@ -51,9 +58,13 @@ dashmap = "5.5"
 
 [dev-dependencies]
 tokio-test = "0.4"
+# Real WebSocket client for the handshake/ping-pong integration tests.
+tokio-tungstenite = "0.21"
+futures = "0.3"
 
 [build-dependencies]
 tonic-build = "0.10"
+protoc-bin-vendored = "3.0.0"
 
 [[bin]]
 name = "websocket-gateway"

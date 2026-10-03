@@ -37,6 +37,15 @@ spec:
             - name: http
               containerPort: {{ .Values.service.targetPort }}
               protocol: TCP
+          {{- if .Values.service.grpcTargetPort }}
+            # Optional gRPC port. Charts that set service.grpcTargetPort
+            # (bonus, casino, kyc, notification, payment, rg, user,
+            # wallet-core) had it silently dropped before, so no gRPC Service
+            # port existed for them.
+            - name: grpc
+              containerPort: {{ .Values.service.grpcTargetPort }}
+              protocol: TCP
+          {{- end }}
           {{- if .Values.healthCheck }}
           livenessProbe:
             httpGet:

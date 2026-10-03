@@ -11,38 +11,24 @@ use crate::domain::channel::Topic;
 pub type ClientSender = mpsc::Sender<Message>;
 
 /// Global subscription map: topic -> set of client senders
+#[derive(Default)]
 pub struct SubscriptionManager {
     subscriptions: DashMap<Topic, Vec<ClientSender>>,
     connection_count: Arc<AtomicU64>,
-    topic_counts: DashMap<i64, usize>, // per-user subscription counts (key=user_id from user_bets/user_balance topics)
 }
 
 impl SubscriptionManager {
     pub fn new() -> Self {
-        Self {
-            subscriptions: DashMap::new(),
-            connection_count: Arc::new(AtomicU64::new(0)),
-            topic_counts: DashMap::new(),
-        }
+        Self::default()
     }
 
     pub fn subscribe(&self, topic: Topic, sender: ClientSender) {
-        self.subscriptions
-            .entry(topic)
-            .or_default()
-            .push(sender);
+        self.subscriptions.entry(topic).or_default().push(sender);
     }
 
     pub fn unsubscribe(&self, topic: &Topic, sender: &ClientSender) {
         if let Some(mut senders) = self.subscriptions.get_mut(topic) {
-            let sender_ptr = sender as *const _;
-            senders.retain(|s| {
-                if s.is_closed() {
-                    return false;
-                }
-                let s_ptr = s as *const _;
-                sender_ptr != s_ptr
-            });
+            senders.retain(|s| !s.is_closed() && !s.same_channel(sender));
         }
     }
 
@@ -74,14 +60,14 @@ impl SubscriptionManager {
     }
 
     pub fn subscriber_count(&self, topic: &Topic) -> usize {
-        self.subscriptions
-            .get(topic)
-            .map(|s| s.len())
-            .unwrap_or(0)
+        self.subscriptions.get(topic).map(|s| s.len()).unwrap_or(0)
     }
 
     pub fn total_subscriptions(&self) -> usize {
-        self.subscriptions.iter().map(|entry| entry.value().len()).sum()
+        self.subscriptions
+            .iter()
+            .map(|entry| entry.value().len())
+            .sum()
     }
 }
 
@@ -90,7 +76,6 @@ impl Clone for SubscriptionManager {
         Self {
             subscriptions: DashMap::new(),
             connection_count: Arc::clone(&self.connection_count),
-            topic_counts: DashMap::new(),
         }
     }
 }
