@@ -50,7 +50,6 @@ export default function AffiliatePayouts() {
     id: string | null;
   }>({ open: false, id: null });
   const [rejectReason, setRejectReason] = useState("");
-  const [approveRef, setApproveRef] = useState("");
   const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery({
@@ -59,7 +58,7 @@ export default function AffiliatePayouts() {
   });
 
   const approveMutation = useMutation({
-    mutationFn: ({ id, ref }: { id: string; ref: string }) =>
+    mutationFn: ({ id, ref }: { id: string; ref?: string }) =>
       affiliatesService.approvePayout(id, ref),
     onSuccess: () => {
       message.success("Payout approved");
@@ -121,9 +120,7 @@ export default function AffiliatePayouts() {
             <Button
               size="small"
               type="primary"
-              onClick={() =>
-                approveMutation.mutate({ id: record.id, ref: approveRef })
-              }
+              onClick={() => approveMutation.mutate({ id: record.id })}
               loading={approveMutation.isPending}
             >
               Approve

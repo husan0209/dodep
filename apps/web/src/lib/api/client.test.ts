@@ -1,3 +1,11 @@
+/**
+ * @jest-environment node
+ *
+ * The API client is exercised through the platform `fetch` implementation.
+ * `jest-environment-jsdom` (the project default, used for component tests)
+ * ships a DOM without `fetch`, so this suite opts into the Node environment
+ * to get the real thing.
+ */
 jest.mock("@/stores/auth-store", () => ({
   useAuthStore: {
     getState: () => ({

@@ -14,7 +14,6 @@ import {
   Modal,
 } from "antd";
 import {
-  SearchOutlined,
   MoreOutlined,
   TagOutlined,
   TeamOutlined,
@@ -72,7 +71,6 @@ export default function UserList() {
   const [lastLoginRange, setLastLoginRange] = useState<[Dayjs | null, Dayjs | null]>([null, null]);
   const [depositRange, setDepositRange] = useState<{ min?: string; max?: string }>({});
   const [ggrRange, setGgrRange] = useState<{ min?: string; max?: string }>({});
-  const [balanceRange, setBalanceRange] = useState<{ min?: string; max?: string }>({});
   const [riskScoreRange, setRiskScoreRange] = useState<{ min?: number; max?: number }>({});
 
   // Pagination
@@ -97,8 +95,6 @@ export default function UserList() {
       deposit_max: depositRange.max,
       ggr_min: ggrRange.min,
       ggr_max: ggrRange.max,
-      balance_min: balanceRange.min,
-      balance_max: balanceRange.max,
       risk_score_min: riskScoreRange.min,
       risk_score_max: riskScoreRange.max,
       sort_by: sorter?.field as string,
@@ -106,7 +102,7 @@ export default function UserList() {
     };
   }, [
     page, pageSize, search, status, kycLevel, countryCode, playerGroup, selectedTags,
-    regDateRange, lastLoginRange, depositRange, ggrRange, balanceRange, riskScoreRange,
+    regDateRange, lastLoginRange, depositRange, ggrRange, riskScoreRange,
     sorter,
   ]);
 
