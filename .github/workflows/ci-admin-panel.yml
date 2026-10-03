@@ -95,7 +95,7 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
 
       - name: Scan image (Trivy)
-        uses: aquasecurity/trivy-action@v0.18
+        uses: aquasecurity/trivy-action@v0.18.0
         with:
           image-ref: ${{ steps.version.outputs.image }}
           severity: "CRITICAL,HIGH"

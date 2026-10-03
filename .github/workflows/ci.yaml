@@ -8,7 +8,14 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  RUST_VERSION: "1.75"
+  # 1.85 is the floor imposed by the committed lockfile:
+  #   1.75 -> lock file version `4` was found, but this version of Cargo does
+  #           not understand this lock file   (lockfile v4 needs >= 1.78)
+  #   1.78 -> feature `edition2024` is required, pulled in by cpufeatures
+  #           0.3.0 via aes 0.9.0   (edition 2024 needs >= 1.85)
+  #   1.85 -> resolves the whole workspace
+  # Do not lower this without re-checking services/rust/Cargo.lock.
+  RUST_VERSION: "1.85"
   GO_VERSION: "1.21"
   PYTHON_VERSION: "3.11"
   NODE_VERSION: "20"
@@ -27,7 +34,7 @@ jobs:
     - uses: actions/checkout@v4
     
     - name: Install Rust
-      uses: dtolnay/rust-action@stable
+      uses: dtolnay/rust-toolchain@stable
       with:
         toolchain: ${{ env.RUST_VERSION }}
         components: rustfmt, clippy
