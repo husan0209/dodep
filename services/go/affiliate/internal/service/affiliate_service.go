@@ -44,22 +44,22 @@ type ApproveAffiliateInput struct {
 }
 
 type CreateAffiliateLinkInput struct {
-	AffiliateID   uuid.UUID
-	CampaignName  string
-	LandingPage   string
-	UTMSource     string
-	UTMMedium     string
-	UTMCampaign   string
+	AffiliateID  uuid.UUID
+	CampaignName string
+	LandingPage  string
+	UTMSource    string
+	UTMMedium    string
+	UTMCampaign  string
 }
 
 type TrackAffiliateClickInput struct {
-	AffiliateCode      string
-	Campaign           string
-	LandingPage        string
-	IPHash             string
-	UserAgentHash      string
-	DeviceFingerprint  string
-	CountryCode        string
+	AffiliateCode     string
+	Campaign          string
+	LandingPage       string
+	IPHash            string
+	UserAgentHash     string
+	DeviceFingerprint string
+	CountryCode       string
 }
 
 type BindReferredUserInput struct {
@@ -112,12 +112,12 @@ type FlagAffiliateFraudInput struct {
 }
 
 type CreatePayoutMethodInput struct {
-	AffiliateID uuid.UUID
-	MethodType  domain.PayoutMethodType
-	DisplayName string
+	AffiliateID   uuid.UUID
+	MethodType    domain.PayoutMethodType
+	DisplayName   string
 	DetailsMasked string
-	IsDefault   bool
-	IsVerified  bool
+	IsDefault     bool
+	IsVerified    bool
 }
 
 type UpdatePayoutMethodInput struct {
@@ -448,14 +448,14 @@ func (s *AffiliateService) RequestPayout(ctx context.Context, in RequestPayoutIn
 	}
 
 	payout := &domain.AffiliatePayout{
-		ID:          uuid.New(),
-		AffiliateID: in.AffiliateID,
-		MethodID:    in.MethodID,
-		Amount:      in.Amount,
-		Currency:    profile.Currency,
-		Status:      domain.PayoutStatusRequested,
+		ID:             uuid.New(),
+		AffiliateID:    in.AffiliateID,
+		MethodID:       in.MethodID,
+		Amount:         in.Amount,
+		Currency:       profile.Currency,
+		Status:         domain.PayoutStatusRequested,
 		IdempotencyKey: in.IdempotencyKey,
-		RequestedAt: time.Now().UTC(),
+		RequestedAt:    time.Now().UTC(),
 	}
 	if err := s.repo.CreatePayout(ctx, payout); err != nil {
 		return nil, err

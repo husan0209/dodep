@@ -105,15 +105,15 @@ const (
 )
 
 type AffiliateEnrollmentRequest struct {
-	ID         uuid.UUID
-	UserID     int64
-	Status     EnrollmentStatus
-	Reason     string
+	ID          uuid.UUID
+	UserID      int64
+	Status      EnrollmentStatus
+	Reason      string
 	ReviewNotes string
-	ReviewedBy string
-	ReviewedAt *time.Time
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
+	ReviewedBy  string
+	ReviewedAt  *time.Time
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
 }
 
 type AffiliateProfile struct {
@@ -236,15 +236,15 @@ type AffiliatePayoutMethod struct {
 }
 
 type AffiliatePayout struct {
-	ID             uuid.UUID
-	AffiliateID    uuid.UUID
-	MethodID       uuid.UUID
-	Amount         decimal.Decimal
-	Currency       string
-	Status         PayoutStatus
-	IdempotencyKey string
-	ApprovedBy     string
-	ApprovedAt     *time.Time
+	ID                uuid.UUID
+	AffiliateID       uuid.UUID
+	MethodID          uuid.UUID
+	Amount            decimal.Decimal
+	Currency          string
+	Status            PayoutStatus
+	IdempotencyKey    string
+	ApprovedBy        string
+	ApprovedAt        *time.Time
 	ProviderReference string
 	RejectionReason   string
 	RequestedAt       time.Time

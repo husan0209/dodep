@@ -217,7 +217,9 @@ func setupAdminRoutes(router fiber.Router, svc *service.AffiliateService) {
 		var req struct {
 			ProviderReference string `json:"provider_reference"`
 		}
-		c.BodyParser(&req)
+		if err := c.BodyParser(&req); err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": "invalid request body"})
+		}
 
 		payout, err := svc.ApproveAffiliatePayout(c.Context(), service.ApproveAffiliatePayoutInput{
 			PayoutID:          payoutID,

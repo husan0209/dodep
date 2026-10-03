@@ -14,35 +14,35 @@ import (
 )
 
 type mockAffiliateRepository struct {
-	getEnrollmentByUserIDFunc      func(context.Context, int64) (*domain.AffiliateEnrollmentRequest, error)
-	createEnrollmentFunc           func(context.Context, *domain.AffiliateEnrollmentRequest) error
-	updateEnrollmentStatusFunc     func(context.Context, int64, domain.EnrollmentStatus, string, string, time.Time) error
-	getProfileByUserIDFunc         func(context.Context, int64) (*domain.AffiliateProfile, error)
-	getProfileByIDFunc             func(context.Context, uuid.UUID) (*domain.AffiliateProfile, error)
-	createProfileFunc              func(context.Context, *domain.AffiliateProfile) error
-	updateProfileStatusFunc        func(context.Context, uuid.UUID, domain.AffiliateStatus, domain.AffiliateStatus) error
-	getCommissionPlanByIDFunc      func(context.Context, uuid.UUID) (*domain.AffiliateCommissionPlan, error)
-	getDefaultCommissionPlanFunc   func(context.Context) (*domain.AffiliateCommissionPlan, error)
-	createLinkFunc                 func(context.Context, *domain.AffiliateLink) error
-	listLinksByAffiliateIDFunc     func(context.Context, uuid.UUID) ([]domain.AffiliateLink, error)
-	getProfileByAffiliateCodeFunc  func(context.Context, string) (*domain.AffiliateProfile, error)
-	createClickFunc                func(context.Context, *domain.AffiliateClick) error
-	getAttributionByUserIDFunc     func(context.Context, int64) (*domain.AffiliateAttribution, error)
-	createAttributionFunc          func(context.Context, *domain.AffiliateAttribution) error
-	getDashboardFunc               func(context.Context, uuid.UUID) (*domain.AffiliateDashboard, error)
-	listEarningsFunc               func(context.Context, uuid.UUID, domain.EarningStatus, int) ([]domain.AffiliateEarning, error)
-	getAvailableBalanceFunc        func(context.Context, uuid.UUID) (decimal.Decimal, error)
-	createPayoutMethodFunc         func(context.Context, *domain.AffiliatePayoutMethod) error
-	listPayoutMethodsFunc          func(context.Context, uuid.UUID) ([]domain.AffiliatePayoutMethod, error)
-	getPayoutMethodByIDFunc        func(context.Context, uuid.UUID) (*domain.AffiliatePayoutMethod, error)
-	updatePayoutMethodFunc         func(context.Context, *domain.AffiliatePayoutMethod) error
-	createPayoutFunc               func(context.Context, *domain.AffiliatePayout) error
-	getPayoutByIDFunc              func(context.Context, uuid.UUID) (*domain.AffiliatePayout, error)
-	updatePayoutFunc               func(context.Context, *domain.AffiliatePayout) error
-	createEarningFunc              func(context.Context, *domain.AffiliateEarning) error
-	createFraudFlagFunc            func(context.Context, *domain.AffiliateFraudFlag) error
-	getOpenFraudFlagsFunc          func(context.Context, uuid.UUID) ([]domain.AffiliateFraudFlag, error)
-	releaseEligibleEarningsFunc    func(context.Context, time.Time) (int64, error)
+	getEnrollmentByUserIDFunc     func(context.Context, int64) (*domain.AffiliateEnrollmentRequest, error)
+	createEnrollmentFunc          func(context.Context, *domain.AffiliateEnrollmentRequest) error
+	updateEnrollmentStatusFunc    func(context.Context, int64, domain.EnrollmentStatus, string, string, time.Time) error
+	getProfileByUserIDFunc        func(context.Context, int64) (*domain.AffiliateProfile, error)
+	getProfileByIDFunc            func(context.Context, uuid.UUID) (*domain.AffiliateProfile, error)
+	createProfileFunc             func(context.Context, *domain.AffiliateProfile) error
+	updateProfileStatusFunc       func(context.Context, uuid.UUID, domain.AffiliateStatus, domain.AffiliateStatus) error
+	getCommissionPlanByIDFunc     func(context.Context, uuid.UUID) (*domain.AffiliateCommissionPlan, error)
+	getDefaultCommissionPlanFunc  func(context.Context) (*domain.AffiliateCommissionPlan, error)
+	createLinkFunc                func(context.Context, *domain.AffiliateLink) error
+	listLinksByAffiliateIDFunc    func(context.Context, uuid.UUID) ([]domain.AffiliateLink, error)
+	getProfileByAffiliateCodeFunc func(context.Context, string) (*domain.AffiliateProfile, error)
+	createClickFunc               func(context.Context, *domain.AffiliateClick) error
+	getAttributionByUserIDFunc    func(context.Context, int64) (*domain.AffiliateAttribution, error)
+	createAttributionFunc         func(context.Context, *domain.AffiliateAttribution) error
+	getDashboardFunc              func(context.Context, uuid.UUID) (*domain.AffiliateDashboard, error)
+	listEarningsFunc              func(context.Context, uuid.UUID, domain.EarningStatus, int) ([]domain.AffiliateEarning, error)
+	getAvailableBalanceFunc       func(context.Context, uuid.UUID) (decimal.Decimal, error)
+	createPayoutMethodFunc        func(context.Context, *domain.AffiliatePayoutMethod) error
+	listPayoutMethodsFunc         func(context.Context, uuid.UUID) ([]domain.AffiliatePayoutMethod, error)
+	getPayoutMethodByIDFunc       func(context.Context, uuid.UUID) (*domain.AffiliatePayoutMethod, error)
+	updatePayoutMethodFunc        func(context.Context, *domain.AffiliatePayoutMethod) error
+	createPayoutFunc              func(context.Context, *domain.AffiliatePayout) error
+	getPayoutByIDFunc             func(context.Context, uuid.UUID) (*domain.AffiliatePayout, error)
+	updatePayoutFunc              func(context.Context, *domain.AffiliatePayout) error
+	createEarningFunc             func(context.Context, *domain.AffiliateEarning) error
+	createFraudFlagFunc           func(context.Context, *domain.AffiliateFraudFlag) error
+	getOpenFraudFlagsFunc         func(context.Context, uuid.UUID) ([]domain.AffiliateFraudFlag, error)
+	releaseEligibleEarningsFunc   func(context.Context, time.Time) (int64, error)
 }
 
 func (m *mockAffiliateRepository) GetEnrollmentByUserID(ctx context.Context, userID int64) (*domain.AffiliateEnrollmentRequest, error) {
@@ -350,14 +350,14 @@ func TestAffiliateService_ApproveAffiliate_CreatesProfileWithDefaultPlan(t *test
 		},
 		getDefaultCommissionPlanFunc: func(ctx context.Context) (*domain.AffiliateCommissionPlan, error) {
 			return &domain.AffiliateCommissionPlan{
-				ID:             uuid.New(),
-				Name:           "default",
-				CommissionType: "revshare",
-				CommissionRate: decimal.RequireFromString("0.20"),
-				HoldPeriodDays: 14,
+				ID:              uuid.New(),
+				Name:            "default",
+				CommissionType:  "revshare",
+				CommissionRate:  decimal.RequireFromString("0.20"),
+				HoldPeriodDays:  14,
 				MinPayoutAmount: decimal.RequireFromString("100"),
-				ApprovalMode:   domain.ApprovalModeManual,
-				PayoutSchedule: domain.PayoutScheduleMonthly,
+				ApprovalMode:    domain.ApprovalModeManual,
+				PayoutSchedule:  domain.PayoutScheduleMonthly,
 			}, nil
 		},
 	}
@@ -466,11 +466,11 @@ func TestAffiliateService_TrackAffiliateClick_CreatesClickForAffiliateCode(t *te
 
 	svc := newTestAffiliateService(repo)
 	click, err := svc.TrackAffiliateClick(ctx, TrackAffiliateClickInput{
-		AffiliateCode:  "AFF12345",
-		LandingPage:    "/landing",
-		IPHash:         "ip",
-		UserAgentHash:  "ua",
-		CountryCode:    "DE",
+		AffiliateCode: "AFF12345",
+		LandingPage:   "/landing",
+		IPHash:        "ip",
+		UserAgentHash: "ua",
+		CountryCode:   "DE",
 	})
 	if err != nil {
 		t.Fatalf("expected click tracking to succeed, got %v", err)
@@ -538,9 +538,9 @@ func TestAffiliateService_BindReferredUser_RejectsSelfReferralAndDuplicateBindin
 	repo := &mockAffiliateRepository{
 		getProfileByIDFunc: func(ctx context.Context, id uuid.UUID) (*domain.AffiliateProfile, error) {
 			return &domain.AffiliateProfile{
-				ID:      affiliateID,
-				UserID:  42,
-				Status:  domain.AffiliateStatusActive,
+				ID:       affiliateID,
+				UserID:   42,
+				Status:   domain.AffiliateStatusActive,
 				Currency: "USD",
 			}, nil
 		},
@@ -599,12 +599,12 @@ func TestAffiliateService_RequestPayout_RequiresEligibilityAndCreatesRequestedPa
 	svc := newTestAffiliateService(repo)
 
 	payout, err := svc.RequestPayout(ctx, RequestPayoutInput{
-		AffiliateID:  affiliateID,
-		MethodID:     uuid.New(),
-		Amount:       decimal.RequireFromString("120"),
+		AffiliateID:    affiliateID,
+		MethodID:       uuid.New(),
+		Amount:         decimal.RequireFromString("120"),
 		IdempotencyKey: "payout-req-1",
-		KYCApproved:  true,
-		HasOpenFraud: false,
+		KYCApproved:    true,
+		HasOpenFraud:   false,
 	})
 	if err != nil {
 		t.Fatalf("expected payout to succeed, got %v", err)
@@ -751,10 +751,10 @@ func TestAffiliateService_ApproveAffiliatePayout_MarksRequestedPayoutAsPaid(t *t
 
 	svc := newTestAffiliateService(repo)
 	payout, err := svc.ApproveAffiliatePayout(ctx, ApproveAffiliatePayoutInput{
-		AffiliateID:        affiliateID,
-		PayoutID:           payoutID,
-		ApprovedBy:         "finance-admin",
-		ProviderReference:  "provider-42",
+		AffiliateID:       affiliateID,
+		PayoutID:          payoutID,
+		ApprovedBy:        "finance-admin",
+		ProviderReference: "provider-42",
 	})
 	if err != nil {
 		t.Fatalf("expected payout approval to succeed, got %v", err)
@@ -801,10 +801,10 @@ func TestAffiliateService_RejectAffiliatePayout_SetsRejectedStatusAndReason(t *t
 
 	svc := newTestAffiliateService(repo)
 	payout, err := svc.RejectAffiliatePayout(ctx, RejectAffiliatePayoutInput{
-		AffiliateID:      affiliateID,
-		PayoutID:         payoutID,
-		RejectedBy:       "finance-admin",
-		RejectionReason:  "kyc mismatch",
+		AffiliateID:     affiliateID,
+		PayoutID:        payoutID,
+		RejectedBy:      "finance-admin",
+		RejectionReason: "kyc mismatch",
 	})
 	if err != nil {
 		t.Fatalf("expected payout rejection to succeed, got %v", err)
