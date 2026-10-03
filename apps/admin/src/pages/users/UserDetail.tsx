@@ -47,12 +47,10 @@ import { USER_STATUSES, KYC_LEVELS, TRANSACTION_STATUSES } from "@/utils/constan
 import { getErrorMessage } from "@/utils/errors";
 import type { ColumnsType } from "antd/es/table";
 import type {
-  UserProfile,
   PlayerGroup,
   BlockUserPayload,
   KycDocument,
-  LinkedAccount,
-} from "@/types/user";
+  LinkedAccount } from "@/types/user";
 import type { CasinoBetSession } from "@/types/casino";
 import type { Deposit, Withdrawal } from "@/types/finance";
 import type { Bet } from "@/types/bet";
@@ -111,13 +109,15 @@ export default function UserDetail() {
     enabled: !!id && activeTab === "withdrawals",
   });
 
-  const { data: transactions, isLoading: transactionsLoading } = useQuery({
+  // The transactions tab is not rendered yet; the query is kept so the data is
+// already warm when it is, and so the request keeps firing while it is enabled.
+useQuery({
     queryKey: ["user-transactions", id],
     queryFn: () => financeService.getTransactions({ user_id: id, page: 1, page_size: 20 }),
     enabled: !!id && activeTab === "transactions",
   });
 
-  const { data: casinoBets, isLoading: casinoBetsLoading } = useQuery({
+  const { data: casinoBets } = useQuery({
     queryKey: ["user-casino-bets", id],
     queryFn: () => casinoService.getCasinoBets({ user_id: id, page: 1, page_size: 20 }),
     enabled: !!id && activeTab === "casino_bets",
@@ -141,7 +141,7 @@ export default function UserDetail() {
     enabled: !!id && activeTab === "kyc",
   });
 
-  const { data: limits, isLoading: limitsLoading } = useQuery({
+  const { data: limits } = useQuery({
     queryKey: ["user-limits", id],
     queryFn: () => usersService.getLimits(id!),
     enabled: !!id && activeTab === "rg",

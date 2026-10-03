@@ -1,6 +1,6 @@
 import { Card, Typography, Space, Select, Switch, Tag } from "antd";
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import DataTable from "@/components/common/DataTable";
 import { casinoService } from "@/services/casino.service";
 import type { ColumnsType } from "antd/es/table";
@@ -13,7 +13,6 @@ export default function Games() {
   const [pageSize, setPageSize] = useState(20);
   const [category, setCategory] = useState<string>();
   const [enabled, setEnabled] = useState<boolean>();
-  const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery({
     queryKey: ["casino-games", page, pageSize, category, enabled],

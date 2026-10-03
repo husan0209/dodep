@@ -50,7 +50,7 @@ export default function AffiliatePayouts() {
     id: string | null;
   }>({ open: false, id: null });
   const [rejectReason, setRejectReason] = useState("");
-  const [approveRef, setApproveRef] = useState("");
+  const [approveRef] = useState("");
   const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery({

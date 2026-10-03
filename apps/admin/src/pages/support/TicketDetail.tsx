@@ -21,30 +21,13 @@ import {
   SendOutlined,
   LockOutlined,
   ArrowLeftOutlined,
-  CheckCircleOutlined,
-  UserAddOutlined,
-} from "@ant-design/icons";
+  UserAddOutlined } from "@ant-design/icons";
 import { supportService } from "@/services/support.service";
 import { useAuthStore } from "@/stores/authStore";
 import type { TicketMessage, SupportTicket } from "@/types/support";
 
 const { Title, Text } = Typography;
 const { TextArea } = Input;
-
-const STATUS_COLORS: Record<string, string> = {
-  open: "blue",
-  pending_player: "orange",
-  pending_internal: "cyan",
-  resolved: "green",
-  closed: "default",
-};
-
-const PRIORITY_COLORS: Record<string, string> = {
-  low: "blue",
-  normal: "green",
-  high: "orange",
-  urgent: "red",
-};
 
 export default function TicketDetail() {
   const { id } = useParams<{ id: string }>();

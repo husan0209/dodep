@@ -14,9 +14,7 @@ import {
   Tooltip,
 } from "antd";
 import {
-  UserOutlined,
   DollarOutlined,
-  WarningOutlined,
   ArrowUpOutlined,
   ArrowDownOutlined,
   GlobalOutlined,
@@ -25,12 +23,9 @@ import {
   WifiOutlined,
   DisconnectOutlined,
   MailOutlined,
-  FileProtectOutlined,
-} from "@ant-design/icons";
+  FileProtectOutlined } from "@ant-design/icons";
 import { useQuery } from "@tanstack/react-query";
 import {
-  LineChart,
-  Line,
   BarChart,
   Bar,
   XAxis,
@@ -40,14 +35,13 @@ import {
   Legend,
   ResponsiveContainer,
   AreaChart,
-  Area,
-} from "recharts";
+  Area } from "recharts";
 import { systemService } from "@/services/system.service";
 import { financeService } from "@/services/finance.service";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { API_BASE_URL } from "@/utils/constants";
 import { formatMoney } from "@/utils/format";
-import type { LiveMetrics, ProviderHealth, GatewayHealth, TopItem } from "@/types/admin";
+import type { LiveMetrics, TopItem } from "@/types/admin";
 
 const { Title, Text } = Typography;
 

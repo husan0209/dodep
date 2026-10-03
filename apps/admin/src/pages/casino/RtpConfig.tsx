@@ -13,7 +13,7 @@ import {
   Modal,
   Form,
 } from "antd";
-import { ReloadOutlined, SaveOutlined, EditOutlined } from "@ant-design/icons";
+import { ReloadOutlined, EditOutlined } from "@ant-design/icons";
 import { casinoService } from "@/services/casino.service";
 
 const { Title } = Typography;
