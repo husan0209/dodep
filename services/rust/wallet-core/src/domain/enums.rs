@@ -26,8 +26,9 @@ impl WalletType {
             WalletType::Cashback => "cashback",
         }
     }
-    
-    pub fn from_str(s: &str) -> Option<Self> {
+
+    /// Parse from the snake_case wire/DB representation.
+    pub fn parse(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "main" => Some(WalletType::Main),
             "bonus" => Some(WalletType::Bonus),
@@ -35,6 +36,14 @@ impl WalletType {
             "cashback" => Some(WalletType::Cashback),
             _ => None,
         }
+    }
+}
+
+impl std::str::FromStr for WalletType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::parse(s).ok_or_else(|| format!("unknown wallet type: {s}"))
     }
 }
 
@@ -50,6 +59,8 @@ pub enum TransactionType {
     BonusCredit,
     BonusDebit,
     Transfer,
+    TransferIn,
+    TransferOut,
     Adjustment,
     Fee,
 }
@@ -65,6 +76,8 @@ impl TransactionType {
             TransactionType::BonusCredit => "bonus_credit",
             TransactionType::BonusDebit => "bonus_debit",
             TransactionType::Transfer => "transfer",
+            TransactionType::TransferIn => "transfer_in",
+            TransactionType::TransferOut => "transfer_out",
             TransactionType::Adjustment => "adjustment",
             TransactionType::Fee => "fee",
         }
@@ -83,6 +96,14 @@ pub enum TransactionStatus {
 }
 
 impl TransactionStatus {
+    /// `Processing` covers the window between acceptance and completion.
+    pub fn is_terminal(&self) -> bool {
+        matches!(
+            self,
+            TransactionStatus::Completed | TransactionStatus::Failed | TransactionStatus::Cancelled
+        )
+    }
+
     pub fn as_str(&self) -> &'static str {
         match self {
             TransactionStatus::Pending => "pending",

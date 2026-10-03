@@ -19,8 +19,12 @@ pub async fn create_db_pool(config: &DatabaseConfig) -> Result<DbPool, sqlx::Err
 }
 
 /// Run database migrations (centralised in libs/migrations/postgresql).
-pub async fn run_migrations(pool: &DbPool) -> Result<(), sqlx::Error> {
+///
+/// `MigrateError` does not convert into `sqlx::Error`, so callers that expect a
+/// single error type get the migration failure boxed.
+pub async fn run_migrations(pool: &DbPool) -> Result<(), Box<dyn std::error::Error>> {
     sqlx::migrate!("../../../libs/migrations/postgresql")
         .run(pool)
-        .await
+        .await?;
+    Ok(())
 }
