@@ -1,10 +1,16 @@
 # Generated code - DO NOT COMMIT
 # Run `buf generate` to regenerate
 
-/gen/
-/gen/go/
 /gen/rust/
 /gen/typescript/
+
+# /gen/go is deliberately COMMITTED. The Go services import the generated
+# packages as `github.com/opus-casino/proto/gen/go/...` and resolve that module
+# through `replace github.com/opus-casino/proto => ../../../libs/proto`, so the
+# generated code has to live inside this module at gen/go/. Ignoring it left
+# every Go service unable to resolve its protobuf imports, and `go vet ./...`
+# failed with "no required module provides package
+# github.com/opus-casino/proto/gen/go/common/v1".
 
 # Build artifacts
 build/

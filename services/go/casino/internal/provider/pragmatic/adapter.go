@@ -122,7 +122,7 @@ func (a *Adapter) VerifyCallbackSignature(body []byte, headers map[string]string
 
 	var sb strings.Builder
 	for _, k := range keys {
-		sb.WriteString(fmt.Sprintf("%v", params[k]))
+		fmt.Fprintf(&sb, "%v", params[k])
 	}
 	sb.WriteString(a.cfg.SecretKey)
 

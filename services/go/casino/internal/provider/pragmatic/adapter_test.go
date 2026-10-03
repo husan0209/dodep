@@ -200,7 +200,7 @@ func computePragmaticHash(params map[string]interface{}, secret string) string {
 
 	var sb strings.Builder
 	for _, k := range keys {
-		sb.WriteString(fmt.Sprintf("%v", params[k]))
+		fmt.Fprintf(&sb, "%v", params[k])
 	}
 	sb.WriteString(secret)
 

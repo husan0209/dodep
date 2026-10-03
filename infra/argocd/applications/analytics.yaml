@@ -1,0 +1,64 @@
+# ArgoCD Applications — Analytics Service (standalone file, does not edit shared appsets)
+# Chart: infra/helm/charts/analytics (internal ClusterIP 8000, no public ingress)
+
+---
+# Analytics Service - Dev (auto-sync)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: dev-analytics
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: analytics
+    app.kubernetes.io/environment: dev
+spec:
+  project: services
+  source:
+    repoURL: https://github.com/opus-casino/infra.git
+    targetRevision: HEAD
+    path: infra/helm/charts/analytics
+    helm:
+      valueFiles:
+        - values.yaml
+      values: |
+        replicaCount: 1
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: dev
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 3
+
+---
+# Analytics Service - Production (manual sync, mirrors production-services appset pattern)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: production-analytics
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: analytics
+    app.kubernetes.io/environment: production
+spec:
+  project: services
+  source:
+    repoURL: https://github.com/opus-casino/infra.git
+    targetRevision: HEAD
+    path: infra/helm/charts/analytics
+    helm:
+      valueFiles:
+        - values-production.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: platform
+  syncPolicy:
+    # Manual sync for production
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 3

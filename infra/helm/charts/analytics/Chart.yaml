@@ -1,0 +1,16 @@
+apiVersion: v2
+name: analytics
+description: Analytics Service - read API over ClickHouse aggregates and reports
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - analytics
+  - reporting
+  - clickhouse
+home: https://opus.casino
+sources:
+  - https://github.com/opus-casino/opus-casino
+maintainers:
+  - name: Opus Casino Team
+    email: team@opus.casino

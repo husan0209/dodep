@@ -31,9 +31,14 @@ env:
   #           not understand this lock file   (lockfile v4 needs >= 1.78)
   #   1.78 -> feature `edition2024` is required, pulled in by cpufeatures
   #           0.3.0 via aes 0.9.0   (edition 2024 needs >= 1.85)
-  #   1.85 -> resolves the whole workspace
+  #   1.85 -> the workspace resolves, but two entries in the committed lockfile
+  #           carry a higher MSRV: icu_* 2.2.0 needs 1.86 and home 0.5.12 needs
+  #           1.88. It is also below the Security Scan jobs, where
+  #           `cargo install cargo-audit` resolves to cargo-audit 0.22.2 and that
+  #           requires rustc >= 1.88.
+  #   1.88 -> resolves the workspace and is high enough for cargo-audit.
   # Do not lower this without re-running that check.
-  RUST_VERSION: "1.85"
+  RUST_VERSION: "1.88"
   # Must satisfy the highest `go` directive in services/go/*/go.mod (>= 1.24).
   GO_VERSION: "1.26"
   PYTHON_VERSION: "3.11"
@@ -172,7 +177,14 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -e ".[dev]"
+        # Install requirements.txt, not `pip install -e ".[dev]"`. pyproject only
+        # carries lower bounds, so the editable install resolved a different
+        # environment from the one .github/workflows/ci-python.yml and
+        # infra/docker/Dockerfile.python use - for fraud-ml it pulled xgboost 3.x,
+        # polars 1.x and onnx 1.23 (which carries advisories) while
+        # requirements.txt pins the set pip-audit has actually cleared. The same
+        # suite was therefore being run against two dependency graphs.
+        pip install -r requirements.txt
     
     - name: Lint with ruff
       run: |
@@ -220,7 +232,16 @@ jobs:
       run: npm run build
     
     - name: Test
-      run: npm run test -- --run
+      # No `--run` here. That is a vitest flag, and this matrix also covers
+      # apps/web, whose `test` script is `jest`:
+      #
+      #   > jest --run
+      #   Unrecognized option "run". Did you mean "u"?
+      #
+      # Both runners already execute once and exit when there is no TTY / when CI
+      # is set, which is the case on the runner, so the flag was never needed for
+      # admin either - it only broke web.
+      run: npm test
 
   # Security scanning
   security-scan:

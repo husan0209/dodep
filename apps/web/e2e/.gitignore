@@ -1,0 +1,4 @@
+# Playwright scoped ignores (this directory only).
+.auth/
+test-results/
+playwright-report/

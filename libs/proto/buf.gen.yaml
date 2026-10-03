@@ -15,14 +15,20 @@ managed:
 
 plugins:
   # Go - protocol buffers
+  # Output stays inside this directory (not ../../gen/go) so that the generated
+  # packages keep the import path `github.com/opus-casino/proto/gen/go/...`
+  # that the .proto files declare in `option go_package` AND that every Go
+  # service imports. That path is only resolvable if gen/go lives under the
+  # module root declared by libs/proto/go.mod, and the services reach this
+  # module through `replace ... => ../../../libs/proto`.
   - remote: buf.build/protocolbuffers/go
-    out: ../../gen/go
+    out: gen/go
     opt:
       - paths=source_relative
 
   # Go - gRPC
   - remote: buf.build/grpc/go
-    out: ../../gen/go
+    out: gen/go
     opt:
       - paths=source_relative
   

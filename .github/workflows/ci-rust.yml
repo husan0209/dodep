@@ -39,6 +39,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
+      # One broken service must not hide the other two. With the default
+      # fail-fast, a failing leg cancels the rest of the matrix and the run
+      # reports CANCEL for services that may well be green, which reads as a
+      # failure of code nobody touched.
+      fail-fast: false
       matrix:
         service: [betting-engine, wallet-core, websocket-gateway]
     
@@ -61,6 +66,17 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
+      - name: Install native build dependencies
+        run: |
+          sudo apt-get update
+          # Every crate build.rs runs tonic-build/prost-build, which shells
+          # out to protoc. The hosted runner image does not ship it, so
+          # without this the job dies in the build script with
+          #   Could not find `protoc`. If `protoc` is installed, try setting
+          #   the `PROTOC` environment variable
+          # before clippy or the tests ever run.
+          sudo apt-get install -y pkg-config libssl-dev protobuf-compiler
+
       - name: Run rustfmt
         working-directory: services/rust/${{ matrix.service }}
         run: cargo fmt -- --check
@@ -77,6 +93,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
+      # One broken service must not hide the other two. With the default
+      # fail-fast, a failing leg cancels the rest of the matrix and the run
+      # reports CANCEL for services that may well be green, which reads as a
+      # failure of code nobody touched.
+      fail-fast: false
       matrix:
         service: [betting-engine, wallet-core, websocket-gateway]
     
@@ -126,6 +147,17 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
+      - name: Install native build dependencies
+        run: |
+          sudo apt-get update
+          # Every crate build.rs runs tonic-build/prost-build, which shells
+          # out to protoc. The hosted runner image does not ship it, so
+          # without this the job dies in the build script with
+          #   Could not find `protoc`. If `protoc` is installed, try setting
+          #   the `PROTOC` environment variable
+          # before clippy or the tests ever run.
+          sudo apt-get install -y pkg-config libssl-dev protobuf-compiler
+
       - name: Run unit tests
         working-directory: services/rust/${{ matrix.service }}
         run: cargo nextest run --lib
@@ -152,6 +184,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
+      # One broken service must not hide the other two. With the default
+      # fail-fast, a failing leg cancels the rest of the matrix and the run
+      # reports CANCEL for services that may well be green, which reads as a
+      # failure of code nobody touched.
+      fail-fast: false
       matrix:
         service: [betting-engine, wallet-core, websocket-gateway]
     
@@ -187,6 +224,11 @@ jobs:
     timeout-minutes: 30
     needs: [lint, test, security]
     strategy:
+      # One broken service must not hide the other two. With the default
+      # fail-fast, a failing leg cancels the rest of the matrix and the run
+      # reports CANCEL for services that may well be green, which reads as a
+      # failure of code nobody touched.
+      fail-fast: false
       matrix:
         service: [betting-engine, wallet-core, websocket-gateway]
     

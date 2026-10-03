@@ -26,6 +26,26 @@ func parseUID(s string) int64 {
 // ptr returns a pointer to the given int64 value (for optional PageResponse.TotalCount).
 func ptr(v int64) *int64 { return &v }
 
+// clampInt32 narrows an int-like value to the int32 range without wrapping.
+//
+// The protobuf fields these feed (KycLevel, RealityCheckIntervalMinutes,
+// TimeLimit.Minutes) are int32 while the domain carries int (and, for
+// KYCLevel, a named int type), so a plain conversion silently wraps on
+// overflow and turns a large value into a negative one (gosec G115). Clamping
+// keeps the value the caller meant.
+func clampInt32[T ~int](v T) int32 {
+	const maxInt32 = 1<<31 - 1
+	const minInt32 = -1 << 31
+	switch {
+	case int64(v) > maxInt32:
+		return maxInt32
+	case int64(v) < minInt32:
+		return minInt32
+	default:
+		return int32(v)
+	}
+}
+
 type UserGRPCHandler struct {
 	pb.UnimplementedUserServiceServer
 	service *service.UserService
@@ -194,7 +214,7 @@ func toProtoUser(user *domain.User) *pb.User {
 		Country:     user.CountryCode,
 		Currency:    user.CurrencyCode,
 		Status:      pb.UserStatus(pb.UserStatus_value[string(user.Status)]),
-		KycLevel:    pb.KycLevel(user.KYCLevel),
+		KycLevel:    pb.KycLevel(clampInt32(user.KYCLevel)),
 		CreatedAt:   timestamppb.New(user.CreatedAt),
 		UpdatedAt:   timestamppb.New(user.UpdatedAt),
 	}
@@ -210,7 +230,7 @@ func toProtoPreferences(pref *domain.UserPreferences) *pb.UserPreferences {
 		SmsNotifications:            pref.SMSNotifications,
 		PushNotifications:           pref.PushNotifications,
 		RealityCheck:                pref.RealityCheck,
-		RealityCheckIntervalMinutes: int32(pref.RealityCheckIntervalMinutes),
+		RealityCheckIntervalMinutes: clampInt32(pref.RealityCheckIntervalMinutes),
 		AutoPlay:                    pref.AutoPlay,
 		SoundPreference:             pref.SoundPreference,
 		UpdatedAt:                   timestamppb.New(pref.UpdatedAt),
@@ -224,7 +244,7 @@ func toProtoLimits(limits *domain.UserLimits) *pb.UserLimits {
 	}
 	if limits.SessionTimeLimit != nil {
 		result.SessionTimeLimit = &pb.TimeLimit{
-			Minutes:  int32(limits.SessionTimeLimit.Minutes),
+			Minutes:  clampInt32(limits.SessionTimeLimit.Minutes),
 			IsActive: limits.SessionTimeLimit.IsActive,
 		}
 	}

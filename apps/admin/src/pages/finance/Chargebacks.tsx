@@ -16,12 +16,10 @@ import {
   message,
 } from "antd";
 import {
-  CheckCircleOutlined,
   CloseCircleOutlined,
   EyeOutlined,
   ReloadOutlined,
-  SafetyCertificateOutlined,
-} from "@ant-design/icons";
+  SafetyCertificateOutlined } from "@ant-design/icons";
 import { paymentsService } from "@/services/payments.service";
 import type { Chargeback, ChargebackActionPayload } from "@/types/payments";
 

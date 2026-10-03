@@ -11,9 +11,7 @@ import {
   Modal,
   Form,
   Select,
-  InputNumber,
-  message,
-} from "antd";
+  message } from "antd";
 import { PlusOutlined, EditOutlined, ReloadOutlined } from "@ant-design/icons";
 import { usersService } from "@/services/users.service";
 

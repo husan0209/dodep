@@ -1,0 +1,163 @@
+# Analytics Service Helm Chart Values
+# Read-only API over ClickHouse (no product tables are written).
+
+replicaCount: 2
+
+image:
+  repository: ghcr.io/opus-casino/analytics
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+serviceAccount:
+  create: true
+  annotations:
+    eks.amazonaws.com/role-arn: ""
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+
+podSecurityContext:
+  fsGroup: 1000
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  capabilities:
+    drop:
+      - ALL
+
+service:
+  type: ClusterIP
+  httpPort: 8000
+  httpTargetPort: 8000
+
+# Internal-only service: consumed by admin-bff and dashboards
+# inside the cluster. No public ingress by default.
+ingress:
+  enabled: false
+  className: "alb"
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internal
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/healthcheck-path: /health
+  hosts:
+    - host: analytics.internal
+      paths:
+        - path: /api/v1/analytics
+          pathType: Prefix
+  tls: []
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+  requests:
+    cpu: 250m
+    memory: 256Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+nodeSelector: {}
+
+healthCheck:
+  path: /health
+  port: 8000
+  liveness:
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 10
+    failureThreshold: 3
+  readiness:
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+env:
+  - name: APP_ENV
+    valueFrom:
+      configMapKeyRef:
+        name: analytics-config
+        key: app-env
+  - name: CLICKHOUSE_HOST
+    valueFrom:
+      configMapKeyRef:
+        name: analytics-config
+        key: clickhouse-host
+  - name: CLICKHOUSE_PORT
+    valueFrom:
+      configMapKeyRef:
+        name: analytics-config
+        key: clickhouse-port
+  - name: CLICKHOUSE_USERNAME
+    valueFrom:
+      secretKeyRef:
+        name: analytics-secrets
+        key: clickhouse-username
+  - name: CLICKHOUSE_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: analytics-secrets
+        key: clickhouse-password
+  - name: REDIS_HOST
+    valueFrom:
+      configMapKeyRef:
+        name: analytics-config
+        key: redis-host
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+networkPolicy:
+  enabled: true
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: istio-system
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+      ports:
+        - protocol: TCP
+          port: 8000
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: data
+      ports:
+        - protocol: TCP
+          port: 8123
+        - protocol: TCP
+          port: 9000
+        - protocol: TCP
+          port: 6379
+
+serviceMonitor:
+  enabled: true
+  interval: 30s
+  scrapeTimeout: 10s
+  path: /metrics
+  port: http
+
+# Analytics-specific settings
+analytics:
+  # ClickHouse (HTTP 8123 for queries via clickhouse-connect)
+  clickhouse:
+    host: "clickhouse-data"
+    port: 8123
+    database: "opus_casino"
+    user: "analytics"
+
+  redis:
+    host: "dragonflydb-data"
+    port: 6379

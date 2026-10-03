@@ -1,0 +1,20 @@
+# ============================================================
+# Pod Disruption Budget — Analytics Service (standalone file)
+# Does not edit infra/k8s/production/pdbs.yaml (owned by parallel work).
+# Selector matches infra/helm/charts/analytics selectorLabels.
+# minAvailable 2 mirrors values-production.yaml (3 replicas).
+# ============================================================
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: analytics-service
+  namespace: platform
+  labels:
+    app.kubernetes.io/name: analytics
+    app.kubernetes.io/component: analytics-service
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: analytics
+      app.kubernetes.io/component: analytics-service

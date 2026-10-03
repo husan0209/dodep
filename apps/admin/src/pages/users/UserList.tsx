@@ -14,13 +14,11 @@ import {
   Modal,
 } from "antd";
 import {
-  SearchOutlined,
   MoreOutlined,
   TagOutlined,
   TeamOutlined,
   ExportOutlined,
-  MergeCellsOutlined,
-} from "@ant-design/icons";
+  MergeCellsOutlined } from "@ant-design/icons";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { useState, useCallback } from "react";
@@ -72,7 +70,7 @@ export default function UserList() {
   const [lastLoginRange, setLastLoginRange] = useState<[Dayjs | null, Dayjs | null]>([null, null]);
   const [depositRange, setDepositRange] = useState<{ min?: string; max?: string }>({});
   const [ggrRange, setGgrRange] = useState<{ min?: string; max?: string }>({});
-  const [balanceRange, setBalanceRange] = useState<{ min?: string; max?: string }>({});
+  const [balanceRange] = useState<{ min?: string; max?: string }>({});
   const [riskScoreRange, setRiskScoreRange] = useState<{ min?: number; max?: number }>({});
 
   // Pagination

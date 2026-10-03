@@ -286,11 +286,20 @@ func (h *AuthGRPCHandler) ChangePassword(ctx context.Context, req *pb.ChangePass
 	return &pb.ChangePasswordResponse{Success: true}, nil
 }
 
-// RequestPasswordReset initiates password reset flow
-func (h *AuthGRPCHandler) RequestPasswordReset(ctx context.Context, req *pb.RequestPasswordResetRequest) (*pb.RequestPasswordResetResponse, error) {
-	h.service.ResetPasswordRequest(ctx, req.Email, req.IpAddress)
+// InitiatePasswordReset initiates password reset flow
+//
+// The RPC is named InitiatePasswordReset in auth/v1/auth.proto; the handler used
+// to be called RequestPasswordReset and used a RequestPasswordResetRequest that
+// the contract never declared, so this method did not implement the generated
+// AuthServiceServer interface and the package did not compile.
+func (h *AuthGRPCHandler) InitiatePasswordReset(ctx context.Context, req *pb.InitiatePasswordResetRequest) (*pb.InitiatePasswordResetResponse, error) {
+	if err := h.service.ResetPasswordRequest(ctx, req.Email, req.IpAddress); err != nil {
+		// Logged, never returned: a distinct error here would tell an
+		// attacker which emails have an account.
+		h.log.Error("InitiatePasswordReset failed", zap.Error(err))
+	}
 	// Always return success to prevent email enumeration
-	return &pb.RequestPasswordResetResponse{Success: true}, nil
+	return &pb.InitiatePasswordResetResponse{Success: true}, nil
 }
 
 // ResetPassword completes password reset
