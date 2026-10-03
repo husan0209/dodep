@@ -7,19 +7,24 @@ Architecture:
 - Rust serves models in production (< 5ms inference)
 - This FastAPI service is for training and batch scoring
 """
-import structlog
-import sys
+import logging
 from contextlib import asynccontextmanager
 
-import clickhouse_connect
+import structlog
 from fastapi import FastAPI
 from prometheus_client import make_asgi_app
 
 from src.config import settings
-from src.api.routes import router as api_router
-from src.consumers.redpanda_consumer import RedpandaConsumer
-from src.models.fraud_detector import FraudDetector
 from src.data.clickhouse import ClickHouseClient
+
+# NOTE: the API router, the Redpanda consumer and the batch FraudDetector
+# orchestrator are not implemented under src/ yet (only stale copies live in the
+# undeployed internal/ tree), so they are intentionally not wired in here.
+# main.py is the container entrypoint (CMD uvicorn main:app) and the image only
+# ships src/ + main.py, so every import below must resolve inside src/.
+
+# structlog wants a numeric level; logging.INFO and friends are plain ints.
+LOG_LEVEL = logging.getLevelNamesMapping().get(settings.log_level.upper(), logging.INFO)
 
 # Configure structured logging
 structlog.configure(
@@ -29,9 +34,7 @@ structlog.configure(
         structlog.processors.dict_tracebacks,
         structlog.processors.JSONRenderer(),
     ],
-    wrapper_class=structlog.make_filtering_bound_logger(
-        getattr(sys.modules["logging"], settings.log_level.upper()).getEffectiveLevel()
-    ),
+    wrapper_class=structlog.make_filtering_bound_logger(LOG_LEVEL),
     context_class=dict,
     logger_factory=structlog.PrintLoggerFactory(),
     cache_logger_on_first_use=True,
@@ -49,7 +52,7 @@ async def lifespan(app: FastAPI):
         version="1.0.0",
         environment=settings.app_env,
     )
-    
+
     # Initialize ClickHouse client
     app.state.clickhouse_client = ClickHouseClient(
         host=settings.clickhouse_host,
@@ -59,24 +62,11 @@ async def lifespan(app: FastAPI):
         password=settings.clickhouse_password,
     )
     logger.info("clickhouse.connected")
-    
-    # Initialize fraud detector
-    app.state.fraud_detector = FraudDetector(model_path=settings.model_path)
-    logger.info("fraud_detector.initialized")
-    
-    # Start Redpanda consumer
-    app.state.consumer = RedpandaConsumer(
-        brokers=settings.redpanda_brokers,
-        fraud_detector=app.state.fraud_detector,
-    )
-    await app.state.consumer.start()
-    logger.info("redpanda_consumer.started")
-    
+
     yield
-    
+
     # Shutdown
     logger.info("fraud_ml.shutdown")
-    await app.state.consumer.stop()
     app.state.clickhouse_client.close()
 
 
@@ -87,9 +77,6 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
-
-# Include API routes
-app.include_router(api_router, prefix="/api/v1")
 
 # Mount Prometheus metrics endpoint
 metrics_app = make_asgi_app()
@@ -110,9 +97,11 @@ async def readiness_check():
 
 if __name__ == "__main__":
     import uvicorn
-    
+
     uvicorn.run(
-        "src.main:app",
+        # The ASGI app lives in this module (services/python/fraud-ml/main.py);
+        # there is no src/main.py.
+        "main:app",
         host=settings.http_host,
         port=settings.http_port,
         reload=settings.app_env == "development",

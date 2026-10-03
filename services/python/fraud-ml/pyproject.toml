@@ -17,7 +17,8 @@ dependencies = [
     # Model Export
     "onnx>=1.15.0",
     "onnxruntime>=1.17.0",
-    "skl2onnx>=1.17.0",
+    # XGBoost -> ONNX converter (skl2onnx.convert_sklearn cannot convert XGBClassifier)
+    "onnxmltools>=1.12.0",
     
     # Database
     "clickhouse-connect>=0.7.1",
