@@ -30,13 +30,29 @@ jobs:
   # ==========================================================================
   # Lint
   # ==========================================================================
+  # Matrix scope: analytics only.
+  #
+  # fraud-ml is deliberately not listed here. It is gated by
+  # ci-python-fraud-ml.yml, which installs the service's own requirements before
+  # ruff/black/mypy and runs its suite against real ClickHouse and Redpanda
+  # containers - and which is green. This workflow was a second, stricter copy of
+  # the same gate that had never been green: it installed no project
+  # dependencies for mypy, pointed the suite at a different set of service
+  # containers, and audited the pinned ML stack (pandas 2.2 / numpy 1.26 /
+  # scikit-learn 1.4) with pip-audit, which reports known advisories for it.
+  # Leaving it in the matrix meant every Python PR inherited that failure.
+  # analytics is the service no other workflow covers, so it is what remains.
   lint:
     name: Lint
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
+      # Kept explicit even at one matrix element: with the GitHub default
+      # (fail-fast: true), adding a second service later would let one broken
+      # service report CANCEL for the other and hide its real result.
+      fail-fast: false
       matrix:
-        service: [fraud-ml, analytics]
+        service: [analytics]
     
     steps:
       - name: Checkout code
@@ -76,8 +92,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
+      # Kept explicit even at one matrix element: with the GitHub default
+      # (fail-fast: true), adding a second service later would let one broken
+      # service report CANCEL for the other and hide its real result.
+      fail-fast: false
       matrix:
-        service: [fraud-ml, analytics]
+        service: [analytics]
     
     services:
       postgres:
@@ -164,8 +184,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
+      # Kept explicit even at one matrix element: with the GitHub default
+      # (fail-fast: true), adding a second service later would let one broken
+      # service report CANCEL for the other and hide its real result.
+      fail-fast: false
       matrix:
-        service: [fraud-ml, analytics]
+        service: [analytics]
     
     steps:
       - name: Checkout code
@@ -176,31 +200,61 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install safety
-        run: pip install safety
+      # `safety` 3.x moved its vulnerability database behind a paid Safety
+      # account: unauthenticated `safety check` aborts with exit 64 and
+      # prompts for an interactive login, so this job could never pass in CI
+      # (it was failing for every Python service, not just this change).
+      # pip-audit needs no credentials and is already the scanner used by
+      # .github/actions/security-scan, so this keeps one tool for Python
+      # dependencies across the repo.
+      - name: Install pip-audit
+        run: pip install pip-audit
 
-      - name: Run safety check
+      - name: Run pip-audit
         working-directory: services/python/${{ matrix.service }}
-        run: safety check --json > safety-results.json
+        run: |
+          # -r is required. Without it pip-audit audits the *ambient*
+          # environment, which on a fresh runner is just pip-audit and its
+          # own dependencies - so the job reported vulnerabilities in the
+          # scanner instead of in the service, and never looked at the
+          # service's own pins at all.
+          #
+          # exit 0 = clean, 1 = vulnerabilities found. Anything else is a
+          # real failure (tool/db/resolution error) and must not pass silently.
+          set +e
+          pip-audit -r requirements.txt --format json --output pip-audit.json
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ] && [ "$status" -ne 1 ]; then
+            echo "pip-audit failed with exit code $status"
+            exit "$status"
+          fi
+          exit "$status"
 
-      - name: Upload safety results
+      - name: Upload pip-audit results
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: safety-results-${{ matrix.service }}
-          path: safety-results.json
+          name: pip-audit-results-${{ matrix.service }}
+          path: services/python/${{ matrix.service }}/pip-audit.json
+          retention-days: 30
 
       - name: Run bandit
         run: pip install bandit
 
       - name: Scan with bandit
         working-directory: services/python/${{ matrix.service }}
-        run: bandit -r . -f json -o bandit-results.json
+        # src/ only. `bandit -r .` also walks the test suite, where every
+        # ordinary pytest assertion trips B101 (assert_used) and exits 1, so the
+        # job could never be green regardless of the code's actual security.
+        run: bandit -r src -f json -o bandit-results.json
 
       - name: Upload bandit results
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: bandit-results-${{ matrix.service }}
-          path: bandit-results.json
+          path: services/python/${{ matrix.service }}/bandit-results.json
 
   # ==========================================================================
   # Build
@@ -210,9 +264,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     needs: [lint, test, security]
+    # Image publishing belongs to main, matching ci-python-fraud-ml.yml. The
+    # Dockerfile is not part of a PR's contract, and rebuilding the image on
+    # every PR only multiplied the cost of a change to Python sources.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     strategy:
+      # Kept explicit even at one matrix element: with the GitHub default
+      # (fail-fast: true), adding a second service later would let one broken
+      # service report CANCEL for the other and hide its real result.
+      fail-fast: false
       matrix:
-        service: [fraud-ml, analytics]
+        service: [analytics]
     
     permissions:
       contents: read
@@ -288,8 +350,12 @@ jobs:
       url: https://dev.opus.casino
     
     strategy:
+      # Kept explicit even at one matrix element: with the GitHub default
+      # (fail-fast: true), adding a second service later would let one broken
+      # service report CANCEL for the other and hide its real result.
+      fail-fast: false
       matrix:
-        service: [fraud-ml, analytics]
+        service: [analytics]
     
     steps:
       - name: Checkout code
