@@ -14,7 +14,7 @@ env:
   CARGO_TERM_COLOR: always
   # See ci-rust.yml: 1.75 cannot parse the v4 workspace lock file.
   RUST_VERSION: '1.88'
-  GO_VERSION: '1.21'
+  GO_VERSION: '1.24'
   PYTHON_VERSION: '3.11'
   NODE_VERSION: '20'
 

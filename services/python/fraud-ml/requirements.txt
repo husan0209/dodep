@@ -34,8 +34,10 @@ structlog==24.1.0
 python-json-logger==2.0.7
 
 # Testing
-pytest==8.0.0
-pytest-asyncio==0.23.4
+pytest==8.3.5
+# 0.23.x caps pytest at <8, which cannot coexist with pytest 8. 0.24 is the
+# first release that requires pytest>=8.2 instead.
+pytest-asyncio==0.24.0
 pytest-cov==4.1.0
 httpx==0.26.0
 

@@ -14,10 +14,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build_client(true)
         .compile(
             &[
-                "../../libs/proto/common/v1/types.proto",
-                "../../libs/proto/betting/v1/betting.proto",
+                // Three levels up: websocket-gateway -> rust -> services -> repo
+                // root. Two levels resolves to services/libs, which does not
+                // exist, so protoc aborted with "Could not make proto path
+                // relative" before it was ever able to complain about anything
+                // else.
+                "../../../libs/proto/common/v1/types.proto",
+                "../../../libs/proto/betting/v1/betting.proto",
             ],
-            &["../../libs/proto"],
+            &["../../../libs/proto"],
         )?;
     Ok(())
 }
