@@ -44,6 +44,23 @@
 | ----------- | ---------- | --------- | ------------------------ |
 | `audit.log` | 8          | entity_id | Все изменения для аудита |
 
+### Партнёрские (affiliate, 30 дней retention)
+
+| Топик                          | Key          | Описание                              |
+| ------------------------------ | ------------ | ------------------------------------- |
+| `affiliate.click.tracked`      | affiliate_id | Клик по реферальной ссылке            |
+| `affiliate.attribution.created`| affiliate_id | Привязка игрока к партнёру            |
+| `affiliate.player.ftd`         | affiliate_id | Первый депозит приведённого игрока    |
+| `affiliate.commission.accrued` | affiliate_id | Начисление комиссии (RevShare от NGR) |
+| `affiliate.commission.released`| affiliate_id | Высвобождение из hold period          |
+| `affiliate.commission.reversed`| affiliate_id | Сторнирование начисления              |
+| `affiliate.payout.requested`   | affiliate_id | Запрос выплаты партнёром              |
+| `affiliate.payout.paid`        | affiliate_id | Выплата партнёру выполнена            |
+| `affiliate.fraud.flagged`      | affiliate_id | Fraud-флаг (self-referral, совпадения)|
+
+Affiliate Service потребляет: `casino.rounds.settled`, `betting.bets.settled`,
+`affiliate.player.activity` (group `affiliate-ngr-processor`).
+
 ## Конфигурация топиков
 
 ### Операционные топики
@@ -149,6 +166,7 @@ message DepositCompletedEvent {
 | Analytics Service    | `analytics-service`        | analytics.events                                    |
 | Fraud Engine         | `fraud-engine`             | fraud.signals, bets.bet.placed                      |
 | Payment Service      | `payment-service`          | payments.initiated, payments.completed              |
+| Affiliate Service    | `affiliate-ngr-processor`  | casino.rounds.settled, betting.bets.settled, affiliate.player.activity |
 
 ## Producer Config (Rust, rdkafka)
 

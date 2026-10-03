@@ -33,7 +33,10 @@ type walletGRPCClient struct {
 
 // NewWalletClient creates a new gRPC wallet client.
 func NewWalletClient(cfg WalletClientConfig, log *zap.Logger) (service.WalletClient, error) {
-	conn, err := grpc.Dial(
+	// grpc.NewClient replaces the deprecated grpc.Dial: it does not block on
+	// connect, so the first RPC (which carries its own timeout) reports an
+	// unreachable service instead of the constructor hanging.
+	conn, err := grpc.NewClient(
 		cfg.Address,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithKeepaliveParams(keepalive.ClientParameters{
@@ -43,7 +46,7 @@ func NewWalletClient(cfg WalletClientConfig, log *zap.Logger) (service.WalletCli
 		}),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("casino: dial wallet-core at %s: %w", cfg.Address, err)
+		return nil, fmt.Errorf("casino: create wallet-core client at %s: %w", cfg.Address, err)
 	}
 
 	log.Info("Casino: wallet-core client created", zap.String("addr", cfg.Address))

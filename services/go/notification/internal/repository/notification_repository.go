@@ -10,14 +10,12 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
-	"go.uber.org/zap"
 )
 
 // NotificationRepository handles data persistence for notifications
 type NotificationRepository struct {
 	db    *pgxpool.Pool
 	redis *redis.Client
-	log   *zap.Logger
 }
 
 var errRedisUnavailable = errors.New("redis client is not initialized")

@@ -4,6 +4,12 @@ import path from "path";
 
 export default defineConfig({
   plugins: [react()],
+  test: {
+    // The panel has no test files yet. Vitest exits 1 on an empty suite, which
+    // turned the CI "Test" step red before a single assertion could run.
+    // Drop this once the first spec lands.
+    passWithNoTests: true,
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

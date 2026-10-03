@@ -8,7 +8,24 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  RUST_VERSION: "1.75"
+  # Floor imposed by the committed lockfile. Measured, not guessed:
+  #
+  #   cargo metadata --format-version 1 | jq '[.packages[].rust_version
+  #     | select(. != null)] | unique | max'
+  #
+  # reports 1.88 as the highest MSRV anywhere in the resolved graph (home
+  # 0.5.12). Older floors fail concretely:
+  #
+  #   1.75 -> lock file version `4` was found, but this version of Cargo does
+  #           not understand this lock file            (lockfile v4 needs >= 1.78)
+  #   1.78 -> feature `edition2024` is required, pulled in by cpufeatures
+  #           0.3.0 via aes 0.9.0       (edition 2024 needs >= 1.85)
+  #   1.85 -> error: rustc 1.85.1 is not supported by the following packages:
+  #           icu_collections@2.2.0 requires rustc 1.86  (and the rest of icu_*
+  #           2.2.0, reached through idna -> url)
+  #
+  # Do not lower this without re-running that metadata query.
+  RUST_VERSION: "1.88"
   GO_VERSION: "1.21"
   PYTHON_VERSION: "3.11"
   NODE_VERSION: "20"
@@ -27,7 +44,7 @@ jobs:
     - uses: actions/checkout@v4
     
     - name: Install Rust
-      uses: dtolnay/rust-action@stable
+      uses: dtolnay/rust-toolchain@stable
       with:
         toolchain: ${{ env.RUST_VERSION }}
         components: rustfmt, clippy
@@ -174,8 +191,12 @@ jobs:
     - name: Build
       run: npm run build
     
+    # Not `npm run test -- --run`: `--run` is a vitest flag and jest rejects it
+    # with 'Unrecognized option "run"'. Each app exposes a `test:ci` script that
+    # already runs its runner once and exits - vitest for admin, plain jest for
+    # web - so a single matrix step serves both.
     - name: Test
-      run: npm run test -- --run
+      run: npm run test:ci
 
   # Security scanning
   security-scan:

@@ -67,7 +67,7 @@ func main() {
 		Password: cfg.RedisPassword,
 		DB:       cfg.RedisDB,
 	})
-	defer rdb.Close()
+	defer func() { _ = rdb.Close() }()
 
 	log.Info("Redis connected")
 

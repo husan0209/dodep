@@ -1,3 +1,15 @@
+/**
+ * The suite runs in the node environment on purpose.
+ *
+ * jest.config.js sets `testEnvironment: "jest-environment-jsdom"` for the DOM
+ * tests, but jsdom does not implement `fetch`. The "converts fetch connection
+ * failure" case below does `jest.spyOn(global, "fetch")`, which under jsdom
+ * fails with `Property 'fetch' does not exist in the provided object` before
+ * the assertion runs. Node 18+ ships a native fetch, so the node environment
+ * gives the test the real thing to spy on, and nothing here touches the DOM.
+ *
+ * @jest-environment node
+ */
 jest.mock("@/stores/auth-store", () => ({
   useAuthStore: {
     getState: () => ({

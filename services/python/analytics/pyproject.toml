@@ -28,6 +28,13 @@ dependencies = [
 dev = [
     "pytest>=7.4.0",
     "pytest-asyncio>=0.23.0",
+    # The CI job runs `pytest -v --cov=src`, so pytest-cov has to be installed
+    # with the package or pytest aborts with "unrecognized arguments: --cov".
+    "pytest-cov>=4.1.0",
+    # Required by fastapi.testclient.TestClient.
+    "httpx>=0.26.0",
+    "ruff>=0.1.0",
+    "mypy>=1.8.0",
 ]
 
 [build-system]

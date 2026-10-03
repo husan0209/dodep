@@ -27,6 +27,7 @@
 | 007 | `007_audit.sql`                | audit_log (append-only, RULE no update/delete)                  |
 | 008 | `008_rls_and_triggers.sql`     | RLS policies, audit triggers, Citus sharding                    |
 | 009 | `009_outbox.sql`               | outbox table (transactional outbox pattern)                     |
+| 021 | `021_affiliates.sql`           | affiliate_* (15 таблиц RevShare from NGR, ledger, outbox)       |
 
 ## Схема таблиц
 
@@ -118,6 +119,106 @@
 
 **Партиционирование:** RANGE(placed_at) DAILY
 **Шардирование:** HASH(user_id)
+
+### affiliate_profiles
+
+Профили партнёров (RevShare from NGR). Деньги партнёров — отдельный леджер, не смешивается с балансом игрока.
+
+| Колонка           | Тип              | Описание                                              |
+| ----------------- | ---------------- | ----------------------------------------------------- |
+| id                | UUID PK          | ID профиля                                            |
+| user_id           | BIGINT UNIQUE    | ID пользователя (один игрок — один профиль)           |
+| status            | affiliate_status | pending_review, active, suspended, rejected, closed   |
+| affiliate_code    | VARCHAR(32) UNIQUE | Реферальный код                                     |
+| commission_plan_id | UUID FK         | Тарифный план                                         |
+| commission_rate   | NUMERIC(10,4)    | Ставка комиссии 0–1 (дефолт 0.20)                     |
+| hold_period_days  | INT              | Hold между accrued и available (дефолт 14)            |
+| min_payout_amount | NUMERIC(18,8)    | Минимальная выплата (дефолт 100)                      |
+| currency          | CHAR(3)          | Валюта (дефолт USD)                                   |
+| kyc_required      | BOOLEAN          | Требуется KYC для выплат                              |
+| approval_mode     | affiliate_approval_mode | manual / automatic                              |
+| payout_schedule   | affiliate_payout_schedule | manual / weekly / monthly                     |
+| approved_by/at    | TEXT / TIMESTAMPTZ | Кто и когда одобрил                                 |
+
+### affiliate_enrollment_requests
+
+Заявки на партнёрство (MVP: только ручной аппрув).
+
+| Колонка      | Тип                        | Описание                              |
+| ------------ | -------------------------- | ------------------------------------- |
+| id           | UUID PK                    | ID заявки                             |
+| user_id      | BIGINT                     | ID пользователя                       |
+| status       | affiliate_enrollment_status | pending_review, approved, rejected   |
+| reason       | TEXT                       | Причина от игрока                     |
+| review_notes | TEXT                       | Заметки админа                        |
+| reviewed_by/at | TEXT / TIMESTAMPTZ       | Кто и когда рассмотрел                |
+
+**Ограничение:** частичный UNIQUE(user_id) WHERE status='pending_review' — одна активная заявка.
+
+### affiliate_commission_plans
+
+Тарифные планы (тип всегда `revshare`, RTP не используется).
+
+| Колонка                  | Тип       | Описание                              |
+| ------------------------ | --------- | ------------------------------------- |
+| id                       | UUID PK   | ID плана                              |
+| name                     | VARCHAR(100) | Название (дефолт `Default RevShare 20`) |
+| commission_rate          | NUMERIC(10,4) | 0–1                                |
+| hold_period_days         | INT       | Hold period                           |
+| min_payout_amount        | NUMERIC(18,8) | Минимальная выплата                |
+| negative_carryover_enabled | BOOLEAN | MVP: всегда FALSE                     |
+| is_default / is_active   | BOOLEAN   | Дефолтный (только один) / активен     |
+
+### affiliate_links / affiliate_clicks / affiliate_attributions
+
+Воронка `click -> registration -> FTD`.
+
+- **affiliate_links:** id, affiliate_id FK, campaign_name, landing_page, referral_code, referral_url, utm_source/medium/campaign, is_active.
+- **affiliate_clicks:** id, affiliate_id FK, link_id FK, click_id UNIQUE, ip_hash, user_agent_hash, device_fingerprint, country_code, landing_page.
+- **affiliate_attributions:** id, affiliate_id FK, referred_user_id BIGINT UNIQUE (один игрок — один партнёр), click_id, attribution_model (дефолт `last_click`), attributed_at, ftd_at, is_ftd_qualified.
+
+### affiliate_earnings
+
+Начисления `commission = max(0, NGR × rate)`, только по финализированным данным.
+
+| Колонка           | Тип                   | Описание                                        |
+| ----------------- | --------------------- | ----------------------------------------------- |
+| id                | UUID PK               | ID начисления                                   |
+| affiliate_id      | UUID FK               | Партнёр                                         |
+| referred_user_id | BIGINT                | Приведённый игрок                               |
+| source_type/id    | VARCHAR(32/64)        | Источник (casino/sports), id раунда/ставки      |
+| period_start/end  | TIMESTAMPTZ           | Период                                          |
+| ggr_amount        | NUMERIC(18,8)         | GGR                                             |
+| ngr_amount        | NUMERIC(18,8)         | NGR (GGR − бонусы − fees − chargebacks − налоги) |
+| commission_rate   | NUMERIC(10,4)         | Снапшот ставки на момент начисления             |
+| commission_amount | NUMERIC(18,8)         | Сумма комиссии                                  |
+| status            | affiliate_earning_status | accrued, pending, available, paid, reversed  |
+| hold_until        | TIMESTAMPTZ           | Доступно после этой даты                        |
+| idempotency_key   | VARCHAR(128) UNIQUE   | Ключ идемпотентности                            |
+
+**Индекс:** (affiliate_id, status, hold_until) — для hold-release job.
+
+### affiliate_payout_methods / affiliate_payouts
+
+Отдельный payout-контур (не смешивается с выводом игрока).
+
+- **affiliate_payout_methods:** id, affiliate_id FK, method_type (`bank_transfer/crypto/ewallet`), details_encrypted, display_name, details_masked, is_default, is_verified.
+- **affiliate_payouts:** id, affiliate_id FK, amount NUMERIC(18,8) CHECK>0, currency, method_id FK, idempotency_key UNIQUE, status (`requested/reviewing/approved/processing/paid/rejected/failed`), requested_at, approved_by/at, provider_reference, rejection_reason.
+
+**Индекс:** (affiliate_id, status, requested_at DESC) — очередь выплат.
+
+### affiliate_adjustments / affiliate_fraud_flags
+
+- **affiliate_adjustments:** id, affiliate_id FK, type (`credit/debit`), amount CHECK>0, reason (обязателен), reference_id, created_by.
+- **affiliate_fraud_flags:** id, affiliate_id FK, referred_user_id, flag_type (self_referral, kyc_match, payment_match, device_match, ...), severity (`low/medium/high/critical`), status (`open/in_review/resolved/dismissed`), details JSONB.
+
+### affiliate_ledger_accounts / affiliate_ledger_entries / affiliate_outbox
+
+- **affiliate_ledger_accounts:** (affiliate_id, account_type, currency) UNIQUE; типы `pending/available/processed/paid/reversed/adjusted`.
+- **affiliate_ledger_entries:** double-entry проводки, UNIQUE(transaction_id, account_id, direction), idempotency_key с индексом.
+- **affiliate_outbox:** BIGSERIAL id, aggregate_type/id, topic, event_key, payload/headers JSONB, published_at, retry_count. Индекс по неопубликованным.
+
+**Миграция:** `libs/migrations/postgresql/021_affiliates.sql` (консолидация `001+002` сервисных миграций, сид дефолтного плана на фиксированном UUID).
 
 ## ENUM типы
 

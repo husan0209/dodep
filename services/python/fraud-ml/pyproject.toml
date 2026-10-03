@@ -18,6 +18,9 @@ dependencies = [
     "onnx>=1.15.0",
     "onnxruntime>=1.17.0",
     "skl2onnx>=1.17.0",
+    # Tree converters for XGBoost. skl2onnx dropped them in 1.20, so
+    # FraudModel.export_onnx cannot convert an XGBClassifier without this.
+    "onnxmltools>=1.14.0",
     
     # Database
     "clickhouse-connect>=0.7.1",
@@ -61,6 +64,16 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+# X, X_scaled, X_train and friends are the conventional names for a design
+# matrix - in this codebase and in the scikit-learn / XGBoost estimators these
+# modules wrap. N803/N806 would force a lowercase `x`, which reads like a typo
+# next to every estimator it gets passed to, so they are relaxed for the model
+# modules only. Every other module is held to the default.
+"internal/models/fraud_detector.py" = ["N803", "N806"]
+"src/models/fraud_model.py" = ["N803", "N806"]
+"tests/test_models.py" = ["N803", "N806"]
 
 [tool.black]
 line-length = 100

@@ -44,6 +44,14 @@ type AffiliateRepository interface {
 	CreateFraudFlag(ctx context.Context, flag *domain.AffiliateFraudFlag) error
 	GetOpenFraudFlags(ctx context.Context, affiliateID uuid.UUID) ([]domain.AffiliateFraudFlag, error)
 
+	// Fraud signal queries backing the automatic anti-fraud engine
+	// (internal/fraud). Implementations must return (0, nil) on empty data.
+	GetClickByClickID(ctx context.Context, clickID string) (*domain.AffiliateClick, error)
+	CountClicksSince(ctx context.Context, affiliateID uuid.UUID, since time.Time) (int64, error)
+	CountAttributionsSince(ctx context.Context, affiliateID uuid.UUID, since time.Time) (int64, error)
+	CountReferredUsersByDevice(ctx context.Context, affiliateID uuid.UUID, deviceFP string, since time.Time) (int64, error)
+	CountReferredUsersByIP(ctx context.Context, affiliateID uuid.UUID, ipHash string, since time.Time) (int64, error)
+
 	// Admin list/query operations
 	ListProfiles(ctx context.Context, status domain.AffiliateStatus, limit, offset int) ([]domain.AffiliateProfile, int64, error)
 	UpdateCommissionRate(ctx context.Context, affiliateID uuid.UUID, rate decimal.Decimal) error

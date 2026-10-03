@@ -160,6 +160,50 @@
 - **ORDER BY:** (report_date, currency)
 - **TTL:** 5 лет
 
+### affiliate_daily_aggregates
+
+Дневные агрегаты партнёров (дашборд кабинета). Миграция `003_affiliate_analytics.sql`.
+
+| Колонка             | Тип                 | Описание                  |
+| ------------------- | ------------------- | ------------------------- |
+| affiliate_id        | String              | ID партнёра               |
+| report_date         | Date                | Дата отчёта               |
+| clicks              | UInt64              | Клики                     |
+| registrations       | UInt64              | Регистрации               |
+| ftd_count           | UInt64              | Первые депозиты           |
+| active_players      | UInt64              | Активные игроки           |
+| ggr_amount          | Decimal(18, 8)      | GGR                       |
+| ngr_amount          | Decimal(18, 8)      | NGR                       |
+| commission_accrued  | Decimal(18, 8)      | Начислено                 |
+| commission_released | Decimal(18, 8)      | Высвобождено из hold      |
+| commission_reversed | Decimal(18, 8)      | Сторнировано              |
+| currency            | LowCardinality(String) | Валюта                 |
+
+- **Engine:** SummingMergeTree
+- **Partition:** toYYYYMM(report_date)
+- **ORDER BY:** (affiliate_id, report_date)
+- **MV:** `affiliate_daily_summary_mv` (клики из `affiliate_clicks_raw`)
+
+### affiliate_earnings / affiliate_payouts
+
+Финансовые записи партнёрки (аудит начислений и выплат).
+
+- **affiliate_earnings:** earning_id, affiliate_id, referred_user_id, source_type/source_id, period_start/end, ggr/ngr_amount Decimal(18,8), commission_rate Decimal(10,4), commission_amount, status, hold_until — MergeTree, ORDER BY (affiliate_id, created_at, earning_id).
+- **affiliate_payouts:** payout_id, affiliate_id, amount, currency, status, requested_at, approved_at Nullable, provider_reference Nullable — MergeTree, ORDER BY (affiliate_id, requested_at, payout_id).
+
+### affiliate_clicks_raw / affiliate_attributions
+
+Сырые клики (TTL 90 дней) и атрибуции `click -> registration -> FTD`.
+
+- **affiliate_clicks_raw:** click_id, affiliate_id, link_id Nullable, ip_hash, user_agent_hash, device_fingerprint Nullable, country_code, landing_page, campaign Nullable — MergeTree, ORDER BY (affiliate_id, created_at, click_id).
+- **affiliate_attributions:** attribution_id, affiliate_id, referred_user_id, click_id, attribution_model, attributed_at, ftd_at Nullable, is_ftd_qualified — MergeTree, ORDER BY (affiliate_id, attributed_at, attribution_id).
+
+### referred_player_activity / affiliate_funnel_hourly / affiliate_fraud_signals
+
+- **referred_player_activity:** активность приведённых игроков по дням (bets, ggr, deposits, withdrawals, bonuses) — SummingMergeTree, ORDER BY (affiliate_id, referred_user_id, activity_date). Источник LTV и когорт.
+- **affiliate_funnel_hourly:** почасовая воронка clicks/registrations/ftds/active + конверсии — SummingMergeTree, TTL 30 дней.
+- **affiliate_fraud_signals:** fraud-сигналы партнёрки (signal_type, severity, details JSON) — MergeTree, TTL 365 дней.
+
 ## Kafka Engine (Redpanda ingestion)
 
 | Queue Table         | Topics                                              | Consumer Group           | Format      |

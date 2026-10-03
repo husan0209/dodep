@@ -6,14 +6,18 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/opus-casino/affiliate/internal/domain"
+	"github.com/opus-casino/affiliate/internal/fraud"
 	"github.com/opus-casino/affiliate/internal/repository"
 	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 )
 
 type AffiliateService struct {
-	repo   repository.AffiliateRepository
-	logger *zap.Logger
+	repo repository.AffiliateRepository
+	// fraudCfg holds the automatic anti-fraud thresholds. Defaults are
+	// conservative; override with SetFraudConfig to retune without a deploy.
+	fraudCfg fraud.Config
+	logger   *zap.Logger
 }
 
 func NewAffiliateService(repo repository.AffiliateRepository, logger *zap.Logger) *AffiliateService {
@@ -22,9 +26,15 @@ func NewAffiliateService(repo repository.AffiliateRepository, logger *zap.Logger
 	}
 
 	return &AffiliateService{
-		repo:   repo,
-		logger: logger,
+		repo:     repo,
+		logger:   logger,
+		fraudCfg: fraud.DefaultConfig(),
 	}
+}
+
+// SetFraudConfig overrides the automatic anti-fraud thresholds.
+func (s *AffiliateService) SetFraudConfig(cfg fraud.Config) {
+	s.fraudCfg = cfg
 }
 
 type EnrollAffiliateInput struct {
@@ -330,6 +340,9 @@ func (s *AffiliateService) BindReferredUser(ctx context.Context, in BindReferred
 	if err := s.repo.CreateAttribution(ctx, attribution); err != nil {
 		return nil, err
 	}
+
+	// Automatic anti-fraud screening: flag-first, never blocks the binding.
+	s.ScreenAttribution(ctx, attribution)
 
 	return attribution, nil
 }

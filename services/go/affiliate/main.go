@@ -45,7 +45,7 @@ func main() {
 
 	// 2. Initialize logger
 	log, _ := zap.NewProduction()
-	defer log.Sync()
+	defer func() { _ = log.Sync() }()
 
 	// 3. Initialize database (GORM + pgx driver, per CONVENTIONS)
 	db, err := gorm.Open(postgres.Open(cfg.DatabaseURL), &gorm.Config{})
