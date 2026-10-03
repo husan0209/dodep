@@ -2,7 +2,7 @@ use std::net::SocketAddr;
 
 use tracing::info;
 
-use super::betting_engine_server;
+use super::proto::betting::v1::betting_engine_service_server::BettingEngineServiceServer;
 use super::BettingEngineService;
 
 use crate::services::bet_service::BetService;
@@ -19,7 +19,7 @@ pub async fn start_grpc(
     info!(%addr, "gRPC server listening");
 
     tonic::transport::Server::builder()
-        .add_service(betting_engine_server::BettingEngineServer::new(service))
+        .add_service(BettingEngineServiceServer::new(service))
         .serve(addr)
         .await?;
 

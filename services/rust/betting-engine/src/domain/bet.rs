@@ -99,18 +99,13 @@ impl BetStatus {
     }
 }
 
-#[derive(Debug, Clone, Copy, Deserialize)]
+#[derive(Debug, Clone, Copy, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum AcceptOddsChanges {
+    #[default]
     None,
     Higher,
     Any,
-}
-
-impl Default for AcceptOddsChanges {
-    fn default() -> Self {
-        Self::None
-    }
 }
 
 // ── Core Entity ──
