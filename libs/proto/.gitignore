@@ -1,8 +1,14 @@
-# Generated code - DO NOT COMMIT
-# Run `buf generate` to regenerate
-
-/gen/
-/gen/go/
+# Generated code
+# Run `buf generate` from this directory to regenerate.
+#
+# /gen/go IS committed. Every Go service resolves the protobuf packages
+# through `replace github.com/opus-casino/proto => ../../libs/proto`, so the
+# import path github.com/opus-casino/proto/gen/go/<svc>/v1 only exists if the
+# generated tree lives at ./gen/go. When it was ignored instead, CI checked out
+# a module without those packages and every Go build, vet, test, lint and
+# gosec job failed with "no required module provides package
+# github.com/opus-casino/proto/gen/go/...". Regenerate with `make gen` and
+# commit the result.
 /gen/rust/
 /gen/typescript/
 

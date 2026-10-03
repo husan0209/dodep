@@ -15,30 +15,38 @@ managed:
 
 plugins:
   # Go - protocol buffers
+  # `out` must stay inside this module: it defines the directory that the
+  # import path github.com/opus-casino/proto/gen/go/... resolves to for every
+  # service (each one carries `replace github.com/opus-casino/proto =>
+  # ../../libs/proto`). Emitting to ../../gen put the packages outside the
+  # module, which is why they had to be committed twice - once ignored, once
+  # unused - and why CI could not compile them.
   - remote: buf.build/protocolbuffers/go
-    out: ../../gen/go
+    out: gen/go
     opt:
       - paths=source_relative
 
   # Go - gRPC
   - remote: buf.build/grpc/go
-    out: ../../gen/go
+    out: gen/go
     opt:
       - paths=source_relative
   
   # Rust - prost (requires: cargo install protoc-gen-prost protoc-gen-tonic)
   # Uncomment after installing the plugins:
   # - local: protoc-gen-prost
-  #   out: ../../gen/rust
+  #   out: gen/rust
   #   opt:
   #     - extern_path=.google.protobuf::prost_wkt_types
   #   strategy: all
   # - local: protoc-gen-tonic
-  #   out: ../../gen/rust
+  #   out: gen/rust
   #   opt:
   #     - no_client
   #   strategy: all
-  
+   
   # TypeScript / JavaScript
+  # Not part of the Go module, so this one still targets the repo-level tree
+  # that apps/web and apps/admin reference.
   - remote: buf.build/protocolbuffers/js
     out: ../../gen/typescript

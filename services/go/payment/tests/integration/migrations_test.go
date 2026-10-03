@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -16,6 +18,31 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
+
+// migrationFile resolves a file under libs/migrations/postgresql relative to
+// this test file rather than to the process working directory. A relative path
+// written for the wrong depth silently reads a non-existent file: the previous
+// "../../../libs/..." climbed three levels from tests/integration and stopped at
+// services/go, so every migration subtest failed on os.ReadFile before it ever
+// reached the database.
+func migrationFile(t *testing.T, name string) string {
+	t.Helper()
+
+	_, thisFile, _, ok := runtime.Caller(0)
+	require.True(t, ok, "failed to resolve the path of migrations_test.go")
+
+	repoRoot := filepath.Join(filepath.Dir(thisFile), "..", "..", "..", "..", "..")
+	return filepath.Join(repoRoot, "libs", "migrations", "postgresql", name)
+}
+
+func readMigration(t *testing.T, name string) string {
+	t.Helper()
+
+	content, err := os.ReadFile(migrationFile(t, name))
+	require.NoErrorf(t, err, "failed to read migration %s", name)
+
+	return string(content)
+}
 
 // TestMigrations_UpAndDown tests all migrations can be applied and rolled back
 // Validates: Phase 1.2 - Database Migrations
@@ -61,10 +88,7 @@ func TestMigrations_UpAndDown(t *testing.T) {
 
 	t.Run("run all up migrations", func(t *testing.T) {
 		// Phase 0.9: centralized migrations in libs/migrations/postgresql
-		migrationUp, err := os.ReadFile("../../../libs/migrations/postgresql/014_payments_core.sql")
-		require.NoError(t, err, "Failed to read centralized migration up")
-
-		err = db.Exec(string(migrationUp)).Error
+		err := db.Exec(readMigration(t, "014_payments_core.sql")).Error
 		require.NoError(t, err, "Failed to execute centralized migration up")
 	})
 
@@ -290,10 +314,7 @@ func TestMigrations_UpAndDown(t *testing.T) {
 
 	t.Run("run all down migrations (rollback)", func(t *testing.T) {
 		// Phase 0.9: single centralized down migration
-		migrationDown, err := os.ReadFile("../../../libs/migrations/postgresql/014_payments_core.down.sql")
-		require.NoError(t, err, "Failed to read centralized migration down")
-
-		err = db.Exec(string(migrationDown)).Error
+		err := db.Exec(readMigration(t, "014_payments_core.down.sql")).Error
 		require.NoError(t, err, "Failed to execute centralized migration down")
 	})
 
@@ -399,17 +420,15 @@ func TestMigrations_IdempotentDown(t *testing.T) {
 	defer sqlDB.Close()
 
 	// Phase 0.9: centralized migration
-	migrationUp, err := os.ReadFile("../../../libs/migrations/postgresql/014_payments_core.sql")
-	require.NoError(t, err)
-	require.NoError(t, db.Exec(string(migrationUp)).Error)
+	migrationUp := readMigration(t, "014_payments_core.sql")
+	require.NoError(t, db.Exec(migrationUp).Error)
 
-	migrationDown, err := os.ReadFile("../../../libs/migrations/postgresql/014_payments_core.down.sql")
-	require.NoError(t, err)
+	migrationDown := readMigration(t, "014_payments_core.down.sql")
 
-	err = db.Exec(string(migrationDown)).Error
+	err = db.Exec(migrationDown).Error
 	require.NoError(t, err, "First down migration should succeed")
 
-	err = db.Exec(string(migrationDown)).Error
+	err = db.Exec(migrationDown).Error
 	require.NoError(t, err, "Second down migration should succeed (idempotent)")
 }
 
@@ -452,16 +471,14 @@ func TestMigrations_CanReApply(t *testing.T) {
 	defer sqlDB.Close()
 
 	// Phase 0.9: centralized single-file migration cycle
-	migrationUp, err := os.ReadFile("../../../libs/migrations/postgresql/014_payments_core.sql")
-	require.NoError(t, err)
-	require.NoError(t, db.Exec(string(migrationUp)).Error, "First up migration should succeed")
+	migrationUp := readMigration(t, "014_payments_core.sql")
+	require.NoError(t, db.Exec(migrationUp).Error, "First up migration should succeed")
 
-	migrationDown, err := os.ReadFile("../../../libs/migrations/postgresql/014_payments_core.down.sql")
-	require.NoError(t, err)
-	require.NoError(t, db.Exec(string(migrationDown)).Error, "First down migration should succeed")
+	migrationDown := readMigration(t, "014_payments_core.down.sql")
+	require.NoError(t, db.Exec(migrationDown).Error, "First down migration should succeed")
 
 	// Second cycle: up again
-	err = db.Exec(string(migrationUp)).Error
+	err = db.Exec(migrationUp).Error
 	require.NoError(t, err, "Second up migration should succeed")
 
 	// Verify table exists
