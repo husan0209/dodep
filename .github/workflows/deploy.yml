@@ -15,7 +15,7 @@ env:
   # Floor imposed by the committed lockfile; see the comment in ci.yaml
   # for the 1.75 / 1.78 / 1.85 evidence. Do not lower without re-checking.
   RUST_VERSION: "1.85"
-  GO_VERSION: '1.21'
+  GO_VERSION: '1.26'
   PYTHON_VERSION: '3.11'
   NODE_VERSION: '20'
 
@@ -56,29 +56,47 @@ jobs:
 
       - name: Install dependencies
         run: |
-          npm install
+          npm --prefix apps/web ci
+          npm --prefix apps/admin ci
           cd services/rust && cargo fetch
           cd ../go/auth && go mod download
           cd ../../python/fraud-ml && pip install -r requirements.txt
 
+      - name: Install buf and generate protobuf stubs
+        run: |
+          BUF_VERSION=1.73.0
+          curl -fsSL -o /tmp/buf.tar.gz \
+            "https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/buf-Linux-x86_64.tar.gz"
+          sudo tar -xzf /tmp/buf.tar.gz -C /tmp
+          sudo install -m 0755 /tmp/buf/bin/buf /usr/local/bin/buf
+          make -C libs/proto gen-go
+
+      - name: Install lint tools
+        run: |
+          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0
+          pip install ruff
+
       - name: Run linters
         run: |
-          npm run lint
-          cd services/rust && cargo clippy -- -D warnings
+          cd apps/web && npm run lint
+          cd ../admin && npm run lint
+          cd ../../services/rust && cargo clippy -- -D warnings
           cd ../go/auth && golangci-lint run
           cd ../../python/fraud-ml && ruff check .
 
       - name: Run tests
         run: |
-          npm run test
-          cd services/rust && cargo test
+          cd apps/web && npm test
+          cd ../admin && npm test
+          cd ../../services/rust && cargo test
           cd ../go/auth && go test ./...
           cd ../../python/fraud-ml && pytest
 
       - name: Build
         run: |
-          npm run build
-          cd services/rust && cargo build --release
+          cd apps/web && npm run build
+          cd ../admin && npm run build
+          cd ../../services/rust && cargo build --release
 
   # ==========================================================================
   # Deploy to Vercel (Web Frontend)

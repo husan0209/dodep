@@ -44,11 +44,9 @@ struct ErrorBody {
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let (status, code, message) = match &self {
-            AppError::Unauthorized { reason } => (
-                StatusCode::UNAUTHORIZED,
-                "WS_UNAUTHORIZED",
-                reason.clone(),
-            ),
+            AppError::Unauthorized { reason } => {
+                (StatusCode::UNAUTHORIZED, "WS_UNAUTHORIZED", reason.clone())
+            }
             AppError::TooManySubscriptions { max, current } => (
                 StatusCode::BAD_REQUEST,
                 "WS_TOO_MANY_SUBSCRIPTIONS",
@@ -64,11 +62,9 @@ impl IntoResponse for AppError {
                 "WS_CONNECTION_LIMIT",
                 format!("{current}/{max}"),
             ),
-            AppError::InvalidTopic(msg) => (
-                StatusCode::BAD_REQUEST,
-                "WS_INVALID_TOPIC",
-                msg.clone(),
-            ),
+            AppError::InvalidTopic(msg) => {
+                (StatusCode::BAD_REQUEST, "WS_INVALID_TOPIC", msg.clone())
+            }
             AppError::KafkaError(e) => {
                 tracing::error!(error = %e, "Kafka error");
                 (

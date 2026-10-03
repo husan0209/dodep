@@ -6,7 +6,7 @@ description = "Real-time WebSocket gateway for Opus Casino platform"
 
 [dependencies]
 # Async runtime
-tokio = { version = "1.35", features = ["full", "rt-multi-thread", "io-uring"] }
+tokio = { version = "1.35", features = ["full", "rt-multi-thread"] }
 
 # Web framework
 axum = { version = "0.7", features = ["macros", "ws"] }
@@ -22,7 +22,7 @@ serde_json = "1.0"
 rkyv = { version = "0.7", features = ["validation"] }
 
 # gRPC client
-tonic = "0.10"
+tonic = "0.11"
 prost = "0.12"
 
 # Redis/Dragonfly for pub/sub
@@ -42,6 +42,9 @@ anyhow = "1.0"
 # Utils
 uuid = { version = "1.6", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
+config = "0.14"
+dotenvy = "0.15"
+futures = "0.3"
 
 # Rate limiting
 governor = "0.6"
@@ -53,7 +56,8 @@ dashmap = "5.5"
 tokio-test = "0.4"
 
 [build-dependencies]
-tonic-build = "0.10"
+tonic-build = "0.11"
+protoc-bin-vendored = "3.0"
 
 [[bin]]
 name = "websocket-gateway"

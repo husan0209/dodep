@@ -7,18 +7,18 @@ Architecture:
 - Rust serves models in production (< 5ms inference)
 - This FastAPI service is for training and batch scoring
 """
-import structlog
+
 import sys
 from contextlib import asynccontextmanager
 
-import clickhouse_connect
+import structlog
 from fastapi import FastAPI
 from prometheus_client import make_asgi_app
-
-from src.config import settings
 from src.api.routes import router as api_router
 from src.consumers.redpanda_consumer import RedpandaConsumer
 from src.models.fraud_detector import FraudDetector
+
+from src.config import settings
 from src.data.clickhouse import ClickHouseClient
 
 # Configure structured logging
@@ -49,7 +49,7 @@ async def lifespan(app: FastAPI):
         version="1.0.0",
         environment=settings.app_env,
     )
-    
+
     # Initialize ClickHouse client
     app.state.clickhouse_client = ClickHouseClient(
         host=settings.clickhouse_host,
@@ -59,11 +59,11 @@ async def lifespan(app: FastAPI):
         password=settings.clickhouse_password,
     )
     logger.info("clickhouse.connected")
-    
+
     # Initialize fraud detector
     app.state.fraud_detector = FraudDetector(model_path=settings.model_path)
     logger.info("fraud_detector.initialized")
-    
+
     # Start Redpanda consumer
     app.state.consumer = RedpandaConsumer(
         brokers=settings.redpanda_brokers,
@@ -71,9 +71,9 @@ async def lifespan(app: FastAPI):
     )
     await app.state.consumer.start()
     logger.info("redpanda_consumer.started")
-    
+
     yield
-    
+
     # Shutdown
     logger.info("fraud_ml.shutdown")
     await app.state.consumer.stop()
@@ -110,7 +110,7 @@ async def readiness_check():
 
 if __name__ == "__main__":
     import uvicorn
-    
+
     uvicorn.run(
         "src.main:app",
         host=settings.http_host,

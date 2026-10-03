@@ -17,7 +17,7 @@ env:
   #   1.85 -> resolves the whole workspace
   # Do not lower this without re-running that check.
   RUST_VERSION: "1.85"
-  GO_VERSION: "1.21"
+  GO_VERSION: "1.26"
   PYTHON_VERSION: "3.11"
   NODE_VERSION: "20"
 
@@ -91,6 +91,18 @@ jobs:
           ~/go/pkg/mod
         key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
     
+    # libs/proto/gen is gitignored, so a fresh checkout cannot compile any
+    # service that imports github.com/opus-casino/proto/gen/go/*.
+    - name: Install buf (pinned)
+      run: |
+        BUF_VERSION=1.73.0
+        curl -fsSL -o /tmp/buf.tar.gz \
+          "https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/buf-Linux-x86_64.tar.gz"
+        sudo tar -xzf /tmp/buf.tar.gz -C /tmp
+        sudo install -m 0755 /tmp/buf/bin/buf /usr/local/bin/buf
+        make -C libs/proto gen-go
+      working-directory: .
+
     - name: Download dependencies
       run: go mod download
     
@@ -183,7 +195,7 @@ jobs:
       run: npm run build
     
     - name: Test
-      run: npm run test -- --run
+      run: npm test
 
   # Security scanning
   security-scan:

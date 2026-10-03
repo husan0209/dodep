@@ -17,7 +17,7 @@ use crate::services::settlement_service::SettlementService;
 
 pub mod opuscasino {
     pub mod betting {
-        tonic::include_proto!("opuscasino.betting");
+        tonic::include_proto!("betting.v1");
     }
 }
 
@@ -50,22 +50,23 @@ impl betting_engine_server::BettingEngine for BettingEngineService {
             .as_ref()
             .map(|u| u.value.clone())
             .unwrap_or_default();
-        let user_id: i64 = user_id_str.parse().map_err(|_| {
-            Status::invalid_argument("Invalid user_id")
-        })?;
+        let user_id: i64 = user_id_str
+            .parse()
+            .map_err(|_| Status::invalid_argument("Invalid user_id"))?;
 
         let stake_str = req
             .stake
             .as_ref()
             .map(|a| a.value.clone())
             .unwrap_or_else(|| "0".into());
-        let stake: rust_decimal::Decimal = stake_str.parse().map_err(|_| {
-            Status::invalid_argument("Invalid stake amount")
-        })?;
+        let stake: rust_decimal::Decimal = stake_str
+            .parse()
+            .map_err(|_| Status::invalid_argument("Invalid stake amount"))?;
 
-        let odds: rust_decimal::Decimal = req.odds.parse().map_err(|_| {
-            Status::invalid_argument("Invalid odds")
-        })?;
+        let odds: rust_decimal::Decimal = req
+            .odds
+            .parse()
+            .map_err(|_| Status::invalid_argument("Invalid odds"))?;
 
         let currency = req
             .stake
@@ -110,8 +111,14 @@ impl betting_engine_server::BettingEngine for BettingEngineService {
         request: Request<CancelBetRequest>,
     ) -> Result<Response<CancelBetResponse>, Status> {
         let req = request.into_inner();
-        let bet_id_str = req.bet_id.as_ref().map(|b| b.value.clone()).unwrap_or_default();
-        let bet_id: i64 = bet_id_str.parse().map_err(|_| Status::invalid_argument("Invalid bet_id"))?;
+        let bet_id_str = req
+            .bet_id
+            .as_ref()
+            .map(|b| b.value.clone())
+            .unwrap_or_default();
+        let bet_id: i64 = bet_id_str
+            .parse()
+            .map_err(|_| Status::invalid_argument("Invalid bet_id"))?;
 
         match self.settlement_service.void_bet(BetId(bet_id)).await {
             Ok(_) => Ok(Response::new(CancelBetResponse {
@@ -132,12 +139,20 @@ impl betting_engine_server::BettingEngine for BettingEngineService {
         request: Request<GetBetRequest>,
     ) -> Result<Response<GetBetResponse>, Status> {
         let req = request.into_inner();
-        let bet_id_str = req.bet_id.as_ref().map(|b| b.value.clone()).unwrap_or_default();
-        let bet_id: i64 = bet_id_str.parse().map_err(|_| Status::invalid_argument("Invalid bet_id"))?;
+        let bet_id_str = req
+            .bet_id
+            .as_ref()
+            .map(|b| b.value.clone())
+            .unwrap_or_default();
+        let bet_id: i64 = bet_id_str
+            .parse()
+            .map_err(|_| Status::invalid_argument("Invalid bet_id"))?;
 
         // gRPC: get without user_id check (internal service call)
         // For now return error — needs user context
-        Err(Status::unimplemented("Use REST API for bet queries with user context"))
+        Err(Status::unimplemented(
+            "Use REST API for bet queries with user context",
+        ))
     }
 
     async fn get_user_bets(
@@ -145,8 +160,14 @@ impl betting_engine_server::BettingEngine for BettingEngineService {
         request: Request<GetUserBetsRequest>,
     ) -> Result<Response<GetUserBetsResponse>, Status> {
         let req = request.into_inner();
-        let user_id_str = req.user_id.as_ref().map(|u| u.value.clone()).unwrap_or_default();
-        let user_id: i64 = user_id_str.parse().map_err(|_| Status::invalid_argument("Invalid user_id"))?;
+        let user_id_str = req
+            .user_id
+            .as_ref()
+            .map(|u| u.value.clone())
+            .unwrap_or_default();
+        let user_id: i64 = user_id_str
+            .parse()
+            .map_err(|_| Status::invalid_argument("Invalid user_id"))?;
 
         let limit = if req.limit > 0 { req.limit as i64 } else { 20 };
 
@@ -156,11 +177,8 @@ impl betting_engine_server::BettingEngine for BettingEngineService {
             .await
         {
             Ok(result) => {
-                let bets: Vec<opuscasino::Bet> = result
-                    .data
-                    .iter()
-                    .map(convert_bet_resp_to_proto)
-                    .collect();
+                let bets: Vec<opuscasino::Bet> =
+                    result.data.iter().map(convert_bet_resp_to_proto).collect();
 
                 Ok(Response::new(GetUserBetsResponse {
                     bets,
@@ -176,17 +194,23 @@ impl betting_engine_server::BettingEngine for BettingEngineService {
         request: Request<SettleBetRequest>,
     ) -> Result<Response<SettleBetResponse>, Status> {
         let req = request.into_inner();
-        let bet_id_str = req.bet_id.as_ref().map(|b| b.value.clone()).unwrap_or_default();
-        let bet_id: i64 = bet_id_str.parse().map_err(|_| Status::invalid_argument("Invalid bet_id"))?;
+        let bet_id_str = req
+            .bet_id
+            .as_ref()
+            .map(|b| b.value.clone())
+            .unwrap_or_default();
+        let bet_id: i64 = bet_id_str
+            .parse()
+            .map_err(|_| Status::invalid_argument("Invalid bet_id"))?;
 
         let actual_win_str = req
             .actual_win
             .as_ref()
             .map(|a| a.value.clone())
             .unwrap_or_else(|| "0".into());
-        let actual_win: rust_decimal::Decimal = actual_win_str.parse().map_err(|_| {
-            Status::invalid_argument("Invalid actual_win amount")
-        })?;
+        let actual_win: rust_decimal::Decimal = actual_win_str
+            .parse()
+            .map_err(|_| Status::invalid_argument("Invalid actual_win amount"))?;
 
         match self
             .settlement_service
@@ -206,13 +230,16 @@ impl betting_engine_server::BettingEngine for BettingEngineService {
         }
     }
 
-    type StreamOddsStream = Pin<Box<dyn tokio::stream::Stream<Item = Result<OddsUpdate, Status>> + Send>>;
+    type StreamOddsStream =
+        Pin<Box<dyn tokio::stream::Stream<Item = Result<OddsUpdate, Status>> + Send>>;
 
     async fn stream_odds(
         &self,
         _request: Request<OddsStreamRequest>,
     ) -> Result<Response<Self::StreamOddsStream>, Status> {
-        Err(Status::unimplemented("Odds streaming handled by WebSocket gateway"))
+        Err(Status::unimplemented(
+            "Odds streaming handled by WebSocket gateway",
+        ))
     }
 }
 

@@ -117,7 +117,10 @@ class ApiClient {
     let token = accessToken;
 
     const makeRequest = async (t: string | null): Promise<T> => {
-      const requestId = crypto.randomUUID();
+      const requestId =
+        typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+          ? crypto.randomUUID()
+          : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
       const startedAt = Date.now();
       let response: Response;
       try {
