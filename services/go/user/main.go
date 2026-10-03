@@ -77,6 +77,11 @@ func main() {
 	<-quit
 	log.Info("Shutting down User Service...")
 	grpcServer.GracefulStop()
-	app.Shutdown()
+	if err := app.Shutdown(); err != nil {
+		// Shutdown drains in-flight requests, so a failure here means some
+		// connections were not closed cleanly. Worth reporting, but the
+		// process is going away either way.
+		log.Error("HTTP shutdown failed", zap.Error(err))
+	}
 	log.Info("User Service stopped")
 }

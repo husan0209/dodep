@@ -198,7 +198,16 @@ jobs:
       run: npm run build
     
     - name: Test
-      run: npm run test -- --run
+      # No `--run` here. That is a vitest flag, and this matrix also covers
+      # apps/web, whose `test` script is `jest`:
+      #
+      #   > jest --run
+      #   Unrecognized option "run". Did you mean "u"?
+      #
+      # Both runners already execute once and exit when there is no TTY / when
+      # CI is set, which is the case on the runner, so the flag was never
+      # needed for admin either - it only broke web.
+      run: npm test
 
   # Security scanning
   security-scan:

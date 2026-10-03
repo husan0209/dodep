@@ -35,11 +35,21 @@ jobs:
             services/go/casino/go.mod
             services/go/notification/go.mod
 
+      # `install-mode: binary` makes this step only fetch the binary. Without
+      # it the action runs `golangci-lint run` itself, and pointing it at
+      # `services/go` - which is not a module, each service under it is - gave
+      #
+      #   typechecking error: pattern ./...: directory prefix . does not
+      #   contain main module or its selected dependencies
+      #
+      # and failed the job before the per-service steps below ran. The two
+      # services are separate modules, so they have to be linted from their own
+      # directories, which is what the explicit steps do.
       - name: Install golangci-lint
-        uses: golangci/golangci-lint-action@v3
+        uses: golangci/golangci-lint-action@v4
         with:
           version: latest
-          working-directory: services/go
+          install-mode: binary
 
       - name: Lint Casino Service
         run: |
