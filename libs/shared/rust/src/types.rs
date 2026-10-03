@@ -44,11 +44,11 @@ impl Money {
         let amount = amount
             .parse::<Decimal>()
             .map_err(|e| format!("Invalid amount: {}", e))?;
-        
+
         if amount < Decimal::ZERO {
             return Err("Amount cannot be negative".to_string());
         }
-        
+
         Ok(Self {
             amount,
             currency: currency.to_uppercase(),
@@ -299,4 +299,200 @@ pub enum KycLevel {
     Identity,
     Enhanced,
     Vip,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn m(amount: &str, currency: &str) -> Money {
+        Money::new(amount, currency).expect("valid money")
+    }
+
+    #[test]
+    fn money_new_parses_and_uppercases_currency() {
+        let money = Money::new("100.00", "usd").unwrap();
+        assert_eq!(money.amount, Decimal::new(10000, 2));
+        assert_eq!(money.currency, "USD");
+    }
+
+    #[test]
+    fn money_new_rejects_negative_and_garbage() {
+        assert!(Money::new("-1.00", "USD").is_err());
+        assert!(Money::new("abc", "USD").is_err());
+        assert!(Money::new("", "USD").is_err());
+    }
+
+    #[test]
+    fn money_add_and_subtract_require_same_currency() {
+        let usd = m("100.00", "USD");
+        let eur = m("100.00", "EUR");
+
+        let sum = usd.add(&m("25.50", "USD")).unwrap();
+        assert_eq!(sum.amount, Decimal::new(12550, 2));
+        assert_eq!(sum.currency, "USD");
+
+        let diff = usd.subtract(&m("25.50", "USD")).unwrap();
+        assert_eq!(diff.amount, Decimal::new(7450, 2));
+
+        assert!(usd.add(&eur).is_err());
+        assert!(usd.subtract(&eur).is_err());
+    }
+
+    #[test]
+    fn money_subtract_can_go_negative() {
+        // Subtraction is pure arithmetic; balance guards live in services.
+        let diff = m("10.00", "USD").subtract(&m("25.00", "USD")).unwrap();
+        assert!(diff.amount < Decimal::ZERO);
+    }
+
+    #[test]
+    fn money_multiply_is_absolute() {
+        let money = m("100.00", "USD");
+        assert_eq!(
+            money.multiply(Decimal::new(15, 1)).amount,
+            Decimal::new(15000, 2)
+        );
+        // A negative scalar must not yield a negative (creditable) amount.
+        assert_eq!(
+            money.multiply(Decimal::new(-15, 1)).amount,
+            Decimal::new(15000, 2)
+        );
+    }
+
+    #[test]
+    fn money_predicates() {
+        assert!(m("0", "USD").is_zero());
+        assert!(!m("0", "USD").is_positive());
+        assert!(!m("0.01", "USD").is_zero());
+        assert!(m("0.01", "USD").is_positive());
+    }
+
+    #[test]
+    fn money_from_decimal_normalizes_currency() {
+        let money = Money::from_decimal(Decimal::new(500, 2), "eur");
+        assert_eq!(money.currency, "EUR");
+        assert_eq!(money.amount, Decimal::new(500, 2));
+    }
+
+    #[test]
+    fn money_serde_roundtrip_preserves_decimal_exactness() {
+        // 0.1 + 0.2 != 0.3 in f64; Decimal must serialize exactly.
+        let total = m("0.1", "USD").add(&m("0.2", "USD")).unwrap();
+        assert_eq!(total.amount.to_string(), "0.3");
+
+        let json = serde_json::to_string(&total).unwrap();
+        let back: Money = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.amount, total.amount);
+        assert_eq!(back.currency, total.currency);
+    }
+
+    #[test]
+    fn identifiers_are_transparent_in_json() {
+        let id = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
+        let user = UserId(id);
+        let json = serde_json::to_string(&user).unwrap();
+        assert_eq!(json, "\"550e8400-e29b-41d4-a716-446655440000\"");
+        let back: UserId = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, user);
+    }
+
+    #[test]
+    fn identifier_newtypes_are_distinct_types() {
+        // Compile-time distinctness; the assertion documents intent.
+        let u = UserId(Uuid::nil());
+        let b = BetId(Uuid::nil());
+        let t = TransactionId(Uuid::nil());
+        let g = GameId(Uuid::nil());
+        let s = SessionId(Uuid::nil());
+        assert_eq!(u.0, b.0);
+        assert_eq!(u.0, t.0);
+        assert_eq!(u.0, g.0);
+        assert_eq!(u.0, s.0);
+    }
+
+    #[test]
+    fn pagination_params_defaults_page_size() {
+        let params: PaginationParams = serde_json::from_str("{}").unwrap();
+        assert_eq!(params.page_size, 20);
+        assert!(params.cursor.is_none());
+        assert!(!params.descending);
+    }
+
+    #[test]
+    fn pagination_params_respects_explicit_page_size() {
+        let params: PaginationParams =
+            serde_json::from_str(r#"{"page_size":50,"descending":true}"#).unwrap();
+        assert_eq!(params.page_size, 50);
+        assert!(params.descending);
+    }
+
+    #[test]
+    fn pagination_result_new_starts_without_cursors() {
+        let result: PaginationResult<String> = PaginationResult::new(vec!["a".into()], true);
+        assert_eq!(result.items.len(), 1);
+        assert!(result.has_more);
+        assert!(result.next_cursor.is_none());
+        assert!(result.prev_cursor.is_none());
+        assert!(result.total_count.is_none());
+    }
+
+    #[test]
+    fn api_response_uses_camel_case_and_omits_empty() {
+        let ok: ApiResponse<u32> = ApiResponse::success(42);
+        let json = serde_json::to_string(&ok).unwrap();
+        assert!(json.contains("\"data\":42"), "{json}");
+        assert!(!json.contains("\"error\""), "{json}");
+
+        let details = ErrorDetails {
+            error_code: "NOT_FOUND".into(),
+            error_message: "missing".into(),
+            metadata: None,
+            field_errors: vec![],
+            trace_id: None,
+        };
+        // `ApiResponse::error` is declared on `impl<T>` but always returns
+        // `ApiResponse<()>`, so T is unconstrained here.
+        let err = ApiResponse::<u32>::error(details);
+        let json = serde_json::to_string(&err).unwrap();
+        // NOTE: `rename_all = "camelCase"` on ApiResponse applies only to its
+        // own fields (data/error). The nested ErrorDetails keeps snake_case,
+        // so the wire format is mixed — pinned here as actual behavior.
+        // Clients must expect `error.error_code`. See report to the owners.
+        assert!(json.contains("\"error_code\""), "{json}");
+        assert!(json.contains("\"error_message\""), "{json}");
+        // Empty field_errors / absent metadata / trace_id must be omitted.
+        assert!(!json.contains("field_errors"), "{json}");
+        assert!(!json.contains("trace_id"), "{json}");
+        assert!(!json.contains("\"data\""), "{json}");
+    }
+
+    #[test]
+    fn enums_serialize_as_snake_case() {
+        assert_eq!(
+            serde_json::to_string(&HealthStatus::Healthy).unwrap(),
+            "\"healthy\""
+        );
+        assert_eq!(
+            serde_json::to_string(&DeviceType::MobileWeb).unwrap(),
+            "\"mobile_web\""
+        );
+        assert_eq!(
+            serde_json::to_string(&WalletType::FreeSpins).unwrap(),
+            "\"free_spins\""
+        );
+        assert_eq!(
+            serde_json::to_string(&TransactionType::BetPlace).unwrap(),
+            "\"bet_place\""
+        );
+        assert_eq!(serde_json::to_string(&BetType::Live).unwrap(), "\"live\"");
+        assert_eq!(
+            serde_json::to_string(&BetStatus::Settled).unwrap(),
+            "\"settled\""
+        );
+        assert_eq!(
+            serde_json::to_string(&KycLevel::Identity).unwrap(),
+            "\"identity\""
+        );
+    }
 }

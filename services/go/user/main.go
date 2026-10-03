@@ -17,28 +17,35 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 
+	pb "github.com/opus-casino/proto/gen/go/user/v1"
 	"github.com/opus-casino/user/internal/config"
 	"github.com/opus-casino/user/internal/handlers"
 	"github.com/opus-casino/user/internal/repository"
 	"github.com/opus-casino/user/internal/service"
-	pb "github.com/opus-casino/proto/gen/go/user/v1"
 )
 
 func main() {
 	cfg := config.Load()
 	log, _ := zap.NewProduction()
-	defer log.Sync()
+	defer func() { _ = log.Sync() }()
+
+	// Every player route is authenticated, so an unusable JWT key means the
+	// service cannot serve traffic at all. Fail at startup rather than
+	// accepting requests it would have to reject.
+	if err := cfg.Validate(); err != nil {
+		log.Fatal("Invalid configuration", zap.String("error", err.Error()))
+	}
 
 	dbPool, err := pgxpool.New(context.Background(), cfg.DatabaseURL)
 	if err != nil {
 		log.Fatal("Failed to connect to database", zap.Error(err))
 	}
-	defer dbPool.Close()
+	defer dbPool.Close() //nolint:errcheck // best-effort close on shutdown
 
 	rdb := redis.NewClient(&redis.Options{
 		Addr: cfg.RedisAddr, Password: cfg.RedisPassword, DB: cfg.RedisDB,
 	})
-	defer rdb.Close()
+	defer func() { _ = rdb.Close() }()
 
 	userRepo := repository.NewUserRepository(dbPool)
 	userService := service.NewUserService(userRepo, log)
@@ -59,11 +66,12 @@ func main() {
 	}()
 
 	app := fiber.New(fiber.Config{AppName: "User Service v1.0.0"})
-	app.Use(recover.New(), logger.New())
+	app.Use(recover.New(), logger.New(), SecurityHeaders())
+	// Probes stay unauthenticated so the orchestrator can reach them.
 	app.Get("/health", func(c *fiber.Ctx) error { return c.SendString("ok") })
 	app.Get("/ready", func(c *fiber.Ctx) error { return c.SendString("ready") })
 
-	setupRoutes(app, userService)
+	setupRoutes(app, userService, NewTokenVerifier(cfg.JWTSecretKey, cfg.JWTEd25519PublicKey))
 
 	go func() {
 		log.Info("Starting HTTP server", zap.String("port", cfg.HTTPPort))
@@ -77,6 +85,8 @@ func main() {
 	<-quit
 	log.Info("Shutting down User Service...")
 	grpcServer.GracefulStop()
-	app.Shutdown()
+	if err := app.Shutdown(); err != nil {
+		log.Error("HTTP shutdown failed", zap.Error(err))
+	}
 	log.Info("User Service stopped")
 }

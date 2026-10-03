@@ -35,8 +35,13 @@ type userGRPCClient struct {
 }
 
 // NewUserClient creates a gRPC user client.
+//
+// grpc.Dial is deprecated (staticcheck SA1019); grpc.NewClient is the replacement.
+// The difference that matters here is the default resolver: Dial used "passthrough",
+// NewClient uses "dns". cfg.Address is a host:port service address, for which the DNS
+// resolver is the intended behaviour (it re-resolves and honours multiple A records).
 func NewUserClient(cfg UserClientConfig, log *zap.Logger) (UserServiceClient, error) {
-	conn, err := grpc.Dial(
+	conn, err := grpc.NewClient(
 		cfg.Address,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithKeepaliveParams(keepalive.ClientParameters{

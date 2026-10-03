@@ -86,15 +86,15 @@ func RegisterSettingsRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger) {
 				}
 			}
 			resp = append(resp, fiber.Map{
-				"id":           fmt.Sprintf("%d", u.ID),
-				"email":        u.Email,
-				"name":         name,
-				"role":         u.Role,
-				"locked":       u.Status != "active",
-				"totp_enabled": u.TOTPEnabled,
+				"id":            fmt.Sprintf("%d", u.ID),
+				"email":         u.Email,
+				"name":          name,
+				"role":          u.Role,
+				"locked":        u.Status != "active",
+				"totp_enabled":  u.TOTPEnabled,
 				"last_login_at": u.LastLoginAt,
 				"last_login_ip": u.LastLoginIP,
-				"created_at":   u.CreatedAt,
+				"created_at":    u.CreatedAt,
 			})
 		}
 		return c.JSON(fiber.Map{"data": resp})

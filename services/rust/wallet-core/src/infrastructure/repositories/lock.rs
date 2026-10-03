@@ -14,7 +14,7 @@ impl LockRepository {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
-    
+
     /// Create a new lock
     pub async fn create(&self, lock: &FundLock) -> Result<(), sqlx::Error> {
         sqlx::query!(
@@ -35,10 +35,10 @@ impl LockRepository {
         )
         .execute(&self.pool)
         .await?;
-        
+
         Ok(())
     }
-    
+
     /// Get active lock by reference ID
     pub async fn get_active_by_reference(
         &self,
@@ -58,10 +58,10 @@ impl LockRepository {
         )
         .fetch_optional(&self.pool)
         .await?;
-        
+
         Ok(lock)
     }
-    
+
     /// Release a lock
     pub async fn release(&self, reference_id: Uuid) -> Result<(), sqlx::Error> {
         sqlx::query!(
@@ -74,7 +74,7 @@ impl LockRepository {
         )
         .execute(&self.pool)
         .await?;
-        
+
         Ok(())
     }
 }

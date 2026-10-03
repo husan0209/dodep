@@ -7,33 +7,33 @@ import (
 
 // Payment error codes (5000-5999 range)
 const (
-	ErrCodePaymentNotFound          = 5001
-	ErrCodePaymentAlreadyProcessed  = 5002
-	ErrCodePaymentExpired           = 5003
-	ErrCodeKYCRequired              = 5004
-	ErrCodeDailyLimitExceeded       = 5005
-	ErrCodeInsufficientBalance      = 5006
-	ErrCodeWalletLocked             = 5007
-	ErrCodeInvalidCryptoAddress     = 5008
-	ErrCodeCurrencyNotSupported     = 5009
-	ErrCodeProviderUnavailable      = 5010
-	ErrCodeWebhookSignatureInvalid  = 5011
-	ErrCodeWithdrawalNotFound       = 5012
+	ErrCodePaymentNotFound            = 5001
+	ErrCodePaymentAlreadyProcessed    = 5002
+	ErrCodePaymentExpired             = 5003
+	ErrCodeKYCRequired                = 5004
+	ErrCodeDailyLimitExceeded         = 5005
+	ErrCodeInsufficientBalance        = 5006
+	ErrCodeWalletLocked               = 5007
+	ErrCodeInvalidCryptoAddress       = 5008
+	ErrCodeCurrencyNotSupported       = 5009
+	ErrCodeProviderUnavailable        = 5010
+	ErrCodeWebhookSignatureInvalid    = 5011
+	ErrCodeWithdrawalNotFound         = 5012
 	ErrCodeWithdrawalAlreadyProcessed = 5013
-	ErrCodeInvalidAmount            = 5014
-	ErrCodeInvalidStatusTransition  = 5015
+	ErrCodeInvalidAmount              = 5014
+	ErrCodeInvalidStatusTransition    = 5015
 )
 
 // Domain errors
 var (
-	ErrPaymentNotFound           = errors.New("payment not found")
-	ErrPaymentAlreadyProcessed   = errors.New("payment already processed")
-	ErrPaymentExpired            = errors.New("payment has expired")
-	ErrWithdrawalNotFound        = errors.New("withdrawal not found")
+	ErrPaymentNotFound            = errors.New("payment not found")
+	ErrPaymentAlreadyProcessed    = errors.New("payment already processed")
+	ErrPaymentExpired             = errors.New("payment has expired")
+	ErrWithdrawalNotFound         = errors.New("withdrawal not found")
 	ErrWithdrawalAlreadyProcessed = errors.New("withdrawal already processed")
 
-	ErrKYCRequired         = errors.New("KYC level 2 required for withdrawals")
-	ErrDailyLimitExceeded  = errors.New("daily limit exceeded")
+	ErrKYCRequired        = errors.New("KYC level 2 required for withdrawals")
+	ErrDailyLimitExceeded = errors.New("daily limit exceeded")
 
 	ErrInsufficientBalance = errors.New("insufficient balance")
 	ErrWalletLocked        = errors.New("wallet is locked")
@@ -126,24 +126,24 @@ func ErrorWithdrawalNotFound(id int64) error {
 
 func ErrorKYCRequiredLevel(level int) error {
 	return WithDetails(ErrKYCRequired, ErrCodeKYCRequired, map[string]interface{}{
-		"current_level": level,
+		"current_level":  level,
 		"required_level": 2,
 	})
 }
 
 func ErrorDailyLimitExceeded(limit, used, requested float64) error {
 	return WithDetails(ErrDailyLimitExceeded, ErrCodeDailyLimitExceeded, map[string]interface{}{
-		"limit":      limit,
-		"used":       used,
-		"requested":  requested,
-		"available":  limit - used,
+		"limit":     limit,
+		"used":      used,
+		"requested": requested,
+		"available": limit - used,
 	})
 }
 
 func ErrorInsufficientBalance(available, requested float64) error {
 	return WithDetails(ErrInsufficientBalance, ErrCodeInsufficientBalance, map[string]interface{}{
-		"available":  available,
-		"requested":  requested,
+		"available": available,
+		"requested": requested,
 	})
 }
 
@@ -169,19 +169,18 @@ func ErrorProviderUnavailable(provider string, reason error) error {
 
 // HTTPStatus returns the appropriate HTTP status code for an error
 func HTTPStatus(err error) int {
-	code := GetErrorCode(err)
-	switch {
-	case code == ErrCodePaymentNotFound || code == ErrCodeWithdrawalNotFound:
+	switch code := GetErrorCode(err); code {
+	case ErrCodePaymentNotFound, ErrCodeWithdrawalNotFound:
 		return 404
-	case code == ErrCodeKYCRequired:
+	case ErrCodeKYCRequired:
 		return 403
-	case code == ErrCodeInsufficientBalance || code == ErrCodeDailyLimitExceeded:
+	case ErrCodeInsufficientBalance, ErrCodeDailyLimitExceeded:
 		return 422
-	case code == ErrCodeWebhookSignatureInvalid:
+	case ErrCodeWebhookSignatureInvalid:
 		return 401
-	case code == ErrCodeProviderUnavailable:
+	case ErrCodeProviderUnavailable:
 		return 502
-	case code == ErrCodeInvalidCryptoAddress || code == ErrCodeInvalidAmount:
+	case ErrCodeInvalidCryptoAddress, ErrCodeInvalidAmount:
 		return 400
 	default:
 		return 500

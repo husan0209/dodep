@@ -69,6 +69,43 @@ const result = await retry(
 const search = debounce((query) => api.search(query), 300);
 ```
 
+### Money arithmetic
+
+Money is never represented as a JavaScript number. Amounts are decimal strings
+and every helper here converts them to integer minor units (cents) before doing
+any arithmetic, so no value ever passes through a binary float
+(`CONVENTIONS.md` NEVER-6).
+
+```typescript
+import { addMoney, subtractMoney, compareMoney, parseMoney } from '@opus-casino/shared';
+
+const total = addMoney({ amount: '0.10', currency: 'USD' }, { amount: '0.20', currency: 'USD' });
+total.amount; // '0.30' — exactly, not 0.30000000000000004
+
+const change = subtractMoney({ amount: '10.00', currency: 'USD' }, { amount: '2.50', currency: 'USD' });
+change.amount; // '7.50'
+
+compareMoney({ amount: '100.00', currency: 'USD' }, { amount: '50.00', currency: 'USD' }); // 1
+
+parseMoney('1.5', 'usd'); // { amount: '1.50', currency: 'USD' }
+```
+
+Points worth knowing:
+
+- **Never pass a `number`.** `parseMoney` takes a string only. A float input is
+  a compile error, and a malformed string throws rather than being coerced.
+- **Mixing currencies throws.** `addMoney`, `subtractMoney` and `compareMoney`
+  reject a currency mismatch instead of adding euros to dollars.
+- **Rounding is half away from zero**, matching the Go
+  (`shopspring/decimal.Round`) and Rust
+  (`RoundingStrategy::MidpointAwayFromZero`) helpers. So
+  `multiplyMoney({ amount: '0.01', currency: 'USD' }, 1.5).amount` is `'0.02'`,
+  where float arithmetic produced `'0.01'`.
+- **Precision holds past 2^53.** A `number` cannot represent
+  `9007199254740993`; these helpers can.
+- **Sub-cent input is an error**, not a truncated value: `'0.001'` throws
+  instead of silently becoming `'0.00'`.
+
 ## API Reference
 
 ### Types
@@ -149,7 +186,34 @@ npm run format
 
 # Test
 npm test
+
+# Test with coverage
+npm test -- --coverage
 ```
+
+### Tests
+
+`npm test` runs Jest through `ts-jest`, type-checking each test file under the
+package's own strict tsconfig, so a test cannot pass against a type error that
+`npm run build` would reject. Coverage thresholds are enforced in
+`jest.config.js` (85% statements, 80% branches, 90% functions); current coverage
+is above 99%.
+
+| File | Covers |
+|------|--------|
+| `src/helpers.test.ts` | Money arithmetic, currency guards, comparison, predicates, formatting |
+| `src/helpers.general.test.ts` | UUID generation, timestamps, retry, debounce/throttle, clone, pick/omit |
+| `src/validators.test.ts` | Every exported validator, including IPv6 forms and calendar edge cases |
+| `src/constants.test.ts` | Constant invariants: ordered bounds, unique codes, money-shaped limits |
+
+### Known inconsistency
+
+`CURRENCIES` mixes fiat ISO 4217 codes with crypto tickers. `USDT` is four
+letters, so `isValidCurrencyCode('USDT')` and therefore `isValidMoney` reject
+any USDT amount, and `Intl.NumberFormat` throws a `RangeError` for `USDT`, `BTC`
+and `ETH`. This is asserted in `src/constants.test.ts` so the mismatch stays
+visible; resolving it (drop the tickers, or teach the validator about them) is a
+call for the constants owner.
 
 ## License
 

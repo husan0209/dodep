@@ -10,18 +10,19 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
-	"go.uber.org/zap"
 )
 
 // NotificationRepository handles data persistence for notifications
 type NotificationRepository struct {
 	db    *pgxpool.Pool
 	redis *redis.Client
-	log   *zap.Logger
 }
 
-var errRedisUnavailable = errors.New("redis client is not initialized")
-var errDatabaseUnavailable = errors.New("database client is not initialized")
+// ErrRedisUnavailable / ErrDatabaseUnavailable are returned when the repository was
+// constructed without a live client. They are exported so callers (and tests) can
+// distinguish "not wired up" from a genuine storage failure via errors.Is.
+var ErrRedisUnavailable = errors.New("redis client is not initialized")
+var ErrDatabaseUnavailable = errors.New("database client is not initialized")
 
 // NewNotificationRepository creates a new notification repository
 func NewNotificationRepository(db *pgxpool.Pool, rdb *redis.Client) *NotificationRepository {
@@ -33,33 +34,33 @@ func NewNotificationRepository(db *pgxpool.Pool, rdb *redis.Client) *Notificatio
 
 // Notification represents a notification
 type Notification struct {
-	ID           string                 `json:"id"`
-	UserID       uint64                 `json:"user_id"`
-	Channel      string                 `json:"channel"`
-	Type         string                 `json:"type"`
-	Priority     string                 `json:"priority"`
-	Subject      string                 `json:"subject"`
-	Message      string                 `json:"message"`
-	Data         map[string]string      `json:"data"`
-	IsRead       bool                   `json:"is_read"`
-	CreatedAt    time.Time              `json:"created_at"`
-	ReadAt       *time.Time             `json:"read_at"`
-	SentAt       *time.Time             `json:"sent_at"`
-	Status       string                 `json:"status"`
-	ErrorMessage string                 `json:"error_message"`
-	ReferenceID  string                 `json:"reference_id"`
-	Metadata     map[string]string      `json:"metadata"`
+	ID           string            `json:"id"`
+	UserID       uint64            `json:"user_id"`
+	Channel      string            `json:"channel"`
+	Type         string            `json:"type"`
+	Priority     string            `json:"priority"`
+	Subject      string            `json:"subject"`
+	Message      string            `json:"message"`
+	Data         map[string]string `json:"data"`
+	IsRead       bool              `json:"is_read"`
+	CreatedAt    time.Time         `json:"created_at"`
+	ReadAt       *time.Time        `json:"read_at"`
+	SentAt       *time.Time        `json:"sent_at"`
+	Status       string            `json:"status"`
+	ErrorMessage string            `json:"error_message"`
+	ReferenceID  string            `json:"reference_id"`
+	Metadata     map[string]string `json:"metadata"`
 }
 
 // NotificationSettings represents user's notification settings
 type NotificationSettings struct {
-	UserID              uint64                        `json:"user_id"`
-	EmailEnabled        bool                          `json:"email_enabled"`
-	SMSEnabled          bool                          `json:"sms_enabled"`
-	PushEnabled         bool                          `json:"push_enabled"`
-	InAppEnabled        bool                          `json:"in_app_enabled"`
-	TypePreferences     map[string]ChannelPreferences `json:"type_preferences"`
-	UpdatedAt           time.Time                     `json:"updated_at"`
+	UserID          uint64                        `json:"user_id"`
+	EmailEnabled    bool                          `json:"email_enabled"`
+	SMSEnabled      bool                          `json:"sms_enabled"`
+	PushEnabled     bool                          `json:"push_enabled"`
+	InAppEnabled    bool                          `json:"in_app_enabled"`
+	TypePreferences map[string]ChannelPreferences `json:"type_preferences"`
+	UpdatedAt       time.Time                     `json:"updated_at"`
 }
 
 // ChannelPreferences represents channel preferences for a notification type
@@ -73,7 +74,7 @@ type ChannelPreferences struct {
 // CreateNotification creates a new notification
 func (r *NotificationRepository) CreateNotification(ctx context.Context, notif *Notification) error {
 	if r.db == nil {
-		return errDatabaseUnavailable
+		return ErrDatabaseUnavailable
 	}
 	return nil
 }
@@ -81,7 +82,7 @@ func (r *NotificationRepository) CreateNotification(ctx context.Context, notif *
 // GetNotification returns a notification by ID
 func (r *NotificationRepository) GetNotification(ctx context.Context, id string) (*Notification, error) {
 	if r.db == nil {
-		return nil, errDatabaseUnavailable
+		return nil, ErrDatabaseUnavailable
 	}
 	return nil, nil
 }
@@ -89,7 +90,7 @@ func (r *NotificationRepository) GetNotification(ctx context.Context, id string)
 // GetUserNotifications returns user's notifications with pagination
 func (r *NotificationRepository) GetUserNotifications(ctx context.Context, userID uint64, typeFilter *string, isRead *bool, dateFrom, dateTo *time.Time, limit, offset int32) ([]Notification, int64, error) {
 	if r.db == nil {
-		return nil, 0, errDatabaseUnavailable
+		return nil, 0, ErrDatabaseUnavailable
 	}
 	return []Notification{}, 0, nil
 }
@@ -97,7 +98,7 @@ func (r *NotificationRepository) GetUserNotifications(ctx context.Context, userI
 // GetUnreadCount returns count of unread notifications for a user
 func (r *NotificationRepository) GetUnreadCount(ctx context.Context, userID uint64) (int32, error) {
 	if r.db == nil {
-		return 0, errDatabaseUnavailable
+		return 0, ErrDatabaseUnavailable
 	}
 	return 0, nil
 }
@@ -105,7 +106,7 @@ func (r *NotificationRepository) GetUnreadCount(ctx context.Context, userID uint
 // MarkAsRead marks a notification as read
 func (r *NotificationRepository) MarkAsRead(ctx context.Context, id string, userID uint64) error {
 	if r.db == nil {
-		return errDatabaseUnavailable
+		return ErrDatabaseUnavailable
 	}
 	return nil
 }
@@ -113,7 +114,7 @@ func (r *NotificationRepository) MarkAsRead(ctx context.Context, id string, user
 // MarkAllAsRead marks all user notifications as read
 func (r *NotificationRepository) MarkAllAsRead(ctx context.Context, userID uint64, typeFilter *string) (int32, error) {
 	if r.db == nil {
-		return 0, errDatabaseUnavailable
+		return 0, ErrDatabaseUnavailable
 	}
 	return 0, nil
 }
@@ -121,7 +122,7 @@ func (r *NotificationRepository) MarkAllAsRead(ctx context.Context, userID uint6
 // DeleteNotification deletes a notification
 func (r *NotificationRepository) DeleteNotification(ctx context.Context, id string, userID uint64) error {
 	if r.db == nil {
-		return errDatabaseUnavailable
+		return ErrDatabaseUnavailable
 	}
 	return nil
 }
@@ -129,7 +130,7 @@ func (r *NotificationRepository) DeleteNotification(ctx context.Context, id stri
 // UpdateNotificationStatus updates notification status
 func (r *NotificationRepository) UpdateNotificationStatus(ctx context.Context, id string, status string, errorMessage string) error {
 	if r.db == nil {
-		return errDatabaseUnavailable
+		return ErrDatabaseUnavailable
 	}
 	return nil
 }
@@ -138,20 +139,20 @@ func (r *NotificationRepository) UpdateNotificationStatus(ctx context.Context, i
 func (r *NotificationRepository) GetNotificationSettings(ctx context.Context, userID uint64) (*NotificationSettings, error) {
 	// TODO: Implement database query
 	return &NotificationSettings{
-		UserID:           userID,
-		EmailEnabled:     true,
-		SMSEnabled:       false,
-		PushEnabled:      true,
-		InAppEnabled:     true,
-		TypePreferences:  make(map[string]ChannelPreferences),
-		UpdatedAt:        time.Now(),
+		UserID:          userID,
+		EmailEnabled:    true,
+		SMSEnabled:      false,
+		PushEnabled:     true,
+		InAppEnabled:    true,
+		TypePreferences: make(map[string]ChannelPreferences),
+		UpdatedAt:       time.Now(),
 	}, nil
 }
 
 // UpdateNotificationSettings updates user's notification settings
 func (r *NotificationRepository) UpdateNotificationSettings(ctx context.Context, settings *NotificationSettings) error {
 	if r.db == nil {
-		return errDatabaseUnavailable
+		return ErrDatabaseUnavailable
 	}
 	return nil
 }
@@ -159,7 +160,7 @@ func (r *NotificationRepository) UpdateNotificationSettings(ctx context.Context,
 // GetPendingNotifications returns pending notifications to be sent
 func (r *NotificationRepository) GetPendingNotifications(ctx context.Context, limit int32) ([]Notification, error) {
 	if r.db == nil {
-		return nil, errDatabaseUnavailable
+		return nil, ErrDatabaseUnavailable
 	}
 	return []Notification{}, nil
 }
@@ -168,7 +169,7 @@ func (r *NotificationRepository) GetPendingNotifications(ctx context.Context, li
 func (r *NotificationRepository) CacheNotification(ctx context.Context, notif *Notification, ttl time.Duration) error {
 	key := "notification:" + notif.ID
 	if r.redis == nil {
-		return errRedisUnavailable
+		return ErrRedisUnavailable
 	}
 
 	payload, err := json.Marshal(notif)
@@ -183,7 +184,7 @@ func (r *NotificationRepository) CacheNotification(ctx context.Context, notif *N
 func (r *NotificationRepository) GetCachedNotification(ctx context.Context, id string) (*Notification, error) {
 	key := "notification:" + id
 	if r.redis == nil {
-		return nil, errRedisUnavailable
+		return nil, ErrRedisUnavailable
 	}
 
 	payload, err := r.redis.Get(ctx, key).Bytes()
@@ -206,7 +207,7 @@ func (r *NotificationRepository) GetCachedNotification(ctx context.Context, id s
 func (r *NotificationRepository) InvalidateNotificationCache(ctx context.Context, id string) error {
 	key := "notification:" + id
 	if r.redis == nil {
-		return errRedisUnavailable
+		return ErrRedisUnavailable
 	}
 
 	return r.redis.Del(ctx, key).Err()
@@ -220,7 +221,7 @@ func (r *NotificationRepository) GetUserUnreadKey(userID uint64) string {
 // IncrementUnreadCount increments unread count in Redis
 func (r *NotificationRepository) IncrementUnreadCount(ctx context.Context, userID uint64) error {
 	if r.redis == nil {
-		return errRedisUnavailable
+		return ErrRedisUnavailable
 	}
 
 	key := r.GetUserUnreadKey(userID)
@@ -230,7 +231,7 @@ func (r *NotificationRepository) IncrementUnreadCount(ctx context.Context, userI
 // DecrementUnreadCount decrements unread count in Redis
 func (r *NotificationRepository) DecrementUnreadCount(ctx context.Context, userID uint64) error {
 	if r.redis == nil {
-		return errRedisUnavailable
+		return ErrRedisUnavailable
 	}
 
 	key := r.GetUserUnreadKey(userID)
@@ -240,7 +241,7 @@ func (r *NotificationRepository) DecrementUnreadCount(ctx context.Context, userI
 // GetUnreadCountFromCache gets unread count from Redis
 func (r *NotificationRepository) GetUnreadCountFromCache(ctx context.Context, userID uint64) (int32, error) {
 	if r.redis == nil {
-		return 0, errRedisUnavailable
+		return 0, ErrRedisUnavailable
 	}
 
 	key := r.GetUserUnreadKey(userID)
@@ -259,7 +260,7 @@ func (r *NotificationRepository) GetUnreadCountFromCache(ctx context.Context, us
 // SetUnreadCount sets unread count in Redis
 func (r *NotificationRepository) SetUnreadCount(ctx context.Context, userID uint64, count int32) error {
 	if r.redis == nil {
-		return errRedisUnavailable
+		return ErrRedisUnavailable
 	}
 
 	key := r.GetUserUnreadKey(userID)

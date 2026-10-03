@@ -18,11 +18,11 @@ import (
 	"google.golang.org/grpc/reflection"
 
 	"github.com/opus-casino/notification/internal/config"
+	"github.com/opus-casino/notification/internal/consumer"
 	"github.com/opus-casino/notification/internal/handlers"
-	pb "github.com/opus-casino/proto/gen/go/notification/v1"
 	"github.com/opus-casino/notification/internal/repository"
 	"github.com/opus-casino/notification/internal/service"
-	"github.com/opus-casino/notification/internal/consumer"
+	pb "github.com/opus-casino/proto/gen/go/notification/v1"
 )
 
 func main() {
@@ -31,14 +31,14 @@ func main() {
 
 	// Initialize logger
 	zapLogger, _ := zap.NewProduction()
-	defer zapLogger.Sync()
+	defer func() { _ = zapLogger.Sync() }()
 
 	// Initialize database connection
 	dbPool, err := pgxpool.New(context.Background(), cfg.DatabaseURL)
 	if err != nil {
 		zapLogger.Fatal("Failed to connect to database", zap.Error(err))
 	}
-	defer dbPool.Close()
+	defer dbPool.Close() //nolint:errcheck // best-effort close on shutdown
 
 	// Initialize Redis client
 	rdb := redis.NewClient(&redis.Options{
@@ -46,7 +46,7 @@ func main() {
 		Password: cfg.RedisPassword,
 		DB:       cfg.RedisDB,
 	})
-	defer rdb.Close()
+	defer func() { _ = rdb.Close() }()
 
 	// Initialize repository
 	notifRepo := repository.NewNotificationRepository(dbPool, rdb)

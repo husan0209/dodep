@@ -28,33 +28,33 @@ func NewNotificationService(repo *repository.NotificationRepository, log *zap.Lo
 
 // Notification represents a notification
 type Notification struct {
-	ID           string                 `json:"id"`
-	UserID       uint64                 `json:"user_id"`
-	Channel      string                 `json:"channel"`
-	Type         string                 `json:"type"`
-	Priority     string                 `json:"priority"`
-	Subject      string                 `json:"subject"`
-	Message      string                 `json:"message"`
-	Data         map[string]string      `json:"data"`
-	IsRead       bool                   `json:"is_read"`
-	CreatedAt    time.Time              `json:"created_at"`
-	ReadAt       *time.Time             `json:"read_at"`
-	SentAt       *time.Time             `json:"sent_at"`
-	Status       string                 `json:"status"`
-	ErrorMessage string                 `json:"error_message"`
-	ReferenceID  string                 `json:"reference_id"`
-	Metadata     map[string]string      `json:"metadata"`
+	ID           string            `json:"id"`
+	UserID       uint64            `json:"user_id"`
+	Channel      string            `json:"channel"`
+	Type         string            `json:"type"`
+	Priority     string            `json:"priority"`
+	Subject      string            `json:"subject"`
+	Message      string            `json:"message"`
+	Data         map[string]string `json:"data"`
+	IsRead       bool              `json:"is_read"`
+	CreatedAt    time.Time         `json:"created_at"`
+	ReadAt       *time.Time        `json:"read_at"`
+	SentAt       *time.Time        `json:"sent_at"`
+	Status       string            `json:"status"`
+	ErrorMessage string            `json:"error_message"`
+	ReferenceID  string            `json:"reference_id"`
+	Metadata     map[string]string `json:"metadata"`
 }
 
 // NotificationSettings represents user's notification settings
 type NotificationSettings struct {
-	UserID           uint64                        `json:"user_id"`
-	EmailEnabled     bool                          `json:"email_enabled"`
-	SMSEnabled       bool                          `json:"sms_enabled"`
-	PushEnabled      bool                          `json:"push_enabled"`
-	InAppEnabled     bool                          `json:"in_app_enabled"`
-	TypePreferences  map[string]ChannelPreferences `json:"type_preferences"`
-	UpdatedAt        time.Time                     `json:"updated_at"`
+	UserID          uint64                        `json:"user_id"`
+	EmailEnabled    bool                          `json:"email_enabled"`
+	SMSEnabled      bool                          `json:"sms_enabled"`
+	PushEnabled     bool                          `json:"push_enabled"`
+	InAppEnabled    bool                          `json:"in_app_enabled"`
+	TypePreferences map[string]ChannelPreferences `json:"type_preferences"`
+	UpdatedAt       time.Time                     `json:"updated_at"`
 }
 
 // ChannelPreferences represents channel preferences for a notification type
@@ -67,15 +67,15 @@ type ChannelPreferences struct {
 
 // SendNotificationRequest represents a request to send a notification
 type SendNotificationRequest struct {
-	UserID     uint64
-	Channel    string
-	Type       string
-	Subject    string
-	Message    string
-	Data       map[string]string
-	TemplateID string
-	Priority   string
-	SendAt     *time.Time
+	UserID      uint64
+	Channel     string
+	Type        string
+	Subject     string
+	Message     string
+	Data        map[string]string
+	TemplateID  string
+	Priority    string
+	SendAt      *time.Time
 	ReferenceID string
 }
 
@@ -88,19 +88,19 @@ type SendNotificationResult struct {
 // SendNotification sends a notification to a user
 func (s *NotificationService) SendNotification(ctx context.Context, req *SendNotificationRequest) (*SendNotificationResult, error) {
 	notif := &repository.Notification{
-		ID:           uuid.New().String(),
-		UserID:       req.UserID,
-		Channel:      req.Channel,
-		Type:         req.Type,
-		Priority:     req.Priority,
-		Subject:      req.Subject,
-		Message:      req.Message,
-		Data:         req.Data,
-		IsRead:       false,
-		CreatedAt:    time.Now(),
-		Status:       "pending",
-		ReferenceID:  req.ReferenceID,
-		Metadata:     make(map[string]string),
+		ID:          uuid.New().String(),
+		UserID:      req.UserID,
+		Channel:     req.Channel,
+		Type:        req.Type,
+		Priority:    req.Priority,
+		Subject:     req.Subject,
+		Message:     req.Message,
+		Data:        req.Data,
+		IsRead:      false,
+		CreatedAt:   time.Now(),
+		Status:      "pending",
+		ReferenceID: req.ReferenceID,
+		Metadata:    make(map[string]string),
 	}
 
 	// Check if user wants this type of notification
@@ -179,15 +179,15 @@ func (s *NotificationService) SendNotification(ctx context.Context, req *SendNot
 
 // SendBulkNotificationRequest represents a request to send bulk notifications
 type SendBulkNotificationRequest struct {
-	UserIDs      []uint64
-	UserSegment  *string
-	Channel      string
-	Type         string
-	Subject      string
-	Message      string
-	Data         map[string]string
-	TemplateID   string
-	Priority     string
+	UserIDs     []uint64
+	UserSegment *string
+	Channel     string
+	Type        string
+	Subject     string
+	Message     string
+	Data        map[string]string
+	TemplateID  string
+	Priority    string
 }
 
 // SendBulkNotificationResult represents the result of sending bulk notifications
@@ -243,13 +243,13 @@ func (s *NotificationService) GetNotification(ctx context.Context, id string) (*
 
 // GetUserNotificationsRequest represents a request to get user notifications
 type GetUserNotificationsRequest struct {
-	UserID     uint64
-	Type       *string
-	IsRead     *bool
-	DateFrom   *time.Time
-	DateTo     *time.Time
-	Limit      int32
-	Offset     int32
+	UserID   uint64
+	Type     *string
+	IsRead   *bool
+	DateFrom *time.Time
+	DateTo   *time.Time
+	Limit    int32
+	Offset   int32
 }
 
 // GetUserNotificationsResult represents the result of getting user notifications
@@ -354,13 +354,13 @@ type UpdateNotificationSettingsRequest struct {
 // UpdateNotificationSettings updates user's notification settings
 func (s *NotificationService) UpdateNotificationSettings(ctx context.Context, req *UpdateNotificationSettingsRequest) (*NotificationSettings, error) {
 	settings := &repository.NotificationSettings{
-		UserID:           req.UserID,
-		EmailEnabled:     getBoolOrDefault(req.EmailEnabled, true),
-		SMSEnabled:       getBoolOrDefault(req.SMSEnabled, false),
-		PushEnabled:      getBoolOrDefault(req.PushEnabled, true),
-		InAppEnabled:     getBoolOrDefault(req.InAppEnabled, true),
-		TypePreferences:  make(map[string]repository.ChannelPreferences),
-		UpdatedAt:        time.Now(),
+		UserID:          req.UserID,
+		EmailEnabled:    getBoolOrDefault(req.EmailEnabled, true),
+		SMSEnabled:      getBoolOrDefault(req.SMSEnabled, false),
+		PushEnabled:     getBoolOrDefault(req.PushEnabled, true),
+		InAppEnabled:    getBoolOrDefault(req.InAppEnabled, true),
+		TypePreferences: make(map[string]repository.ChannelPreferences),
+		UpdatedAt:       time.Now(),
 	}
 
 	// Convert type preferences

@@ -22,10 +22,10 @@ import (
 // Config holds Amusnet (EGT Interactive) API credentials.
 // Amusnet requires mutual TLS (mTLS) in addition to HMAC-SHA256 signing.
 type Config struct {
-	Enabled         bool
-	OperatorID      string
-	SecretKey       string
-	APIURL          string
+	Enabled    bool
+	OperatorID string
+	SecretKey  string
+	APIURL     string
 	// ClientCertPath and ClientKeyPath are paths to the operator's mTLS certificate.
 	// Amusnet provides these during onboarding. Mount via Docker secrets.
 	ClientCertPath  string
@@ -125,7 +125,7 @@ func (a *Adapter) BuildLaunchURL(ctx context.Context, req provider.LaunchRequest
 	if err != nil {
 		return "", fmt.Errorf("amusnet: launch http: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, _ := io.ReadAll(resp.Body)
 
@@ -156,7 +156,7 @@ func (a *Adapter) GetGames(ctx context.Context) ([]provider.ProviderGame, error)
 	if err != nil {
 		return nil, fmt.Errorf("amusnet: games http: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, _ := io.ReadAll(resp.Body)
 

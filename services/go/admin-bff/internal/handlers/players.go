@@ -374,13 +374,17 @@ func listPlayers(db *gorm.DB, log *zap.Logger) fiber.Handler {
 		riskMax := c.QueryInt("risk_max", -1)
 		page := c.QueryInt("page", 1)
 		ps := c.QueryInt("page_size", 50)
-		if page < 1 { page = 1 }
-		if ps < 1 || ps > 200 { ps = 50 }
+		if page < 1 {
+			page = 1
+		}
+		if ps < 1 || ps > 200 {
+			ps = 50
+		}
 
 		type playerRow struct {
-			PlayerID  int64   `gorm:"column:player_id"`
-			TotalDep  float64 `gorm:"column:total_dep"`
-			DepCount  int64   `gorm:"column:dep_count"`
+			PlayerID int64   `gorm:"column:player_id"`
+			TotalDep float64 `gorm:"column:total_dep"`
+			DepCount int64   `gorm:"column:dep_count"`
 		}
 		q := db.Table("deposits").
 			Select("player_id, COALESCE(SUM(amount::numeric),0) as total_dep, COUNT(*) as dep_count").
@@ -404,7 +408,7 @@ func listPlayers(db *gorm.DB, log *zap.Logger) fiber.Handler {
 		result := make([]fiber.Map, 0, len(rows))
 		for _, r := range rows {
 			result = append(result, fiber.Map{
-				"id":           r.PlayerID,
+				"id":            r.PlayerID,
 				"total_deposit": r.TotalDep,
 				"deposit_count": r.DepCount,
 			})
@@ -453,15 +457,15 @@ func getPlayerOverview(db *gorm.DB, log *zap.Logger) fiber.Handler {
 
 		return c.JSON(fiber.Map{
 			"data": fiber.Map{
-				"player_id":        pid,
-				"total_deposits":   totalDep,
-				"deposit_count":    depCount,
+				"player_id":         pid,
+				"total_deposits":    totalDep,
+				"deposit_count":     depCount,
 				"total_withdrawals": totalWd,
-				"withdrawal_count": wdCount,
-				"risk_alerts":      alertCount,
-				"screening_status": screeningStatus,
-				"notes":            notes,
-				"suppressions":     suppressions,
+				"withdrawal_count":  wdCount,
+				"risk_alerts":       alertCount,
+				"screening_status":  screeningStatus,
+				"notes":             notes,
+				"suppressions":      suppressions,
 			},
 		})
 	}

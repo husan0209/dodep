@@ -41,7 +41,7 @@ func main() {
 	if cfg.Env == "development" {
 		log, _ = zap.NewDevelopment()
 	}
-	defer log.Sync()
+	defer func() { _ = log.Sync() }()
 
 	// ── Database (GORM + pgx) ──────────────────────────────────────────────
 	db, err := gorm.Open(postgres.Open(cfg.DatabaseURL), &gorm.Config{})
@@ -55,7 +55,7 @@ func main() {
 		Password: cfg.RedisPassword,
 		DB:       cfg.RedisDB,
 	})
-	defer rdb.Close()
+	defer func() { _ = rdb.Close() }()
 
 	// ── Repository ────────────────────────────────────────────────────────
 	casinoRepo := repository.NewCasinoRepository(db, rdb)
@@ -137,11 +137,11 @@ func main() {
 
 	// ── Fiber HTTP Server ──────────────────────────────────────────────────
 	app := fiber.New(fiber.Config{
-		AppName:       "Casino Service v1.0.0",
-		ReadTimeout:   10 * time.Second,
-		WriteTimeout:  10 * time.Second,
-		IdleTimeout:   60 * time.Second,
-		ErrorHandler:  jsonErrorHandler,
+		AppName:      "Casino Service v1.0.0",
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		IdleTimeout:  60 * time.Second,
+		ErrorHandler: jsonErrorHandler,
 	})
 
 	app.Use(recover.New())

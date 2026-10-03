@@ -9,8 +9,8 @@ import (
 	adminclient "github.com/opus-casino/admin-bff/internal/client"
 	"github.com/opus-casino/admin-bff/internal/models"
 	"github.com/opus-casino/admin-bff/internal/service"
-	commonv1 "github.com/opus-casino/proto/gen/go/common/v1"
 	bettingv1 "github.com/opus-casino/proto/gen/go/betting/v1"
+	commonv1 "github.com/opus-casino/proto/gen/go/common/v1"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -41,12 +41,22 @@ func listSportsEvents(db *gorm.DB, log *zap.Logger) fiber.Handler {
 		status := c.Query("status", "")
 		page := c.QueryInt("page", 1)
 		pageSize := c.QueryInt("page_size", 20)
-		if page < 1 { page = 1 }
-		if pageSize < 1 || pageSize > 200 { pageSize = 20 }
+		if page < 1 {
+			page = 1
+		}
+		if pageSize < 1 || pageSize > 200 {
+			pageSize = 20
+		}
 		q := db.Model(&models.SportsEvent{})
-		if sport != "" { q = q.Where("sport = ?", sport) }
-		if league != "" { q = q.Where("league = ?", league) }
-		if status != "" { q = q.Where("status = ?", status) }
+		if sport != "" {
+			q = q.Where("sport = ?", sport)
+		}
+		if league != "" {
+			q = q.Where("league = ?", league)
+		}
+		if status != "" {
+			q = q.Where("status = ?", status)
+		}
 		var total int64
 		if err := q.Count(&total).Error; err != nil {
 			log.Error("count sports events failed", zap.Error(err))
@@ -60,7 +70,7 @@ func listSportsEvents(db *gorm.DB, log *zap.Logger) fiber.Handler {
 		}
 		tp := int(math.Ceil(float64(total) / float64(pageSize)))
 		return c.JSON(fiber.Map{
-			"data": items,
+			"data":       items,
 			"pagination": fiber.Map{"page": page, "page_size": pageSize, "total": total, "total_pages": tp},
 		})
 	}
@@ -105,7 +115,9 @@ func updateSportsEvent(db *gorm.DB, log *zap.Logger, auditSvc *service.AuditServ
 func suspendSportsEvent(db *gorm.DB, log *zap.Logger, auditSvc *service.AuditService) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		id := c.Params("id")
-		var body struct{ Reason string `json:"reason"` }
+		var body struct {
+			Reason string `json:"reason"`
+		}
 		if err := c.BodyParser(&body); err != nil {
 			return c.Status(400).JSON(fiber.Map{"error": "invalid body"})
 		}
@@ -279,7 +291,7 @@ func listSportsBets(db *gorm.DB, log *zap.Logger, bettingClient *adminclient.Bet
 			"data": bets,
 			"pagination": fiber.Map{
 				"next_cursor": pageResp.NextCursor,
-				"has_more":   pageResp.HasMore,
+				"has_more":    pageResp.HasMore,
 				"total_count": pageResp.TotalCount,
 			},
 		})
@@ -321,9 +333,9 @@ func resettleBet(db *gorm.DB, log *zap.Logger, bettingClient *adminclient.Bettin
 	return func(c *fiber.Ctx) error {
 		id := c.Params("id")
 		var body struct {
-			Result     string `json:"result"`
-			ActualWin  string `json:"actual_win,omitempty"`
-			Currency   string `json:"currency,omitempty"`
+			Result    string `json:"result"`
+			ActualWin string `json:"actual_win,omitempty"`
+			Currency  string `json:"currency,omitempty"`
 		}
 		if err := c.BodyParser(&body); err != nil {
 			return c.Status(400).JSON(fiber.Map{"error": "invalid body"})

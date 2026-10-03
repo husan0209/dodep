@@ -20,14 +20,26 @@ func RegisterDepositRoutes(router fiber.Router, db *gorm.DB) {
 		playerID := c.Query("player_id", "")
 		page := c.QueryInt("page", 1)
 		ps := c.QueryInt("page_size", 50)
-		if page < 1 { page = 1 }
-		if ps < 1 || ps > 200 { ps = 50 }
+		if page < 1 {
+			page = 1
+		}
+		if ps < 1 || ps > 200 {
+			ps = 50
+		}
 
 		q := db.Model(&models.Deposit{})
-		if status != "" { q = q.Where("status = ?", status) }
-		if method != "" { q = q.Where("method = ?", method) }
-		if gateway != "" { q = q.Where("gateway = ?", gateway) }
-		if playerID != "" { q = q.Where("player_id = ?", playerID) }
+		if status != "" {
+			q = q.Where("status = ?", status)
+		}
+		if method != "" {
+			q = q.Where("method = ?", method)
+		}
+		if gateway != "" {
+			q = q.Where("gateway = ?", gateway)
+		}
+		if playerID != "" {
+			q = q.Where("player_id = ?", playerID)
+		}
 
 		var total int64
 		q.Count(&total)
@@ -38,7 +50,7 @@ func RegisterDepositRoutes(router fiber.Router, db *gorm.DB) {
 			"data": items,
 			"pagination": fiber.Map{
 				"page": page, "page_size": ps,
-				"total": total, "total_pages": int(math.Ceil(float64(total)/float64(ps))),
+				"total": total, "total_pages": int(math.Ceil(float64(total) / float64(ps))),
 			},
 		})
 	})
@@ -71,8 +83,8 @@ func RegisterDepositRoutes(router fiber.Router, db *gorm.DB) {
 		now := time.Now()
 		db.Model(&models.Deposit{}).Where("id = ?", c.Params("id")).Updates(map[string]any{
 			"status":      "completed",
-			"credited_at":  now,
-			"notes":        gorm.Expr("COALESCE(notes, '') || '\n[Manual Credit: ' || ? || ']'", req.Reason),
+			"credited_at": now,
+			"notes":       gorm.Expr("COALESCE(notes, '') || '\n[Manual Credit: ' || ? || ']'", req.Reason),
 			"updated_at":  now,
 		})
 		return c.JSON(fiber.Map{"success": true})

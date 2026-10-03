@@ -30,37 +30,37 @@ func NewCasinoRepository(db *gorm.DB, rdb *redis.Client) *CasinoRepository {
 
 // Game represents a casino game
 type Game struct {
-	ID                 string                 `json:"id"`
-	Name               string                 `json:"name"`
-	ProviderID         string                 `json:"provider_id"`
-	ProviderName       string                 `json:"provider_name"`
-	Category           string                 `json:"category"`
-	Tags               []string               `json:"tags"`
-	Description        string                 `json:"description"`
-	ImageURL           string                 `json:"image_url"`
-	ThumbnailURL       string                 `json:"thumbnail_url"`
-	SupportedCurrencies []string              `json:"supported_currencies"`
-	MinBet             string                 `json:"min_bet"`
-	MaxBet             string                 `json:"max_bet"`
-	Features           GameFeatures           `json:"features"`
-	RTP                float64                `json:"rtp"`
-	Volatility         string                 `json:"volatility"`
-	IsActive           bool                   `json:"is_active"`
-	IsDemoAvailable    bool                   `json:"is_demo_available"`
-	RestrictedCountries []string              `json:"restricted_countries"`
-	PopularityScore    int32                  `json:"popularity_score"`
-	ReleasedAt         time.Time              `json:"released_at"`
-	Metadata           map[string]string      `json:"metadata"`
+	ID                  string            `json:"id"`
+	Name                string            `json:"name"`
+	ProviderID          string            `json:"provider_id"`
+	ProviderName        string            `json:"provider_name"`
+	Category            string            `json:"category"`
+	Tags                []string          `json:"tags"`
+	Description         string            `json:"description"`
+	ImageURL            string            `json:"image_url"`
+	ThumbnailURL        string            `json:"thumbnail_url"`
+	SupportedCurrencies []string          `json:"supported_currencies"`
+	MinBet              string            `json:"min_bet"`
+	MaxBet              string            `json:"max_bet"`
+	Features            GameFeatures      `json:"features"`
+	RTP                 float64           `json:"rtp"`
+	Volatility          string            `json:"volatility"`
+	IsActive            bool              `json:"is_active"`
+	IsDemoAvailable     bool              `json:"is_demo_available"`
+	RestrictedCountries []string          `json:"restricted_countries"`
+	PopularityScore     int32             `json:"popularity_score"`
+	ReleasedAt          time.Time         `json:"released_at"`
+	Metadata            map[string]string `json:"metadata"`
 }
 
 // GameFeatures represents game features
 type GameFeatures struct {
-	HasFreeSpins    bool     `json:"has_free_spins"`
-	HasBonusBuy     bool     `json:"has_bonus_buy"`
-	HasJackpot      bool     `json:"has_jackpot"`
-	HasMultiplayer  bool     `json:"has_multiplayer"`
-	HasLiveDealer   bool     `json:"has_live_dealer"`
-	BonusFeatures   []string `json:"bonus_features"`
+	HasFreeSpins   bool     `json:"has_free_spins"`
+	HasBonusBuy    bool     `json:"has_bonus_buy"`
+	HasJackpot     bool     `json:"has_jackpot"`
+	HasMultiplayer bool     `json:"has_multiplayer"`
+	HasLiveDealer  bool     `json:"has_live_dealer"`
+	BonusFeatures  []string `json:"bonus_features"`
 }
 
 // Provider represents a game provider
@@ -96,17 +96,17 @@ type GameSession struct {
 
 // GameRound represents a single game round
 type GameRound struct {
-	ID           string            `json:"id"`
-	SessionID    string            `json:"session_id"`
-	RoundID      string            `json:"round_id"`
-	BetAmount    string            `json:"bet_amount"`
-	WinAmount    string            `json:"win_amount"`
-	NetResult    string            `json:"net_result"`
-	Status       string            `json:"status"`
-	StartedAt    time.Time         `json:"started_at"`
-	EndedAt      time.Time         `json:"ended_at"`
-	GameState    map[string]string `json:"game_state"`
-	Metadata     map[string]string `json:"metadata"`
+	ID        string            `json:"id"`
+	SessionID string            `json:"session_id"`
+	RoundID   string            `json:"round_id"`
+	BetAmount string            `json:"bet_amount"`
+	WinAmount string            `json:"win_amount"`
+	NetResult string            `json:"net_result"`
+	Status    string            `json:"status"`
+	StartedAt time.Time         `json:"started_at"`
+	EndedAt   time.Time         `json:"ended_at"`
+	GameState map[string]string `json:"game_state"`
+	Metadata  map[string]string `json:"metadata"`
 }
 
 // GetGamesOptions represents options for getting games

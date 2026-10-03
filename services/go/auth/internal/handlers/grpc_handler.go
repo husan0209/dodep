@@ -52,8 +52,8 @@ func (h *AuthGRPCHandler) Register(ctx context.Context, req *pb.RegisterRequest)
 	}
 
 	return &pb.RegisterResponse{
-		UserId: &commonv1.UserId{Value: result.UserID},
-		Tokens: toProtoToken(result.Tokens),
+		UserId:  &commonv1.UserId{Value: result.UserID},
+		Tokens:  toProtoToken(result.Tokens),
 		Session: toProtoSession(result.Session),
 	}, nil
 }
@@ -84,7 +84,7 @@ func (h *AuthGRPCHandler) Login(ctx context.Context, req *pb.LoginRequest) (*pb.
 	}
 
 	resp := &pb.LoginResponse{
-		UserId:      &commonv1.UserId{Value: result.UserID},
+		UserId:       &commonv1.UserId{Value: result.UserID},
 		Requires_2Fa: result.Requires2FA,
 	}
 
@@ -286,11 +286,17 @@ func (h *AuthGRPCHandler) ChangePassword(ctx context.Context, req *pb.ChangePass
 	return &pb.ChangePasswordResponse{Success: true}, nil
 }
 
-// RequestPasswordReset initiates password reset flow
-func (h *AuthGRPCHandler) RequestPasswordReset(ctx context.Context, req *pb.RequestPasswordResetRequest) (*pb.RequestPasswordResetResponse, error) {
-	h.service.ResetPasswordRequest(ctx, req.Email, req.IpAddress)
-	// Always return success to prevent email enumeration
-	return &pb.RequestPasswordResetResponse{Success: true}, nil
+// InitiatePasswordReset initiates password reset flow.
+// Method name must match the `InitiatePasswordReset` RPC in libs/proto/auth/v1/auth.proto,
+// otherwise it never satisfies the generated AuthServiceServer interface.
+func (h *AuthGRPCHandler) InitiatePasswordReset(ctx context.Context, req *pb.InitiatePasswordResetRequest) (*pb.InitiatePasswordResetResponse, error) {
+	if err := h.service.ResetPasswordRequest(ctx, req.Email, req.IpAddress); err != nil {
+		// Never surface the failure to the caller: the proto requires
+		// `success = true` always, so a non-nil error here would leak which
+		// addresses have an account (email enumeration).
+		h.log.Error("InitiatePasswordReset failed", zap.Error(err))
+	}
+	return &pb.InitiatePasswordResetResponse{Success: true}, nil
 }
 
 // ResetPassword completes password reset

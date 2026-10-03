@@ -22,11 +22,7 @@ impl BetService {
     }
 
     #[tracing::instrument(name = "service.place_bet", skip(self, req), fields(user_id = %user_id))]
-    pub async fn place_bet(
-        &self,
-        user_id: UserId,
-        req: PlaceBetRequest,
-    ) -> Result<Bet, AppError> {
+    pub async fn place_bet(&self, user_id: UserId, req: PlaceBetRequest) -> Result<Bet, AppError> {
         req.validate()?;
 
         if req.selections.is_empty() {
@@ -88,11 +84,7 @@ impl BetService {
     }
 
     #[tracing::instrument(name = "service.get_bet", skip(self))]
-    pub async fn get_bet(
-        &self,
-        user_id: UserId,
-        bet_id: BetId,
-    ) -> Result<Bet, AppError> {
+    pub async fn get_bet(&self, user_id: UserId, bet_id: BetId) -> Result<Bet, AppError> {
         self.bet_repo
             .get_bet_by_id(bet_id, user_id)
             .await?

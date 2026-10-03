@@ -2,8 +2,8 @@ package crypto
 
 import (
 	"crypto/ed25519"
-	"fmt"
 	"encoding/base64"
+	"fmt"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -27,7 +27,7 @@ const (
 
 // JWTConfig holds JWT configuration
 type JWTConfig struct {
-	mode           jwtMode
+	mode            jwtMode
 	SecretKey       string // HS256 only (development fallback)
 	Ed25519Private  ed25519.PrivateKey
 	Ed25519Public   ed25519.PublicKey

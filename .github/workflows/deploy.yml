@@ -12,8 +12,10 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  RUST_VERSION: '1.75'
-  GO_VERSION: '1.21'
+  # services/rust/Cargo.lock requires >= 1.88 (home 0.5.12).
+  RUST_VERSION: '1.88'
+  # services/go/* declare go 1.24.x.
+  GO_VERSION: '1.24'
   PYTHON_VERSION: '3.11'
   NODE_VERSION: '20'
 
@@ -37,7 +39,7 @@ jobs:
           cache: 'npm'
 
       - name: Setup Rust
-        uses: dtolnay/rust-action@stable
+        uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ env.RUST_VERSION }}
           components: clippy, rustfmt
@@ -181,10 +183,17 @@ jobs:
     timeout-minutes: 5
     needs: [deploy-web, deploy-backend, deploy-admin]
     if: always()
-    
+
+    # The webhook is exposed through `env` so the step condition can test it.
+    # `secrets.*` is NOT available in a step `if:` expression, and this workflow runs on
+    # every pull_request, so on repositories without the secret configured the Slack step
+    # aborted with "Specify secrets.SLACK_WEBHOOK_URL" and turned the check red on all PRs.
+    env:
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+
     steps:
       - name: Notify Slack
-        if: always()
+        if: env.SLACK_WEBHOOK_URL != ''
         uses: 8398a7/action-slack@v3
         with:
           status: ${{ job.status }}
@@ -194,7 +203,11 @@ jobs:
             Backend: ${{ needs.deploy-backend.result }}
             Admin: ${{ needs.deploy-admin.result }}
         env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+          SLACK_WEBHOOK_URL: ${{ env.SLACK_WEBHOOK_URL }}
+
+      - name: Skip Slack notification
+        if: env.SLACK_WEBHOOK_URL == ''
+        run: echo "SLACK_WEBHOOK secret is not configured - skipping Slack notification."
 
       - name: Notify Success
         if: success()

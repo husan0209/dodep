@@ -39,11 +39,19 @@ func listAffiliates(db *gorm.DB, log *zap.Logger) fiber.Handler {
 		search := c.Query("search", "")
 		page := c.QueryInt("page", 1)
 		pageSize := c.QueryInt("page_size", 20)
-		if page < 1 { page = 1 }
-		if pageSize < 1 || pageSize > 200 { pageSize = 20 }
+		if page < 1 {
+			page = 1
+		}
+		if pageSize < 1 || pageSize > 200 {
+			pageSize = 20
+		}
 		q := db.Model(&models.Affiliate{})
-		if status != "" { q = q.Where("status = ?", status) }
-		if search != "" { q = q.Where("user_id ILIKE ?", "%"+search+"%") }
+		if status != "" {
+			q = q.Where("status = ?", status)
+		}
+		if search != "" {
+			q = q.Where("user_id ILIKE ?", "%"+search+"%")
+		}
 		var total int64
 		if err := q.Count(&total).Error; err != nil {
 			log.Error("count affiliates failed", zap.Error(err))
@@ -57,7 +65,7 @@ func listAffiliates(db *gorm.DB, log *zap.Logger) fiber.Handler {
 		}
 		tp := int(math.Ceil(float64(total) / float64(pageSize)))
 		return c.JSON(fiber.Map{
-			"data": items,
+			"data":       items,
 			"pagination": fiber.Map{"page": page, "page_size": pageSize, "total": total, "total_pages": tp},
 		})
 	}
@@ -128,10 +136,18 @@ func approveAffiliate(db *gorm.DB, log *zap.Logger, auditSvc *service.AuditServi
 			return c.Status(400).JSON(fiber.Map{"error": "invalid body"})
 		}
 		updates := map[string]interface{}{"status": "active", "updated_at": time.Now()}
-		if body.CommissionRate != nil { updates["revenue_share_pct"] = *body.CommissionRate }
-		if body.HoldPeriodDays != nil { updates["hold_period_days"] = *body.HoldPeriodDays }
-		if body.MinPayoutAmount != nil { updates["min_payout_amount"] = *body.MinPayoutAmount }
-		if body.Currency != nil { updates["currency"] = *body.Currency }
+		if body.CommissionRate != nil {
+			updates["revenue_share_pct"] = *body.CommissionRate
+		}
+		if body.HoldPeriodDays != nil {
+			updates["hold_period_days"] = *body.HoldPeriodDays
+		}
+		if body.MinPayoutAmount != nil {
+			updates["min_payout_amount"] = *body.MinPayoutAmount
+		}
+		if body.Currency != nil {
+			updates["currency"] = *body.Currency
+		}
 		if err := db.Model(&models.Affiliate{}).Where("id = ?", id).Updates(updates).Error; err != nil {
 			log.Error("approve affiliate failed", zap.Error(err))
 			return c.Status(500).JSON(fiber.Map{"error": "database error"})
@@ -192,10 +208,16 @@ func listPayouts(db *gorm.DB, log *zap.Logger) fiber.Handler {
 		status := c.Query("status", "")
 		page := c.QueryInt("page", 1)
 		pageSize := c.QueryInt("page_size", 20)
-		if page < 1 { page = 1 }
-		if pageSize < 1 || pageSize > 200 { pageSize = 20 }
+		if page < 1 {
+			page = 1
+		}
+		if pageSize < 1 || pageSize > 200 {
+			pageSize = 20
+		}
 		q := db.Model(&models.AffiliatePayout{})
-		if status != "" { q = q.Where("status = ?", status) }
+		if status != "" {
+			q = q.Where("status = ?", status)
+		}
 		var total int64
 		if err := q.Count(&total).Error; err != nil {
 			log.Error("count payouts failed", zap.Error(err))
@@ -209,7 +231,7 @@ func listPayouts(db *gorm.DB, log *zap.Logger) fiber.Handler {
 		}
 		tp := int(math.Ceil(float64(total) / float64(pageSize)))
 		return c.JSON(fiber.Map{
-			"data": items,
+			"data":       items,
 			"pagination": fiber.Map{"page": page, "page_size": pageSize, "total": total, "total_pages": tp},
 		})
 	}
@@ -260,10 +282,16 @@ func listFraudFlags(db *gorm.DB, log *zap.Logger) fiber.Handler {
 		status := c.Query("status", "")
 		page := c.QueryInt("page", 1)
 		pageSize := c.QueryInt("page_size", 20)
-		if page < 1 { page = 1 }
-		if pageSize < 1 || pageSize > 200 { pageSize = 20 }
+		if page < 1 {
+			page = 1
+		}
+		if pageSize < 1 || pageSize > 200 {
+			pageSize = 20
+		}
 		q := db.Model(&models.FraudFlag{})
-		if status != "" { q = q.Where("status = ?", status) }
+		if status != "" {
+			q = q.Where("status = ?", status)
+		}
 		var total int64
 		if err := q.Count(&total).Error; err != nil {
 			log.Error("count fraud flags failed", zap.Error(err))
@@ -277,7 +305,7 @@ func listFraudFlags(db *gorm.DB, log *zap.Logger) fiber.Handler {
 		}
 		tp := int(math.Ceil(float64(total) / float64(pageSize)))
 		return c.JSON(fiber.Map{
-			"data": items,
+			"data":       items,
 			"pagination": fiber.Map{"page": page, "page_size": pageSize, "total": total, "total_pages": tp},
 		})
 	}

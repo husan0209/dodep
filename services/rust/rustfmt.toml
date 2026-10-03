@@ -1,8 +1,17 @@
-[format]
+# rustfmt configuration for the services/rust workspace.
+#
+# NOTE: this file previously declared `[format]` and `[clippy]` sections. rustfmt has
+# no such sections, so it refused to run at all:
+#   Warning: Unknown configuration option `clippy`
+#   Warning: Unknown configuration option `format`
+#   error: failed to parse ... (exit code 1)
+# which broke `cargo fmt --all -- --check` in the rust-build CI job. The options below
+# are therefore top level, where rustfmt actually reads them.
 edition = "2021"
 newline_style = "unix"
 use_small_heuristics = "Default"
 
-[clippy]
-allowed-warnings = 0
-deny = ["clippy::pedantic"]
+# The old `[clippy]` section (`allowed-warnings = 0`, `deny = ["clippy::pedantic"]`) was
+# inert here: rustfmt ignored it, so it never affected Clippy. Clippy configuration
+# lives in `clippy.toml` (or `[lints.clippy]` in Cargo.toml); pedantic lints are not
+# enabled repo-wide, and `cargo clippy -- -D warnings` is what CI enforces.

@@ -13,32 +13,40 @@ managed:
     - file_option: java_multiple_files
       value: true
 
+# NOTE: `out` paths are relative to this file (the buf module root), so generated
+# code MUST land inside `libs/proto/gen/`. Go services import it as
+# `github.com/opus-casino/proto/gen/go/...` and resolve that module through
+# `replace github.com/opus-casino/proto => ../../../libs/proto`. Emitting to
+# `../../gen/go` instead produced files whose import path did not exist inside the
+# module, so every Go build/lint/scan failed with
+# "no export data for github.com/opus-casino/proto/gen/go/<svc>/v1".
+
 plugins:
   # Go - protocol buffers
   - remote: buf.build/protocolbuffers/go
-    out: ../../gen/go
+    out: gen/go
     opt:
       - paths=source_relative
 
   # Go - gRPC
   - remote: buf.build/grpc/go
-    out: ../../gen/go
+    out: gen/go
     opt:
       - paths=source_relative
-  
+
   # Rust - prost (requires: cargo install protoc-gen-prost protoc-gen-tonic)
   # Uncomment after installing the plugins:
   # - local: protoc-gen-prost
-  #   out: ../../gen/rust
+  #   out: gen/rust
   #   opt:
   #     - extern_path=.google.protobuf::prost_wkt_types
   #   strategy: all
   # - local: protoc-gen-tonic
-  #   out: ../../gen/rust
+  #   out: gen/rust
   #   opt:
   #     - no_client
   #   strategy: all
-  
+
   # TypeScript / JavaScript
   - remote: buf.build/protocolbuffers/js
-    out: ../../gen/typescript
+    out: gen/typescript

@@ -99,3 +99,6 @@ tmp_*.txt
 .env.local
 .env.production
 .env.development.local
+
+# TypeScript incremental build info
+*.tsbuildinfo

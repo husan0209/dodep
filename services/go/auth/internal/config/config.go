@@ -20,7 +20,7 @@ type Config struct {
 	RedisDB       int
 
 	// JWT
-	JWTSecretKey string
+	JWTSecretKey               string
 	JWTEd25519PrivateKeyBase64 string
 	JWTEd25519PublicKeyBase64  string
 
@@ -53,7 +53,7 @@ func Load() *Config {
 		RedisDB:       getIntEnv("REDIS_DB", 0),
 
 		// JWT
-		JWTSecretKey: getEnv("JWT_SECRET_KEY", defaultJWTSecret),
+		JWTSecretKey:               getEnv("JWT_SECRET_KEY", defaultJWTSecret),
 		JWTEd25519PrivateKeyBase64: getEnv("JWT_ED25519_PRIVATE_KEY", ""),
 		JWTEd25519PublicKeyBase64:  getEnv("JWT_ED25519_PUBLIC_KEY", ""),
 

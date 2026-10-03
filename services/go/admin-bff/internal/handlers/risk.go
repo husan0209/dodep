@@ -31,7 +31,6 @@ func RegisterRiskRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger, audit
 	risk.Delete("/watchlist/:id", removeWatchlistEntry(db, log, auditSvc))
 }
 
-
 func listRiskAlerts(db *gorm.DB, log *zap.Logger) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		status := c.Query("status", "")
@@ -39,13 +38,23 @@ func listRiskAlerts(db *gorm.DB, log *zap.Logger) fiber.Handler {
 		category := c.Query("category", "")
 		page := c.QueryInt("page", 1)
 		pageSize := c.QueryInt("page_size", 20)
-		if page < 1 { page = 1 }
-		if pageSize < 1 || pageSize > 200 { pageSize = 20 }
+		if page < 1 {
+			page = 1
+		}
+		if pageSize < 1 || pageSize > 200 {
+			pageSize = 20
+		}
 
 		q := db.Model(&models.RiskAlert{})
-		if status != "" { q = q.Where("status = ?", status) }
-		if severity != "" { q = q.Where("severity = ?", severity) }
-		if category != "" { q = q.Where("category = ?", category) }
+		if status != "" {
+			q = q.Where("status = ?", status)
+		}
+		if severity != "" {
+			q = q.Where("severity = ?", severity)
+		}
+		if category != "" {
+			q = q.Where("category = ?", category)
+		}
 
 		var total int64
 		if err := q.Count(&total).Error; err != nil {
@@ -61,7 +70,7 @@ func listRiskAlerts(db *gorm.DB, log *zap.Logger) fiber.Handler {
 		}
 		tp := int(math.Ceil(float64(total) / float64(pageSize)))
 		return c.JSON(fiber.Map{
-			"data": items,
+			"data":       items,
 			"pagination": fiber.Map{"page": page, "page_size": pageSize, "total": total, "total_pages": tp},
 		})
 	}
@@ -145,11 +154,19 @@ func listRiskRules(db *gorm.DB, log *zap.Logger) fiber.Handler {
 		ruleType := c.Query("rule_type", "")
 		page := c.QueryInt("page", 1)
 		pageSize := c.QueryInt("page_size", 20)
-		if page < 1 { page = 1 }
-		if pageSize < 1 || pageSize > 200 { pageSize = 20 }
+		if page < 1 {
+			page = 1
+		}
+		if pageSize < 1 || pageSize > 200 {
+			pageSize = 20
+		}
 		q := db.Model(&models.RiskRule{})
-		if search != "" { q = q.Where("name ILIKE ?", "%"+search+"%") }
-		if ruleType != "" { q = q.Where("rule_type = ?", ruleType) }
+		if search != "" {
+			q = q.Where("name ILIKE ?", "%"+search+"%")
+		}
+		if ruleType != "" {
+			q = q.Where("rule_type = ?", ruleType)
+		}
 		var total int64
 		if err := q.Count(&total).Error; err != nil {
 			log.Error("count risk rules failed", zap.Error(err))
@@ -256,12 +273,22 @@ func listAuditLog(db *gorm.DB, log *zap.Logger) fiber.Handler {
 		resourceType := c.Query("resource_type", "")
 		page := c.QueryInt("page", 1)
 		pageSize := c.QueryInt("page_size", 20)
-		if page < 1 { page = 1 }
-		if pageSize < 1 || pageSize > 200 { pageSize = 20 }
+		if page < 1 {
+			page = 1
+		}
+		if pageSize < 1 || pageSize > 200 {
+			pageSize = 20
+		}
 		q := db.Model(&models.RiskAuditLog{})
-		if adminID != "" { q = q.Where("admin_id = ?", adminID) }
-		if action != "" { q = q.Where("action = ?", action) }
-		if resourceType != "" { q = q.Where("resource_type = ?", resourceType) }
+		if adminID != "" {
+			q = q.Where("admin_id = ?", adminID)
+		}
+		if action != "" {
+			q = q.Where("action = ?", action)
+		}
+		if resourceType != "" {
+			q = q.Where("resource_type = ?", resourceType)
+		}
 		var total int64
 		if err := q.Count(&total).Error; err != nil {
 			log.Error("count audit log failed", zap.Error(err))
@@ -311,13 +338,13 @@ func getUserRiskProfile(db *gorm.DB, log *zap.Logger) fiber.Handler {
 
 		return c.JSON(fiber.Map{
 			"data": fiber.Map{
-				"user_id":         userID,
-				"risk_score":      riskScoreSum,
-				"factors":         factors,
-				"alerts_count":    alertsCount,
-				"open_alerts":     alertsCount,
+				"user_id":          userID,
+				"risk_score":       riskScoreSum,
+				"factors":          factors,
+				"alerts_count":     alertsCount,
+				"open_alerts":      alertsCount,
 				"screening_status": screeningStatus,
-				"watchlist_count": watchlistCount,
+				"watchlist_count":  watchlistCount,
 			},
 		})
 	}
@@ -328,10 +355,16 @@ func listScreeningHits(db *gorm.DB, log *zap.Logger) fiber.Handler {
 		listType := c.Query("list_type", "")
 		page := c.QueryInt("page", 1)
 		pageSize := c.QueryInt("page_size", 20)
-		if page < 1 { page = 1 }
-		if pageSize < 1 || pageSize > 200 { pageSize = 20 }
+		if page < 1 {
+			page = 1
+		}
+		if pageSize < 1 || pageSize > 200 {
+			pageSize = 20
+		}
 		q := db.Model(&models.ScreeningResult{}).Where("status != ?", "clear")
-		if listType != "" { q = q.Where("status = ?", listType) }
+		if listType != "" {
+			q = q.Where("status = ?", listType)
+		}
 		var total int64
 		if err := q.Count(&total).Error; err != nil {
 			log.Error("count screening hits failed", zap.Error(err))
@@ -384,10 +417,16 @@ func listWatchlist(db *gorm.DB, log *zap.Logger) fiber.Handler {
 		listType := c.Query("list_type", "")
 		page := c.QueryInt("page", 1)
 		pageSize := c.QueryInt("page_size", 20)
-		if page < 1 { page = 1 }
-		if pageSize < 1 || pageSize > 200 { pageSize = 20 }
+		if page < 1 {
+			page = 1
+		}
+		if pageSize < 1 || pageSize > 200 {
+			pageSize = 20
+		}
 		q := db.Model(&models.RiskWatchlistEntry{})
-		if listType != "" { q = q.Where("list_type = ?", listType) }
+		if listType != "" {
+			q = q.Where("list_type = ?", listType)
+		}
 		var total int64
 		if err := q.Count(&total).Error; err != nil {
 			log.Error("count watchlist failed", zap.Error(err))

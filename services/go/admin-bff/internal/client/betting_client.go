@@ -9,8 +9,8 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
 
-	commonv1 "github.com/opus-casino/proto/gen/go/common/v1"
 	bettingv1 "github.com/opus-casino/proto/gen/go/betting/v1"
+	commonv1 "github.com/opus-casino/proto/gen/go/common/v1"
 )
 
 // BettingClient wraps the betting-engine gRPC client.
@@ -87,8 +87,8 @@ func (c *BettingClient) SettleBet(ctx context.Context, betID string, result bett
 	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
 	req := &bettingv1.SettleBetRequest{
-		BetId:                betIDProto(betID),
-		Result:               result,
+		BetId:               betIDProto(betID),
+		Result:              result,
 		SettlementReference: settlementRef,
 	}
 	if actualWin != nil {

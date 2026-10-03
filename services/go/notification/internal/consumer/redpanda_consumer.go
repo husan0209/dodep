@@ -13,11 +13,11 @@ import (
 
 // RedpandaConsumer consumes events from Redpanda/Kafka
 type RedpandaConsumer struct {
-	brokers       []string
-	service       *service.NotificationService
-	log           *zap.Logger
-	topics        []string
-	groupID       string
+	brokers []string
+	service *service.NotificationService
+	log     *zap.Logger
+	topics  []string
+	groupID string
 }
 
 // Event represents a platform event
@@ -67,7 +67,7 @@ func (c *RedpandaConsumer) consumeTopic(ctx context.Context, topic string) {
 		MinBytes: 10e3, // 10KB
 		MaxBytes: 10e6, // 10MB
 	})
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 
 	c.log.Info("Starting consumer for topic", zap.String("topic", topic))
 

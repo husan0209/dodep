@@ -68,13 +68,13 @@ type InitiateDepositRequest struct {
 
 // InitiateDepositResponse represents a deposit response
 type InitiateDepositResponse struct {
-	PaymentUUID   string
-	PaymentID     string
-	PayAddress    string
-	PayAmount     decimal.Decimal
-	PayCurrency   string
-	FiatAmount    decimal.Decimal
-	ExpiresAt     time.Time
+	PaymentUUID string
+	PaymentID   string
+	PayAddress  string
+	PayAmount   decimal.Decimal
+	PayCurrency string
+	FiatAmount  decimal.Decimal
+	ExpiresAt   time.Time
 }
 
 // InitiateDeposit creates a new deposit payment

@@ -8,8 +8,13 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  RUST_VERSION: "1.75"
-  GO_VERSION: "1.21"
+  # Floor required by services/rust/Cargo.lock: `home 0.5.12` declares
+  # rust-version = 1.88 (also `wasip2 1.0.3` -> 1.87, `icu_* 2.2.0` -> 1.86).
+  # 1.75 could never resolve this lockfile.
+  RUST_VERSION: "1.88"
+  # Floor required by the `go` directives in services/go/*/go.mod and libs/**/go.mod,
+  # several of which declare `go 1.24.x`.
+  GO_VERSION: "1.24"
   PYTHON_VERSION: "3.11"
   NODE_VERSION: "20"
 
@@ -27,7 +32,12 @@ jobs:
     - uses: actions/checkout@v4
     
     - name: Install Rust
-      uses: dtolnay/rust-action@stable
+      # NOTE: the action was renamed upstream (dtolnay/rust-action is a 404;
+      # dtolnay/rust-toolchain is the current name). Referencing the old name made
+      # every rust-build job die in "Prepare all required actions" with
+      # "Unable to resolve action dtolnay/rust-action, repository not found",
+      # before a single cargo command ran.
+      uses: dtolnay/rust-toolchain@stable
       with:
         toolchain: ${{ env.RUST_VERSION }}
         components: rustfmt, clippy

@@ -1,11 +1,12 @@
 // Package client contains integration clients for third-party services.
 // Each client is feature-flagged via environment variables:
-//   SUMSUB_APP_TOKEN + SUMSUB_SECRET_KEY        → KYC / Identity
-//   COMPLYADVANTAGE_API_KEY                     → PEP / Sanctions
-//   CHAINALYSIS_API_KEY                         → Crypto compliance
-//   SPORTRADAR_API_KEY                          → Live scores
-//   VICTORIAMETRICS_URL                         → Provider health metrics
-//   CLICKHOUSE_DSN                              → Analytics queries
+//
+//	SUMSUB_APP_TOKEN + SUMSUB_SECRET_KEY        → KYC / Identity
+//	COMPLYADVANTAGE_API_KEY                     → PEP / Sanctions
+//	CHAINALYSIS_API_KEY                         → Crypto compliance
+//	SPORTRADAR_API_KEY                          → Live scores
+//	VICTORIAMETRICS_URL                         → Provider health metrics
+//	CLICKHOUSE_DSN                              → Analytics queries
 //
 // When the env var is absent the client returns ErrNotConfigured,
 // and the calling handler returns a graceful degraded response.
@@ -104,16 +105,16 @@ func NewComplyAdvantageClient() *ComplyAdvantageClient {
 func (c *ComplyAdvantageClient) configured() bool { return c.apiKey != "" }
 
 type ScreeningRequest struct {
-	SearchTerm string `json:"search_term"`
-	Fuzziness  float64 `json:"fuzziness"` // 0.0 = exact, 1.0 = very fuzzy
+	SearchTerm string         `json:"search_term"`
+	Fuzziness  float64        `json:"fuzziness"` // 0.0 = exact, 1.0 = very fuzzy
 	Filters    map[string]any `json:"filters"`
 }
 
 type ScreeningResponse struct {
-	Status     string         `json:"status"` // clear|pep_match|sanctions_hit|review_required
-	MatchScore float64        `json:"match_score"`
+	Status     string           `json:"status"` // clear|pep_match|sanctions_hit|review_required
+	MatchScore float64          `json:"match_score"`
 	Matches    []map[string]any `json:"matches"`
-	RawPayload json.RawMessage `json:"raw_payload"`
+	RawPayload json.RawMessage  `json:"raw_payload"`
 }
 
 // SearchPEPSanctions screens a player name/ID against PEP and sanctions lists.
@@ -158,10 +159,10 @@ func NewChainalysisClient() *ChainalysisClient {
 func (c *ChainalysisClient) configured() bool { return c.apiKey != "" }
 
 type CryptoRiskResponse struct {
-	Address    string   `json:"address"`
-	RiskScore  int      `json:"risk_score"`  // 0-100
-	Categories []string `json:"categories"`  // e.g. "darknet_market", "mixer"
-	ClusterName string  `json:"cluster_name"`
+	Address     string   `json:"address"`
+	RiskScore   int      `json:"risk_score"` // 0-100
+	Categories  []string `json:"categories"` // e.g. "darknet_market", "mixer"
+	ClusterName string   `json:"cluster_name"`
 }
 
 // CheckAddress checks a crypto address risk score.
@@ -203,14 +204,14 @@ func NewSportradarClient() *SportradarClient {
 func (c *SportradarClient) configured() bool { return c.apiKey != "" }
 
 type LiveScoreData struct {
-	EventID    string `json:"event_id"`
-	HomeTeam   string `json:"home_team"`
-	AwayTeam   string `json:"away_team"`
-	ScoreHome  int    `json:"score_home"`
-	ScoreAway  int    `json:"score_away"`
-	Minute     int    `json:"minute"`
-	Period     string `json:"period"` // 1H|2H|HT|FT
-	Status     string `json:"status"` // live|not_started|finished
+	EventID   string `json:"event_id"`
+	HomeTeam  string `json:"home_team"`
+	AwayTeam  string `json:"away_team"`
+	ScoreHome int    `json:"score_home"`
+	ScoreAway int    `json:"score_away"`
+	Minute    int    `json:"minute"`
+	Period    string `json:"period"` // 1H|2H|HT|FT
+	Status    string `json:"status"` // live|not_started|finished
 }
 
 // GetLiveScore fetches the current score for an event.
@@ -237,12 +238,20 @@ func (c *SportradarClient) GetLiveScore(ctx context.Context, eventID string) (*L
 	result := &LiveScoreData{EventID: eventID, Status: "live"}
 	if sport := raw["sport_event_status"]; sport != nil {
 		if sm, ok := sport.(map[string]any); ok {
-			if hs, ok := sm["home_score"].(float64); ok { result.ScoreHome = int(hs) }
-			if as, ok := sm["away_score"].(float64); ok { result.ScoreAway = int(as) }
-			if min, ok := sm["clock"].(map[string]any); ok {
-				if m, ok := min["played"].(float64); ok { result.Minute = int(m) }
+			if hs, ok := sm["home_score"].(float64); ok {
+				result.ScoreHome = int(hs)
 			}
-			if s, ok := sm["status"].(string); ok { result.Status = s }
+			if as, ok := sm["away_score"].(float64); ok {
+				result.ScoreAway = int(as)
+			}
+			if min, ok := sm["clock"].(map[string]any); ok {
+				if m, ok := min["played"].(float64); ok {
+					result.Minute = int(m)
+				}
+			}
+			if s, ok := sm["status"].(string); ok {
+				result.Status = s
+			}
 		}
 	}
 	return result, nil

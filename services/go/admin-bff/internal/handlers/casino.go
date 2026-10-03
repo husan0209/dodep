@@ -75,7 +75,7 @@ func listCasinoGames(db *gorm.DB, log *zap.Logger) fiber.Handler {
 		}
 		tp := int(math.Ceil(float64(total) / float64(pageSize)))
 		return c.JSON(fiber.Map{
-			"data": items,
+			"data":       items,
 			"pagination": fiber.Map{"page": page, "page_size": pageSize, "total": total, "total_pages": tp},
 		})
 	}
@@ -286,13 +286,25 @@ func listCasinoSessions(db *gorm.DB, log *zap.Logger) fiber.Handler {
 		status := c.Query("status", "")
 		page := c.QueryInt("page", 1)
 		pageSize := c.QueryInt("page_size", 20)
-		if page < 1 { page = 1 }
-		if pageSize < 1 || pageSize > 200 { pageSize = 20 }
+		if page < 1 {
+			page = 1
+		}
+		if pageSize < 1 || pageSize > 200 {
+			pageSize = 20
+		}
 		q := db.Model(&models.CasinoGameSession{})
-		if gameID != "" { q = q.Where("game_id = ?", gameID) }
-		if userID != "" { q = q.Where("user_id = ?", userID) }
-		if providerID != "" { q = q.Where("provider_id = ?", providerID) }
-		if status != "" { q = q.Where("status = ?", status) }
+		if gameID != "" {
+			q = q.Where("game_id = ?", gameID)
+		}
+		if userID != "" {
+			q = q.Where("user_id = ?", userID)
+		}
+		if providerID != "" {
+			q = q.Where("provider_id = ?", providerID)
+		}
+		if status != "" {
+			q = q.Where("status = ?", status)
+		}
 		var total int64
 		if err := q.Count(&total).Error; err != nil {
 			log.Error("count casino sessions failed", zap.Error(err))
@@ -306,7 +318,7 @@ func listCasinoSessions(db *gorm.DB, log *zap.Logger) fiber.Handler {
 		}
 		tp := int(math.Ceil(float64(total) / float64(pageSize)))
 		return c.JSON(fiber.Map{
-			"data": items,
+			"data":       items,
 			"pagination": fiber.Map{"page": page, "page_size": pageSize, "total": total, "total_pages": tp},
 		})
 	}
@@ -343,10 +355,16 @@ func listProviderSettlements(db *gorm.DB, log *zap.Logger) fiber.Handler {
 		providerID := c.Query("provider_id", "")
 		page := c.QueryInt("page", 1)
 		pageSize := c.QueryInt("page_size", 20)
-		if page < 1 { page = 1 }
-		if pageSize < 1 || pageSize > 200 { pageSize = 20 }
+		if page < 1 {
+			page = 1
+		}
+		if pageSize < 1 || pageSize > 200 {
+			pageSize = 20
+		}
 		q := db.Model(&models.ProviderSettlement{})
-		if providerID != "" { q = q.Where("provider_id = ?", providerID) }
+		if providerID != "" {
+			q = q.Where("provider_id = ?", providerID)
+		}
 		var total int64
 		if err := q.Count(&total).Error; err != nil {
 			log.Error("count settlements failed", zap.Error(err))
@@ -360,7 +378,7 @@ func listProviderSettlements(db *gorm.DB, log *zap.Logger) fiber.Handler {
 		}
 		tp := int(math.Ceil(float64(total) / float64(pageSize)))
 		return c.JSON(fiber.Map{
-			"data": items,
+			"data":       items,
 			"pagination": fiber.Map{"page": page, "page_size": pageSize, "total": total, "total_pages": tp},
 		})
 	}
@@ -395,15 +413,31 @@ func listCasinoBets(db *gorm.DB, log *zap.Logger) fiber.Handler {
 		dateTo := c.Query("date_to", "")
 		page := c.QueryInt("page", 1)
 		pageSize := c.QueryInt("page_size", 20)
-		if page < 1 { page = 1 }
-		if pageSize < 1 || pageSize > 200 { pageSize = 20 }
+		if page < 1 {
+			page = 1
+		}
+		if pageSize < 1 || pageSize > 200 {
+			pageSize = 20
+		}
 		q := db.Model(&models.CasinoGameRound{})
-		if gameID != "" { q = q.Where("game_id = ?", gameID) }
-		if userID != "" { q = q.Where("user_id = ?", userID) }
-		if providerID != "" { q = q.Where("provider_id = ?", providerID) }
-		if status != "" { q = q.Where("status = ?", status) }
-		if dateFrom != "" { q = q.Where("created_at >= ?", dateFrom) }
-		if dateTo != "" { q = q.Where("created_at <= ?", dateTo) }
+		if gameID != "" {
+			q = q.Where("game_id = ?", gameID)
+		}
+		if userID != "" {
+			q = q.Where("user_id = ?", userID)
+		}
+		if providerID != "" {
+			q = q.Where("provider_id = ?", providerID)
+		}
+		if status != "" {
+			q = q.Where("status = ?", status)
+		}
+		if dateFrom != "" {
+			q = q.Where("created_at >= ?", dateFrom)
+		}
+		if dateTo != "" {
+			q = q.Where("created_at <= ?", dateTo)
+		}
 		var total int64
 		if err := q.Count(&total).Error; err != nil {
 			log.Error("count casino bets failed", zap.Error(err))
@@ -417,7 +451,7 @@ func listCasinoBets(db *gorm.DB, log *zap.Logger) fiber.Handler {
 		}
 		tp := int(math.Ceil(float64(total) / float64(pageSize)))
 		return c.JSON(fiber.Map{
-			"data": items,
+			"data":       items,
 			"pagination": fiber.Map{"page": page, "page_size": pageSize, "total": total, "total_pages": tp},
 		})
 	}
@@ -425,14 +459,20 @@ func listCasinoBets(db *gorm.DB, log *zap.Logger) fiber.Handler {
 
 func adminIDString(c *fiber.Ctx) string {
 	adminIDRaw := c.Locals("admin_id")
-	if v, ok := adminIDRaw.(string); ok { return v }
-	if v, ok := adminIDRaw.(int64); ok { return string(rune(v)) }
+	if v, ok := adminIDRaw.(string); ok {
+		return v
+	}
+	if v, ok := adminIDRaw.(int64); ok {
+		return string(rune(v))
+	}
 	return ""
 }
 
 func adminIDInt64(c *fiber.Ctx) *int64 {
 	adminIDRaw := c.Locals("admin_id")
-	if v, ok := adminIDRaw.(int64); ok { return &v }
+	if v, ok := adminIDRaw.(int64); ok {
+		return &v
+	}
 	return nil
 }
 

@@ -1,10 +1,12 @@
-# Generated code - DO NOT COMMIT
+# Generated Rust code - DO NOT COMMIT
 # Run `buf generate` to regenerate
-
-/gen/
-/gen/go/
 /gen/rust/
-/gen/typescript/
 
 # Build artifacts
 build/
+
+# NOTE: /gen/go/ and /gen/typescript/ ARE committed on purpose.
+# Go services consume the generated Go code through the `github.com/opus-casino/proto`
+# module (see the `replace` directive in each service's go.mod), and CI does not run
+# `buf generate` before building. If these were ignored, every Go build, lint and
+# security scan would fail to resolve `github.com/opus-casino/proto/gen/go/<svc>/v1`.

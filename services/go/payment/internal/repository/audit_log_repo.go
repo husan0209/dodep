@@ -25,7 +25,7 @@ func (r *auditLogRepo) Create(ctx context.Context, log *AuditLog) error {
 	if log.ID == 0 {
 		log.ID = time.Now().UnixNano()
 	}
-	
+
 	// In production, this would:
 	// 1. Publish to Redpanda topic payments.audit
 	// 2. ClickHouse would consume and store the log

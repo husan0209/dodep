@@ -19,12 +19,20 @@ func RegisterKycRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger) {
 		priority := c.Query("priority", "")
 		page := c.QueryInt("page", 1)
 		pageSize := c.QueryInt("page_size", 50)
-		if page < 1 { page = 1 }
-		if pageSize < 1 || pageSize > 200 { pageSize = 50 }
+		if page < 1 {
+			page = 1
+		}
+		if pageSize < 1 || pageSize > 200 {
+			pageSize = 50
+		}
 
 		q := db.Model(&models.KycReview{})
-		if status != "" { q = q.Where("status = ?", status) }
-		if priority != "" { q = q.Where("priority = ?", priority) }
+		if status != "" {
+			q = q.Where("status = ?", status)
+		}
+		if priority != "" {
+			q = q.Where("priority = ?", priority)
+		}
 
 		var total int64
 		if err := q.Count(&total).Error; err != nil {
@@ -39,14 +47,16 @@ func RegisterKycRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger) {
 		}
 		tp := int(math.Ceil(float64(total) / float64(pageSize)))
 		return c.JSON(fiber.Map{
-			"data": items,
+			"data":       items,
 			"pagination": fiber.Map{"page": page, "page_size": pageSize, "total": total, "total_pages": tp},
 		})
 	})
 
 	kyc.Post("/reviews/:id/assign", func(c *fiber.Ctx) error {
 		id := c.Params("id")
-		var req struct { AssignedTo string `json:"assigned_to"` }
+		var req struct {
+			AssignedTo string `json:"assigned_to"`
+		}
 		if err := c.BodyParser(&req); err != nil {
 			return c.Status(400).JSON(fiber.Map{"error": "invalid body"})
 		}
@@ -60,12 +70,17 @@ func RegisterKycRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger) {
 
 	kyc.Post("/reviews/:id/decision", func(c *fiber.Ctx) error {
 		id := c.Params("id")
-		var req struct { Decision string `json:"decision"`; Reason string `json:"reason"` }
+		var req struct {
+			Decision string `json:"decision"`
+			Reason   string `json:"reason"`
+		}
 		if err := c.BodyParser(&req); err != nil {
 			return c.Status(400).JSON(fiber.Map{"error": "invalid body"})
 		}
 		st := req.Decision
-		if st == "resubmission" { st = "resubmission_requested" }
+		if st == "resubmission" {
+			st = "resubmission_requested"
+		}
 		if err := db.Model(&models.KycReview{}).Where("id = ?", id).Updates(map[string]any{
 			"status": st, "decision_reason": req.Reason, "reviewed_at": time.Now(),
 		}).Error; err != nil {
@@ -74,7 +89,11 @@ func RegisterKycRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger) {
 		var r models.KycReview
 		if err := db.Select("document_id").Where("id = ?", id).First(&r).Error; err == nil {
 			ds := "pending"
-			if st == "approved" { ds = "verified" } else if st == "rejected" { ds = "rejected" }
+			if st == "approved" {
+				ds = "verified"
+			} else if st == "rejected" {
+				ds = "rejected"
+			}
 			db.Model(&models.KycDocument{}).Where("id = ?", r.DocumentID).Update("status", ds)
 		}
 		return c.JSON(fiber.Map{"success": true})
@@ -83,7 +102,9 @@ func RegisterKycRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger) {
 	kyc.Get("/documents/:id", func(c *fiber.Ctx) error {
 		var d models.KycDocument
 		if err := db.Where("id = ?", c.Params("id")).First(&d).Error; err != nil {
-			if err == gorm.ErrRecordNotFound { return c.Status(404).JSON(fiber.Map{"error": "not found"}) }
+			if err == gorm.ErrRecordNotFound {
+				return c.Status(404).JSON(fiber.Map{"error": "not found"})
+			}
 			return c.Status(500).JSON(fiber.Map{"error": "database error"})
 		}
 		return c.JSON(fiber.Map{"data": d})
@@ -101,37 +122,60 @@ func RegisterKycRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger) {
 		st := c.Query("status", "")
 		page := c.QueryInt("page", 1)
 		ps := c.QueryInt("page_size", 50)
-		if page < 1 { page = 1 }
-		if ps < 1 || ps > 200 { ps = 50 }
+		if page < 1 {
+			page = 1
+		}
+		if ps < 1 || ps > 200 {
+			ps = 50
+		}
 		q := db.Model(&models.SofRequest{})
-		if st != "" { q = q.Where("status = ?", st) }
+		if st != "" {
+			q = q.Where("status = ?", st)
+		}
 		var total int64
 		q.Count(&total)
 		var items []models.SofRequest
 		q.Order("created_at DESC").Limit(ps).Offset((page - 1) * ps).Find(&items)
 		ids := make([]string, 0, len(items))
-		for _, it := range items { ids = append(ids, it.ID) }
+		for _, it := range items {
+			ids = append(ids, it.ID)
+		}
 		var docs []models.SofDocument
-		if len(ids) > 0 { db.Where("request_id IN ?", ids).Find(&docs) }
+		if len(ids) > 0 {
+			db.Where("request_id IN ?", ids).Find(&docs)
+		}
 		dm := make(map[string][]models.SofDocument)
-		for _, d := range docs { dm[d.RequestID] = append(dm[d.RequestID], d) }
+		for _, d := range docs {
+			dm[d.RequestID] = append(dm[d.RequestID], d)
+		}
 		type resp struct {
 			models.SofRequest
 			Documents []models.SofDocument `json:"documents"`
 		}
 		out := make([]resp, 0, len(items))
-		for _, it := range items { out = append(out, resp{SofRequest: it, Documents: dm[it.ID]}) }
+		for _, it := range items {
+			out = append(out, resp{SofRequest: it, Documents: dm[it.ID]})
+		}
 		return c.JSON(fiber.Map{
-			"data": out,
-			"pagination": fiber.Map{"page": page, "page_size": ps, "total": total, "total_pages": int(math.Ceil(float64(total)/float64(ps)))},
+			"data":       out,
+			"pagination": fiber.Map{"page": page, "page_size": ps, "total": total, "total_pages": int(math.Ceil(float64(total) / float64(ps)))},
 		})
 	})
 
 	kyc.Post("/sof/requests/:id/review", func(c *fiber.Ctx) error {
-		var req struct { Decision string `json:"decision"`; Notes string `json:"notes"` }
-		if err := c.BodyParser(&req); err != nil { return c.Status(400).JSON(fiber.Map{"error": "invalid body"}) }
+		var req struct {
+			Decision string `json:"decision"`
+			Notes    string `json:"notes"`
+		}
+		if err := c.BodyParser(&req); err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": "invalid body"})
+		}
 		st := req.Decision
-		if st == "approve" { st = "approved" } else if st == "reject" { st = "rejected" }
+		if st == "approve" {
+			st = "approved"
+		} else if st == "reject" {
+			st = "rejected"
+		}
 		db.Model(&models.SofRequest{}).Where("id = ?", c.Params("id")).Updates(map[string]any{
 			"status": st, "notes": req.Notes, "reviewed_at": time.Now(),
 		})
@@ -142,24 +186,32 @@ func RegisterKycRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger) {
 		st := c.Query("status", "")
 		page := c.QueryInt("page", 1)
 		ps := c.QueryInt("page_size", 50)
-		if page < 1 { page = 1 }
-		if ps < 1 || ps > 200 { ps = 50 }
+		if page < 1 {
+			page = 1
+		}
+		if ps < 1 || ps > 200 {
+			ps = 50
+		}
 		q := db.Model(&models.ScreeningResult{})
-		if st != "" { q = q.Where("status = ?", st) }
+		if st != "" {
+			q = q.Where("status = ?", st)
+		}
 		var total int64
 		q.Count(&total)
 		var items []models.ScreeningResult
 		q.Order("screened_at DESC").Limit(ps).Offset((page - 1) * ps).Find(&items)
 		return c.JSON(fiber.Map{
-			"data": items,
-			"pagination": fiber.Map{"page": page, "page_size": ps, "total": total, "total_pages": int(math.Ceil(float64(total)/float64(ps)))},
+			"data":       items,
+			"pagination": fiber.Map{"page": page, "page_size": ps, "total": total, "total_pages": int(math.Ceil(float64(total) / float64(ps)))},
 		})
 	})
 
 	kyc.Get("/screenings/player/:player_id", func(c *fiber.Ctx) error {
 		var r models.ScreeningResult
 		if err := db.Where("player_id = ?", c.Params("player_id")).Order("screened_at DESC").First(&r).Error; err != nil {
-			if err == gorm.ErrRecordNotFound { return c.JSON(fiber.Map{"data": nil}) }
+			if err == gorm.ErrRecordNotFound {
+				return c.JSON(fiber.Map{"data": nil})
+			}
 			return c.Status(500).JSON(fiber.Map{"error": "database error"})
 		}
 		return c.JSON(fiber.Map{"data": r})
@@ -174,12 +226,17 @@ func RegisterKycRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger) {
 			ScreenedAt: time.Now(),
 			ScreenedBy: "manual",
 		}
-		if err := db.Create(&screening).Error; err != nil { return c.Status(500).JSON(fiber.Map{"error": "database error"}) }
+		if err := db.Create(&screening).Error; err != nil {
+			return c.Status(500).JSON(fiber.Map{"error": "database error"})
+		}
 		return c.JSON(fiber.Map{"success": true, "data": screening})
 	})
 
 	kyc.Post("/screenings/:id/review", func(c *fiber.Ctx) error {
-		var req struct { Decision string `json:"decision"`; Notes string `json:"notes"` }
+		var req struct {
+			Decision string `json:"decision"`
+			Notes    string `json:"notes"`
+		}
 		c.BodyParser(&req)
 		db.Model(&models.ScreeningResult{}).Where("id = ?", c.Params("id")).Updates(map[string]any{
 			"status": req.Decision, "review_notes": req.Notes, "reviewed_at": time.Now(),
@@ -190,8 +247,8 @@ func RegisterKycRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger) {
 	kyc.Get("/expiry-stats", func(c *fiber.Ctx) error {
 		n := time.Now()
 		var e30, e7, ex int64
-		db.Model(&models.KycDocument{}).Where("expires_at BETWEEN ? AND ?", n, n.AddDate(0,0,30)).Count(&e30)
-		db.Model(&models.KycDocument{}).Where("expires_at BETWEEN ? AND ?", n, n.AddDate(0,0,7)).Count(&e7)
+		db.Model(&models.KycDocument{}).Where("expires_at BETWEEN ? AND ?", n, n.AddDate(0, 0, 30)).Count(&e30)
+		db.Model(&models.KycDocument{}).Where("expires_at BETWEEN ? AND ?", n, n.AddDate(0, 0, 7)).Count(&e7)
 		db.Model(&models.KycDocument{}).Where("expires_at < ?", n).Count(&ex)
 		return c.JSON(fiber.Map{"data": fiber.Map{"expiring_30d": e30, "expiring_7d": e7, "expired": ex}})
 	})
@@ -199,32 +256,36 @@ func RegisterKycRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger) {
 	kyc.Get("/expiring", func(c *fiber.Ctx) error {
 		page := c.QueryInt("page", 1)
 		ps := c.QueryInt("page_size", 50)
-		if page < 1 { page = 1 }
-		if ps < 1 || ps > 200 { ps = 50 }
+		if page < 1 {
+			page = 1
+		}
+		if ps < 1 || ps > 200 {
+			ps = 50
+		}
 		n := time.Now()
-		q := db.Model(&models.KycDocument{}).Where("expires_at BETWEEN ? AND ?", n, n.AddDate(0,0,30))
+		q := db.Model(&models.KycDocument{}).Where("expires_at BETWEEN ? AND ?", n, n.AddDate(0, 0, 30))
 		var total int64
 		q.Count(&total)
 		var items []models.KycDocument
-		q.Order("expires_at ASC").Limit(ps).Offset((page-1)*ps).Find(&items)
+		q.Order("expires_at ASC").Limit(ps).Offset((page - 1) * ps).Find(&items)
 		return c.JSON(fiber.Map{
-			"data": items,
-			"pagination": fiber.Map{"page": page, "page_size": ps, "total": total, "total_pages": int(math.Ceil(float64(total)/float64(ps)))},
+			"data":       items,
+			"pagination": fiber.Map{"page": page, "page_size": ps, "total": total, "total_pages": int(math.Ceil(float64(total) / float64(ps)))},
 		})
 	})
 
 	kyc.Get("/team-stats", func(c *fiber.Ctx) error {
 		td := time.Now().Format("2006-01-02")
 		var qd int64
-		db.Model(&models.KycReview{}).Where("status IN ?", []string{"pending","in_review"}).Count(&qd)
+		db.Model(&models.KycReview{}).Where("status IN ?", []string{"pending", "in_review"}).Count(&qd)
 		var avg int64
 		db.Raw("SELECT COALESCE(AVG(EXTRACT(EPOCH FROM (reviewed_at - created_at))/60),0) FROM kyc_reviews WHERE reviewed_at IS NOT NULL AND DATE(created_at)=?", td).Scan(&avg)
 		var sb int64
-		db.Model(&models.KycReview{}).Where("wait_time_minutes > 120 AND status IN ?", []string{"pending","in_review"}).Count(&sb)
+		db.Model(&models.KycReview{}).Where("wait_time_minutes > 120 AND status IN ?", []string{"pending", "in_review"}).Count(&sb)
 		var off []models.KycTeamMetric
 		db.Where("metric_date = ?", td).Find(&off)
 		return c.JSON(fiber.Map{"data": fiber.Map{
-			"today": fiber.Map{"queue_depth": qd, "avg_review_minutes": avg, "sla_breaches": sb},
+			"today":    fiber.Map{"queue_depth": qd, "avg_review_minutes": avg, "sla_breaches": sb},
 			"officers": off,
 		}})
 	})
@@ -234,19 +295,29 @@ func RegisterKycRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger) {
 		ack := c.Query("acknowledged", "")
 		page := c.QueryInt("page", 1)
 		ps := c.QueryInt("page_size", 50)
-		if page < 1 { page = 1 }
-		if ps < 1 || ps > 200 { ps = 50 }
+		if page < 1 {
+			page = 1
+		}
+		if ps < 1 || ps > 200 {
+			ps = 50
+		}
 		q := db.Model(&models.RgAlert{})
-		if sev != "" { q = q.Where("severity = ?", sev) }
-		if ack == "false" || ack == "0" { q = q.Where("acknowledged_by IS NULL") }
-		if ack == "true" || ack == "1" { q = q.Where("acknowledged_by IS NOT NULL") }
+		if sev != "" {
+			q = q.Where("severity = ?", sev)
+		}
+		if ack == "false" || ack == "0" {
+			q = q.Where("acknowledged_by IS NULL")
+		}
+		if ack == "true" || ack == "1" {
+			q = q.Where("acknowledged_by IS NOT NULL")
+		}
 		var total int64
 		q.Count(&total)
 		var items []models.RgAlert
-		q.Order("created_at DESC").Limit(ps).Offset((page-1)*ps).Find(&items)
+		q.Order("created_at DESC").Limit(ps).Offset((page - 1) * ps).Find(&items)
 		return c.JSON(fiber.Map{
-			"data": items,
-			"pagination": fiber.Map{"page": page, "page_size": ps, "total": total, "total_pages": int(math.Ceil(float64(total)/float64(ps)))},
+			"data":       items,
+			"pagination": fiber.Map{"page": page, "page_size": ps, "total": total, "total_pages": int(math.Ceil(float64(total) / float64(ps)))},
 		})
 	})
 
@@ -260,7 +331,9 @@ func RegisterKycRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger) {
 	kyc.Get("/rg/players/:player_id/limits", func(c *fiber.Ctx) error {
 		var l models.RgLimit
 		if err := db.Where("player_id = ?", c.Params("player_id")).First(&l).Error; err != nil {
-			if err == gorm.ErrRecordNotFound { return c.JSON(fiber.Map{"data": fiber.Map{}}) }
+			if err == gorm.ErrRecordNotFound {
+				return c.JSON(fiber.Map{"data": fiber.Map{}})
+			}
 			return c.Status(500).JSON(fiber.Map{"error": "database error"})
 		}
 		return c.JSON(fiber.Map{"data": l})
@@ -268,7 +341,9 @@ func RegisterKycRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger) {
 
 	kyc.Put("/rg/players/:player_id/limits", func(c *fiber.Ctx) error {
 		var req models.RgLimit
-		if err := c.BodyParser(&req); err != nil { return c.Status(400).JSON(fiber.Map{"error": "invalid body"}) }
+		if err := c.BodyParser(&req); err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": "invalid body"})
+		}
 		pidStr := c.Params("player_id")
 		pidInt, _ := strconv.ParseInt(pidStr, 10, 64)
 		var ex models.RgLimit

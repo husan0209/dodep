@@ -24,9 +24,9 @@ type DepositCompletedEvent struct {
 
 // PaymentConsumer listens to payment events and triggers bonus logic.
 type PaymentConsumer struct {
-	client     *kgo.Client
-	bonusSvc   *service.BonusService
-	log        *zap.Logger
+	client   *kgo.Client
+	bonusSvc *service.BonusService
+	log      *zap.Logger
 }
 
 // NewPaymentConsumer creates a Redpanda consumer for payment events.

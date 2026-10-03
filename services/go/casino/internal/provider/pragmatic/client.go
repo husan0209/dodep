@@ -43,7 +43,7 @@ func NewClient(cfg Config, log *zap.Logger) *Client {
 
 // GetGamesResponse is the raw Pragmatic Play game list response.
 type GetGamesResponse struct {
-	Error    int    `json:"error"`
+	Error    int `json:"error"`
 	GameList []struct {
 		GameID          string          `json:"gameID"`
 		GameName        string          `json:"gameName"`
@@ -52,10 +52,10 @@ type GetGamesResponse struct {
 		Technology      string          `json:"technology"`
 		Platform        string          `json:"platform"`
 		Currencies      []string        `json:"currencies"`
-		Countries       []string        `json:"countries"`       // Blocked countries
+		Countries       []string        `json:"countries"` // Blocked countries
 		ImageURL        string          `json:"image"`
 		HasJackpot      bool            `json:"hasJackpot"`
-		FrbAvailable    bool            `json:"frbAvailable"`    // Free rounds bonus
+		FrbAvailable    bool            `json:"frbAvailable"` // Free rounds bonus
 		BonusBuyEnabled bool            `json:"bonusBuyEnabled"`
 		RTP             float64         `json:"rtp"`
 		Volatility      string          `json:"volatility"`
@@ -85,7 +85,7 @@ func (c *Client) GetGames(ctx context.Context) (*GetGamesResponse, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -114,14 +114,14 @@ type GetLaunchURLResponse struct {
 // GetLaunchURL generates a signed game launch URL.
 func (c *Client) GetLaunchURL(ctx context.Context, opts LaunchURLOptions) (string, error) {
 	params := c.buildParams(map[string]string{
-		"secureLogin":  c.cfg.AgentID,
-		"symbol":       opts.Symbol,
-		"token":        opts.Token,
-		"language":     opts.Language,
-		"cur":          opts.Currency,
-		"lobbyURL":     opts.LobbyURL,
+		"secureLogin":      c.cfg.AgentID,
+		"symbol":           opts.Symbol,
+		"token":            opts.Token,
+		"language":         opts.Language,
+		"cur":              opts.Currency,
+		"lobbyURL":         opts.LobbyURL,
 		"externalPlayerId": opts.ExternalPlayerID,
-		"platform":     opts.Platform, // "web" or "mobile"
+		"platform":         opts.Platform, // "web" or "mobile"
 	})
 	if opts.Demo {
 		params.Set("mode", "demo")
@@ -138,7 +138,7 @@ func (c *Client) GetLaunchURL(ctx context.Context, opts LaunchURLOptions) (strin
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {

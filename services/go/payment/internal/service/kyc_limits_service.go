@@ -28,16 +28,16 @@ type KYCLimitsConfig struct {
 func DefaultKYCLimits() KYCLimitsConfig {
 	return KYCLimitsConfig{
 		DepositLimits: map[int]float64{
-			0: 500,     // Level 0: $500/day
-			1: 2000,    // Level 1: $2,000/day
-			2: 10000,   // Level 2: $10,000/day
-			3: 50000,   // Level 3: $50,000/day
+			0: 500,   // Level 0: $500/day
+			1: 2000,  // Level 1: $2,000/day
+			2: 10000, // Level 2: $10,000/day
+			3: 50000, // Level 3: $50,000/day
 		},
 		WithdrawalLimits: map[int]float64{
-			0: 0,      // Level 0: $0/day (no withdrawals allowed)
-			1: 500,    // Level 1: $500/day
-			2: 5000,   // Level 2: $5,000/day
-			3: 25000,  // Level 3: $25,000/day
+			0: 0,     // Level 0: $0/day (no withdrawals allowed)
+			1: 500,   // Level 1: $500/day
+			2: 5000,  // Level 2: $5,000/day
+			3: 25000, // Level 3: $25,000/day
 		},
 	}
 }

@@ -79,11 +79,11 @@ func RegisterFinanceRoutes(router fiber.Router, svc *service.FinanceService, db 
 		}
 		netRev := totalDeposits - totalWithdrawals
 		return c.JSON(fiber.Map{"data": fiber.Map{
-			"total_deposits":           formatMoney(totalDeposits),
-			"total_withdrawals":        formatMoney(totalWithdrawals),
-			"net_revenue":              formatMoney(netRev),
-			"ggr":                      formatMoney(netRev),
-			"pending_withdrawals_count": pendingWithdrawalsCount,
+			"total_deposits":             formatMoney(totalDeposits),
+			"total_withdrawals":          formatMoney(totalWithdrawals),
+			"net_revenue":                formatMoney(netRev),
+			"ggr":                        formatMoney(netRev),
+			"pending_withdrawals_count":  pendingWithdrawalsCount,
 			"pending_withdrawals_amount": formatMoney(pendingWithdrawalsAmount),
 		}})
 	})

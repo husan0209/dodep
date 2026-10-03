@@ -7,44 +7,77 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/opus-casino/user/internal/domain"
-	"github.com/opus-casino/user/internal/repository"
 )
 
+// UserRepository is the persistence contract required by UserService.
+// The pgx-backed *repository.UserRepository satisfies it implicitly;
+// tests inject an in-memory fake. Defined here (service side) per the
+// dependency-inversion rule: handler → service → repository (interfaces).
+type UserRepository interface {
+	GetUserByID(ctx context.Context, id int64) (*domain.User, error)
+	GetUserByEmail(ctx context.Context, email string) (*domain.User, error)
+	UpdateUser(ctx context.Context, req *domain.UpdateUserRequest) (*domain.User, error)
+	SoftDeleteUser(ctx context.Context, userID int64) error
+	GetPreferences(ctx context.Context, userID int64) (*domain.UserPreferences, error)
+	UpsertPreferences(ctx context.Context, pref *domain.UserPreferences) error
+	GetLimits(ctx context.Context, userID int64) (*domain.UserLimits, error)
+	SetLimits(ctx context.Context, userID int64, req *domain.SetLimitsRequest) error
+	GetActivity(ctx context.Context, userID int64, limit, offset int) ([]map[string]interface{}, int, error)
+}
+
 type UserService struct {
-	repo *repository.UserRepository
+	repo UserRepository
 	log  *zap.Logger
 }
 
-func NewUserService(repo *repository.UserRepository, log *zap.Logger) *UserService {
+func NewUserService(repo UserRepository, log *zap.Logger) *UserService {
+	if repo == nil {
+		panic("user: repository is required")
+	}
 	return &UserService{repo: repo, log: log}
 }
 
 func (s *UserService) GetUser(ctx context.Context, userID int64) (*domain.User, error) {
+	if userID <= 0 {
+		return nil, domain.ErrInvalidUserID
+	}
 	user, err := s.repo.GetUserByID(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("get user: %w", err)
 	}
 	if user == nil {
-		return nil, fmt.Errorf("user not found")
+		return nil, domain.ErrUserNotFound
 	}
 	return user, nil
 }
 
 func (s *UserService) GetUserByEmail(ctx context.Context, email string) (*domain.User, error) {
+	if email == "" {
+		return nil, domain.ErrUserNotFound
+	}
 	user, err := s.repo.GetUserByEmail(ctx, email)
 	if err != nil {
 		return nil, fmt.Errorf("get user by email: %w", err)
 	}
 	if user == nil {
-		return nil, fmt.Errorf("user not found")
+		return nil, domain.ErrUserNotFound
 	}
 	return user, nil
 }
 
 func (s *UserService) UpdateUser(ctx context.Context, req *domain.UpdateUserRequest) (*domain.User, error) {
+	if req == nil || req.UserID <= 0 {
+		return nil, domain.ErrInvalidUserID
+	}
 	user, err := s.repo.UpdateUser(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("update user: %w", err)
+	}
+	// A nil result means the UPDATE matched no row (deleted user, or a race
+	// with SoftDeleteUser). Returning it as 200 OK would hand the client a
+	// JSON `null` body and report success for an update that never happened.
+	if user == nil {
+		return nil, domain.ErrUserNotFound
 	}
 
 	s.log.Info("User updated", zap.Int64("user_id", req.UserID))

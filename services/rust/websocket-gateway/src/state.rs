@@ -18,10 +18,7 @@ struct AppStateInner {
 }
 
 impl AppState {
-    pub fn new(
-        config: AppConfig,
-        kafka_broadcaster: KafkaBroadcaster,
-    ) -> Self {
+    pub fn new(config: AppConfig, kafka_broadcaster: KafkaBroadcaster) -> Self {
         let (kafka_tx, _) = broadcast::channel::<KafkaMessage>(4096);
         let subscription_manager = SubscriptionManager::new();
 

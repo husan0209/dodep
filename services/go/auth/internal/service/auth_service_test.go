@@ -20,30 +20,30 @@ import (
 )
 
 type mockAuthRepository struct {
-	getUserByEmail    func(context.Context, string) (*domain.User, error)
-	getUserByIdentifier func(context.Context, string) (*domain.User, error)
-	getUserByID       func(context.Context, string) (*domain.User, error)
-	getUserByGoogleSub func(context.Context, string) (*domain.User, error)
-	createUser        func(context.Context, *domain.User) error
+	getUserByEmail       func(context.Context, string) (*domain.User, error)
+	getUserByIdentifier  func(context.Context, string) (*domain.User, error)
+	getUserByID          func(context.Context, string) (*domain.User, error)
+	getUserByGoogleSub   func(context.Context, string) (*domain.User, error)
+	createUser           func(context.Context, *domain.User) error
 	createUserFromGoogle func(context.Context, string, string, string) (*domain.User, error)
-	linkGoogleSub     func(context.Context, string, string, bool) error
-	updateUser        func(context.Context, *domain.User) error
-	updateLastLogin   func(context.Context, string) error
-	updatePassword    func(context.Context, string, string) error
-	createSession     func(context.Context, *domain.Session) error
-	getSession        func(context.Context, string) (*domain.Session, error)
-	deleteSession     func(context.Context, string, string) error
-	getUserSessions   func(context.Context, string) ([]string, error)
-	deleteAllSessions func(context.Context, string) error
-	storeRefreshToken func(context.Context, string, string, string, time.Duration) error
-	getRefreshToken   func(context.Context, string) (string, string, error)
-	deleteRefresh     func(context.Context, string) error
-	trackAttempt      func(context.Context, string, string) (int, bool, error)
-	isLocked          func(context.Context, string) (bool, error)
-	clearAttempts     func(context.Context, string, string) error
-	storeTempToken    func(context.Context, string, string, time.Duration) error
-	getTempToken      func(context.Context, string) (string, error)
-	deleteTempToken   func(context.Context, string) error
+	linkGoogleSub        func(context.Context, string, string, bool) error
+	updateUser           func(context.Context, *domain.User) error
+	updateLastLogin      func(context.Context, string) error
+	updatePassword       func(context.Context, string, string) error
+	createSession        func(context.Context, *domain.Session) error
+	getSession           func(context.Context, string) (*domain.Session, error)
+	deleteSession        func(context.Context, string, string) error
+	getUserSessions      func(context.Context, string) ([]string, error)
+	deleteAllSessions    func(context.Context, string) error
+	storeRefreshToken    func(context.Context, string, string, string, time.Duration) error
+	getRefreshToken      func(context.Context, string) (string, string, error)
+	deleteRefresh        func(context.Context, string) error
+	trackAttempt         func(context.Context, string, string) (int, bool, error)
+	isLocked             func(context.Context, string) (bool, error)
+	clearAttempts        func(context.Context, string, string) error
+	storeTempToken       func(context.Context, string, string, time.Duration) error
+	getTempToken         func(context.Context, string) (string, error)
+	deleteTempToken      func(context.Context, string) error
 }
 
 func (m *mockAuthRepository) GetUserByEmail(ctx context.Context, email string) (*domain.User, error) {

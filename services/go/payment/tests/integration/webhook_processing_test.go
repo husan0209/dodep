@@ -30,10 +30,10 @@ func TestWebhookProcessing_SignatureVerification(t *testing.T) {
 	nowpaymentsClient := NewMockNOWPaymentsClient(containers.IPNSecret)
 
 	tests := []struct {
-		name           string
-		payload        client.WebhookPayload
-		signature      string
-		expectValid    bool
+		name        string
+		payload     client.WebhookPayload
+		signature   string
+		expectValid bool
 	}{
 		{
 			name: "valid signature",
@@ -288,7 +288,7 @@ func TestWebhookProcessing_WithdrawalWebhook(t *testing.T) {
 
 	t.Run("process finished withdrawal webhook", func(t *testing.T) {
 		withdrawalID := "np-webhook-withdrawal-finished"
-		
+
 		// Create withdrawal
 		withdrawal := &domain.Withdrawal{
 			UUID:           uuid.New(),

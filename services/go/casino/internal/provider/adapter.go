@@ -47,11 +47,11 @@ type LaunchRequest struct {
 type ProviderGame struct {
 	ExternalID          string
 	Name                string
-	Category            string   // "slot" | "table" | "live" | "crash"
+	Category            string // "slot" | "table" | "live" | "crash"
 	SubCategory         string
 	Tags                []string
 	RTP                 float64
-	Volatility          string   // "low" | "medium" | "high"
+	Volatility          string // "low" | "medium" | "high"
 	MinBet              decimal.Decimal
 	MaxBet              decimal.Decimal
 	ThumbnailURL        string

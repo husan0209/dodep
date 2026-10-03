@@ -6,16 +6,28 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/opus-casino/user/internal/domain"
 )
 
-type UserRepository struct {
-	pool *pgxpool.Pool
+// DBPool is the subset of pgxpool.Pool used by UserRepository.
+// *pgxpool.Pool satisfies it implicitly; tests inject a pgxmock pool.
+type DBPool interface {
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 }
 
-func NewUserRepository(pool *pgxpool.Pool) *UserRepository {
+type UserRepository struct {
+	pool DBPool
+}
+
+func NewUserRepository(pool DBPool) *UserRepository {
+	if pool == nil {
+		panic("user: pool is required")
+	}
 	return &UserRepository{pool: pool}
 }
 
@@ -169,11 +181,17 @@ func (r *UserRepository) GetLimits(ctx context.Context, userID int64) (*domain.U
 	limits := &domain.UserLimits{}
 	var sessionMinutes int
 	var sessionActive bool
+	// Money columns are NUMERIC in Postgres; scan into *string first and
+	// convert to MoneyLimit structs. Scanning directly into *MoneyLimit
+	// fails (destination kind 'ptr' not supported) whenever a row exists.
+	var dailyDeposit, weeklyDeposit, monthlyDeposit,
+		dailyBet, weeklyBet, monthlyBet,
+		dailyLoss, weeklyLoss, monthlyLoss *string
 	err := r.pool.QueryRow(ctx, query, userID).Scan(
 		&limits.UserID,
-		&limits.DailyDepositLimit, &limits.WeeklyDepositLimit, &limits.MonthlyDepositLimit,
-		&limits.DailyBetLimit, &limits.WeeklyBetLimit, &limits.MonthlyBetLimit,
-		&limits.DailyLossLimit, &limits.WeeklyLossLimit, &limits.MonthlyLossLimit,
+		&dailyDeposit, &weeklyDeposit, &monthlyDeposit,
+		&dailyBet, &weeklyBet, &monthlyBet,
+		&dailyLoss, &weeklyLoss, &monthlyLoss,
 		&sessionMinutes, &sessionActive,
 		&limits.SelfExclusion, &limits.SelfExclusionUntil, &limits.UpdatedAt,
 	)
@@ -183,11 +201,28 @@ func (r *UserRepository) GetLimits(ctx context.Context, userID int64) (*domain.U
 	if err != nil {
 		return nil, fmt.Errorf("get limits: %w", err)
 	}
+	limits.DailyDepositLimit = toMoneyLimit(dailyDeposit)
+	limits.WeeklyDepositLimit = toMoneyLimit(weeklyDeposit)
+	limits.MonthlyDepositLimit = toMoneyLimit(monthlyDeposit)
+	limits.DailyBetLimit = toMoneyLimit(dailyBet)
+	limits.WeeklyBetLimit = toMoneyLimit(weeklyBet)
+	limits.MonthlyBetLimit = toMoneyLimit(monthlyBet)
+	limits.DailyLossLimit = toMoneyLimit(dailyLoss)
+	limits.WeeklyLossLimit = toMoneyLimit(weeklyLoss)
+	limits.MonthlyLossLimit = toMoneyLimit(monthlyLoss)
 	limits.SessionTimeLimit = &domain.TimeLimit{
 		Minutes:  sessionMinutes,
 		IsActive: sessionActive,
 	}
 	return limits, nil
+}
+
+// toMoneyLimit converts a nullable NUMERIC-as-text column to MoneyLimit.
+func toMoneyLimit(amount *string) *domain.MoneyLimit {
+	if amount == nil {
+		return nil
+	}
+	return &domain.MoneyLimit{Amount: *amount}
 }
 
 func (r *UserRepository) SetLimits(ctx context.Context, userID int64, req *domain.SetLimitsRequest) error {
@@ -235,7 +270,11 @@ func (r *UserRepository) SetLimits(ctx context.Context, userID int64, req *domai
 func (r *UserRepository) GetActivity(ctx context.Context, userID int64, limit, offset int) ([]map[string]interface{}, int, error) {
 	countQuery := `SELECT COUNT(*) FROM audit_log WHERE record_id = $1 AND table_name = 'users'`
 	var total int
-	r.pool.QueryRow(ctx, countQuery, userID).Scan(&total)
+	// A failed count must not be reported as "0 rows": return it so the caller can
+	// distinguish an empty page from a broken query.
+	if err := r.pool.QueryRow(ctx, countQuery, userID).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("count audit log entries: %w", err)
+	}
 
 	query := `
 		SELECT id, action, old_data, new_data, user_id, created_at
@@ -252,14 +291,24 @@ func (r *UserRepository) GetActivity(ctx context.Context, userID int64, limit, o
 	for rows.Next() {
 		var id int64
 		var action, oldData, newData string
-		var logUserID *int64
+		// audit_log.user_id is nullable (system-initiated entries have no user).
+		// pgtype.Int8 is used instead of *int64 because a bare *int64 destination
+		// cannot represent NULL, and pgx refuses the scan outright.
+		var logUserID pgtype.Int8
 		var createdAt time.Time
-		rows.Scan(&id, &action, &oldData, &newData, &logUserID, &createdAt)
+		if err := rows.Scan(&id, &action, &oldData, &newData, &logUserID, &createdAt); err != nil {
+			rows.Close()
+			return nil, 0, fmt.Errorf("scan audit log entry %d: %w", id, err)
+		}
 		activities = append(activities, map[string]interface{}{
 			"id":         id,
 			"action":     action,
+			"user_id":    logUserID,
 			"created_at": createdAt,
 		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("iterate audit log entries: %w", err)
 	}
 	return activities, total, nil
 }

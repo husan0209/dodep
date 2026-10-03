@@ -15,7 +15,11 @@ on:
       - 'libs/proto/**'
 
 env:
-  GO_VERSION: '1.21'
+  # services/go/casino and services/go/notification declare `go 1.24.x`.
+  GO_VERSION: '1.24'
+  # Pinned rather than `latest`: an unpinned major bump changes the enabled linter set
+  # and turns unrelated PRs red.
+  GOLANGCI_LINT_VERSION: 'v2.14.0'
   REGISTRY: ghcr.io
   IMAGE_PREFIX: opus-casino
 
@@ -35,11 +39,16 @@ jobs:
             services/go/casino/go.mod
             services/go/notification/go.mod
 
+      # NOTE: golangci/golangci-lint-action used to be pointed at `services/go`, which is
+      # not a Go module. The action runs `golangci-lint run` in its working-directory, so
+      # it aborted with
+      #   [linters_context] typechecking error: pattern ./...: directory prefix .
+      #   does not contain main module or its selected dependencies   (exit code 7)
+      # before either service was ever linted.
+      # Installing the binary with `go install` keeps it out of the module tree and lets
+      # the per-service steps below decide where it runs.
       - name: Install golangci-lint
-        uses: golangci/golangci-lint-action@v3
-        with:
-          version: latest
-          working-directory: services/go
+        run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${{ env.GOLANGCI_LINT_VERSION }}
 
       - name: Lint Casino Service
         run: |
@@ -91,16 +100,12 @@ jobs:
             services/go/casino/go.mod
             services/go/notification/go.mod
 
-      - name: Generate Proto files
-        run: |
-          cd libs/proto
-          # Install protoc-gen-go
-          go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
-          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
-          # Generate Go code from proto files
-          protoc --go_out=. --go_opt=paths=source_relative \
-                 --go-grpc_out=. --go-grpc_opt=paths=source_relative \
-                 */v1/*.proto
+      # NOTE: the "Generate Proto files" step that used to live here was removed.
+      # It called `protoc`, which is not installed on ubuntu-latest, and it wrote to
+      # `libs/proto/<pkg>/v1/*.pb.go` via `--go_out=.`, which is not where the Go
+      # services import from. The generated code is now committed under
+      # `libs/proto/gen/go/` (see libs/proto/buf.gen.yaml) so builds, lints and scans
+      # resolve `github.com/opus-casino/proto/gen/go/<svc>/v1` without codegen.
 
       - name: Test Casino Service
         run: |

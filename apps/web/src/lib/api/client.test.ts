@@ -34,9 +34,18 @@ describe("api client configuration", () => {
 describe("network diagnostics", () => {
   test("converts fetch connection failure to structured ApiClientError", async () => {
     const client = createApiClient("http://localhost:8080");
-    const fetchMock = jest
-      .spyOn(global, "fetch")
-      .mockRejectedValue(new TypeError("fetch failed"));
+
+    // `jest.spyOn(global, "fetch")` throws "Property `fetch` does not exist in the
+    // provided object" whenever the test environment does not expose a global fetch,
+    // which depends on the Node version jest is running under. Defining the property
+    // directly works in every environment and is still reverted afterwards.
+    const originalFetch = globalThis.fetch;
+    const fetchMock = jest.fn().mockRejectedValue(new TypeError("fetch failed"));
+    Object.defineProperty(globalThis, "fetch", {
+      value: fetchMock,
+      configurable: true,
+      writable: true,
+    });
 
     let error: unknown;
     try {
@@ -44,7 +53,15 @@ describe("network diagnostics", () => {
     } catch (caught) {
       error = caught;
     } finally {
-      fetchMock.mockRestore();
+      if (originalFetch) {
+        Object.defineProperty(globalThis, "fetch", {
+          value: originalFetch,
+          configurable: true,
+          writable: true,
+        });
+      } else {
+        delete (globalThis as { fetch?: unknown }).fetch;
+      }
     }
 
     expect(error).toBeInstanceOf(ApiClientError);

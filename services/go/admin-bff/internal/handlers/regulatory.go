@@ -18,11 +18,19 @@ func RegisterRegulatoryRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger)
 		jurisdiction := c.Query("jurisdiction", "")
 		page := c.QueryInt("page", 1)
 		ps := c.QueryInt("page_size", 50)
-		if page < 1 { page = 1 }
-		if ps < 1 || ps > 200 { ps = 50 }
+		if page < 1 {
+			page = 1
+		}
+		if ps < 1 || ps > 200 {
+			ps = 50
+		}
 		q := db.Model(&models.RegulatoryReport{})
-		if status != "" { q = q.Where("status = ?", status) }
-		if jurisdiction != "" { q = q.Where("jurisdiction = ?", jurisdiction) }
+		if status != "" {
+			q = q.Where("status = ?", status)
+		}
+		if jurisdiction != "" {
+			q = q.Where("jurisdiction = ?", jurisdiction)
+		}
 		var total int64
 		q.Count(&total)
 		var items []models.RegulatoryReport
@@ -36,10 +44,10 @@ func RegisterRegulatoryRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger)
 	reg.Post("/reports", func(c *fiber.Ctx) error {
 		var req struct {
 			Jurisdiction string    `json:"jurisdiction"`
-			ReportType string    `json:"report_type"`
-			PeriodStart time.Time `json:"period_start"`
-			PeriodEnd   time.Time `json:"period_end"`
-			Notes       string    `json:"notes"`
+			ReportType   string    `json:"report_type"`
+			PeriodStart  time.Time `json:"period_start"`
+			PeriodEnd    time.Time `json:"period_end"`
+			Notes        string    `json:"notes"`
 		}
 		if err := c.BodyParser(&req); err != nil {
 			return c.Status(400).JSON(fiber.Map{"error": "invalid body"})
@@ -100,10 +108,16 @@ func RegisterRegulatoryRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger)
 		status := c.Query("status", "")
 		page := c.QueryInt("page", 1)
 		ps := c.QueryInt("page_size", 50)
-		if page < 1 { page = 1 }
-		if ps < 1 || ps > 200 { ps = 50 }
+		if page < 1 {
+			page = 1
+		}
+		if ps < 1 || ps > 200 {
+			ps = 50
+		}
 		q := db.Model(&models.SARReport{})
-		if status != "" { q = q.Where("status = ?", status) }
+		if status != "" {
+			q = q.Where("status = ?", status)
+		}
 		var total int64
 		q.Count(&total)
 		var items []models.SARReport
@@ -178,10 +192,16 @@ func RegisterRegulatoryRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger)
 		status := c.Query("status", "")
 		page := c.QueryInt("page", 1)
 		ps := c.QueryInt("page_size", 50)
-		if page < 1 { page = 1 }
-		if ps < 1 || ps > 200 { ps = 50 }
+		if page < 1 {
+			page = 1
+		}
+		if ps < 1 || ps > 200 {
+			ps = 50
+		}
 		q := db.Model(&models.PlayerComplaint{})
-		if status != "" { q = q.Where("status = ?", status) }
+		if status != "" {
+			q = q.Where("status = ?", status)
+		}
 		var total int64
 		q.Count(&total)
 		var items []models.PlayerComplaint
@@ -260,12 +280,12 @@ func RegisterRegulatoryRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger)
 
 	reg.Put("/tax-config", func(c *fiber.Ctx) error {
 		var req struct {
-			ID           string  `json:"id"`
-			Jurisdiction string  `json:"jurisdiction"`
-			TaxType      string  `json:"tax_type"`
-			TaxBase      string  `json:"tax_base"`
-			Rate         string  `json:"rate"`
-			Currency     string  `json:"currency"`
+			ID            string `json:"id"`
+			Jurisdiction  string `json:"jurisdiction"`
+			TaxType       string `json:"tax_type"`
+			TaxBase       string `json:"tax_base"`
+			Rate          string `json:"rate"`
+			Currency      string `json:"currency"`
 			EffectiveFrom string `json:"effective_from"`
 		}
 		if err := c.BodyParser(&req); err != nil {
@@ -274,11 +294,21 @@ func RegisterRegulatoryRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger)
 		var tc models.TaxConfig
 		if req.ID != "" {
 			if err := db.First(&tc, "id = ?", req.ID).Error; err == nil {
-				if req.Jurisdiction != "" { tc.Jurisdiction = req.Jurisdiction }
-				if req.TaxType != "" { tc.TaxType = req.TaxType }
-				if req.TaxBase != "" { tc.TaxBase = req.TaxBase }
-				if req.Rate != "" { tc.Rate = req.Rate }
-				if req.Currency != "" { tc.Currency = req.Currency }
+				if req.Jurisdiction != "" {
+					tc.Jurisdiction = req.Jurisdiction
+				}
+				if req.TaxType != "" {
+					tc.TaxType = req.TaxType
+				}
+				if req.TaxBase != "" {
+					tc.TaxBase = req.TaxBase
+				}
+				if req.Rate != "" {
+					tc.Rate = req.Rate
+				}
+				if req.Currency != "" {
+					tc.Currency = req.Currency
+				}
 				if err := db.Save(&tc).Error; err != nil {
 					return c.Status(500).JSON(fiber.Map{"error": "database error"})
 				}
@@ -325,7 +355,7 @@ func RegisterRegulatoryRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger)
 				"total_player_balances": formatMoney(playerBalances),
 				"funds_in_segregated":   formatMoney(segregatedFunds),
 				"segregation_ratio":     ratio,
-				"liabilities_total":   formatMoney(liabilities),
+				"liabilities_total":     formatMoney(liabilities),
 			},
 		})
 	})
