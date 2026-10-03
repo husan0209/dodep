@@ -1,8 +1,13 @@
-[format]
+# rustfmt configuration for the Rust services workspace.
+#
+# These are top-level keys on purpose. The file used to wrap them in a
+# `[format]` section and to add a `[clippy]` section; rustfmt knows neither, so
+# it warned "Unknown configuration option" on every invocation and silently
+# ignored all of it - edition and newline_style never took effect.
+#
+# Lint strictness is not configured here: it comes from
+# `cargo clippy -- -D warnings` (also the `cargo lint` alias in .cargo/config.toml).
+
 edition = "2021"
 newline_style = "unix"
 use_small_heuristics = "Default"
-
-[clippy]
-allowed-warnings = 0
-deny = ["clippy::pedantic"]

@@ -313,6 +313,7 @@ func newTestPaymentService(
 		user,
 		nil, // producer
 		nil, // tracer
+		"https://example.test/ipn", // ipnCallbackURL
 	)
 }
 

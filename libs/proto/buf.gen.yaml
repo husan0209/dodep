@@ -15,14 +15,20 @@ managed:
 
 plugins:
   # Go - protocol buffers
+  # `out` is relative to this file (libs/proto), so the stubs land inside the
+  # github.com/opus-casino/proto module at gen/go. That is the path every
+  # service resolves through its
+  #   replace github.com/opus-casino/proto => ../../../libs/proto
+  # and the path `make -C libs/proto gen-go` already targets. Writing them to
+  # ../../gen/go instead produced a tree no Go module could reach.
   - remote: buf.build/protocolbuffers/go
-    out: ../../gen/go
+    out: gen/go
     opt:
       - paths=source_relative
 
   # Go - gRPC
   - remote: buf.build/grpc/go
-    out: ../../gen/go
+    out: gen/go
     opt:
       - paths=source_relative
   

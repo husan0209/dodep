@@ -69,12 +69,25 @@ jobs:
       - name: "G3: No hardcoded secrets or private keys"
         run: |
           echo "Проверка G3: отсутствие захардкоженных приватных ключей..."
-          if grep -rn "BEGIN RSA PRIVATE KEY" . 2>/dev/null | grep -v ".git"; then
-            echo "❌ Обнаружен приватный ключ в репозитории!"
-            exit 1
-          fi
-          if grep -rn "BEGIN OPENSSH PRIVATE KEY" . 2>/dev/null | grep -v ".git"; then
-            echo "❌ Обнаружен SSH приватный ключ в репозитории!"
+          # git grep instead of `grep -rn .`: it only looks at tracked files and
+          # cannot match anything inside .git (where `grep -v ".git"` was a
+          # regex, not a path filter, and silently matched everything).
+          #
+          # Markdown is excluded on purpose. The vendored agent skill packs
+          # (*/skills/kubernetes-specialist/references/configuration.md) contain
+          # PEM *placeholders* - truncated bodies such as "MIIEvQIBADANBgkq..." -
+          # to show what a Kubernetes Secret looks like. Those are documentation,
+          # not key material, and failing the guard on them makes it unusable.
+          #
+          # This file is excluded too: the guard necessarily spells out the
+          # header it searches for.
+          PEM_HEADER='-----BEGIN (RSA |DSA |EC |OPENSSH )?PRIVATE KEY-----'
+          HITS=$(git grep -n -I -E -e "$PEM_HEADER" -- \
+            ':!*.md' \
+            ':!.github/workflows/architecture-guards.yml' || true)
+          if [ -n "$HITS" ]; then
+            echo "❌ Обнаружен приватный ключ в репозитории:"
+            echo "$HITS"
             exit 1
           fi
           echo "✅ G3 пройден: приватные ключи не обнаружены."

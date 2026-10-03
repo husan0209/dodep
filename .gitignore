@@ -45,6 +45,10 @@ pnpm-debug.log*
 coverage/
 *.lcov
 .nyc_output/
+# pytest-cov writes a single .coverage data file next to the service
+.coverage
+.coverage.*
+htmlcov/
 
 # Nx
 .nx/cache/

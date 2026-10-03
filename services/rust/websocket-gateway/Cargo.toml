@@ -6,7 +6,12 @@ description = "Real-time WebSocket gateway for Opus Casino platform"
 
 [dependencies]
 # Async runtime
-tokio = { version = "1.35", features = ["full", "rt-multi-thread", "io-uring"] }
+# `full` already contains rt-multi-thread. `io-uring` must NOT be listed: it is
+# an unstable tokio feature that requires building with --cfg tokio_unstable
+# and tokio refuses to compile without it ("The `io-uring` feature requires
+# `--cfg tokio_unstable`."), which broke the whole workspace build. Nothing here
+# uses io_uring - it is Linux-only and tokio's default IO driver is mio.
+tokio = { version = "1.35", features = ["full"] }
 
 # Web framework
 axum = { version = "0.7", features = ["macros", "ws"] }

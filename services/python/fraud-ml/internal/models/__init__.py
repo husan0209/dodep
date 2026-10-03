@@ -3,12 +3,12 @@ ML Models package
 """
 
 from .fraud_detector import (
-    FraudDetector,
+    AccountTakeoverDetector,
     BetAnomalyDetector,
     BonusAbuseDetector,
-    PaymentFraudDetector,
-    AccountTakeoverDetector,
+    FraudDetector,
     FraudPrediction,
+    PaymentFraudDetector,
 )
 
 __all__ = [

@@ -1,10 +1,15 @@
-# Generated code - DO NOT COMMIT
-# Run `buf generate` to regenerate
-
-/gen/
-/gen/go/
+# Generated Rust and TypeScript - regenerate with `buf generate`
 /gen/rust/
 /gen/typescript/
+
+# The Go stubs under /gen/go are deliberately NOT ignored.
+#
+# They are the only copy of the generated gRPC clients in a clean checkout and
+# every Go service resolves them through
+#   replace github.com/opus-casino/proto => ../../../libs/proto
+# so `go build ./...` cannot start without them. They are committed at exactly
+# the path `make -C libs/proto gen-go` writes to, so regenerating produces no
+# diff.
 
 # Build artifacts
 build/
