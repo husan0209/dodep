@@ -8,7 +8,9 @@ import structlog
 logger = structlog.get_logger()
 
 
-# Feature registry - defines all features used by the model
+# Feature registry - defines all features used by the model.
+# Order matters: it is the model input order (training, ONNX metadata and
+# the Rust serving side all consume features in exactly this sequence).
 FEATURE_REGISTRY = {
     # Betting behavior
     "bets_7d": {"type": "numeric", "source": "extraction", "description": "Bets in last 7 days"},
@@ -77,11 +79,7 @@ FEATURE_REGISTRY = {
         "source": "derived",
         "description": "Multi-device indicator (>3)",
     },
-    "multi_ip": {
-        "type": "binary",
-        "source": "derived",
-        "description": "Multi-IP indicator (>10)",
-    },
+    "multi_ip": {"type": "binary", "source": "derived", "description": "Multi-IP indicator (>10)"},
     "high_roller": {"type": "binary", "source": "derived", "description": "High roller indicator"},
     "rapid_bettor": {
         "type": "binary",

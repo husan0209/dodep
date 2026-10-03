@@ -184,19 +184,24 @@ class FeatureExtractor:
                   ue.event_type = 'deposit') OVER w_30d as total_deposit_30d,
 
             -- Session behavior
-            uniqIf(JSONExtractString(ue.properties, 'device_id'), true) OVER w_30d
-                as device_count_30d,
-            uniqIf(JSONExtractString(ue.properties, 'ip'), true) OVER w_30d as ip_count_30d,
+            uniqIf(JSONExtractString(ue.properties, 'device_id'), true)
+                OVER w_30d as device_count_30d,
+            uniqIf(JSONExtractString(ue.properties, 'ip'), true)
+                OVER w_30d as ip_count_30d,
             uniqIf(ue.country, true) OVER w_30d as country_count_30d,
 
             -- Win rate
             countIf(ue.event_type = 'bet_settled' AND
-                    JSONExtractString(ue.properties, 'result') = 'won') OVER w_7d as wins_7d,
+                    JSONExtractString(ue.properties, 'result') = 'won')
+                OVER w_7d as wins_7d,
             countIf(ue.event_type = 'bet_settled') OVER w_7d as settled_7d,
 
             -- Account age
-            dateDiff('day', min(ue.event_time) OVER (PARTITION BY ue.user_id),
-                     ue.event_time) as account_age_days,
+            dateDiff(
+                'day',
+                min(ue.event_time) OVER (PARTITION BY ue.user_id),
+                ue.event_time
+            ) as account_age_days,
 
             -- Label: fraud signal
             coalesce(max(fs.is_fraud), 0) as is_fraud
@@ -209,12 +214,18 @@ class FeatureExtractor:
         WHERE ue.event_time >= {cutoff:DateTime}
           AND ue.event_time <= {as_of:DateTime}
         WINDOW
-            w_24h AS (PARTITION BY ue.user_id ORDER BY ue.event_time
-                      RANGE BETWEEN INTERVAL 24 HOUR PRECEDING AND CURRENT ROW),
-            w_7d AS (PARTITION BY ue.user_id ORDER BY ue.event_time
-                     RANGE BETWEEN INTERVAL 7 DAY PRECEDING AND CURRENT ROW),
-            w_30d AS (PARTITION BY ue.user_id ORDER BY ue.event_time
-                      RANGE BETWEEN INTERVAL 30 DAY PRECEDING AND CURRENT ROW)
+            w_24h AS (
+                PARTITION BY ue.user_id ORDER BY ue.event_time
+                RANGE BETWEEN INTERVAL 24 HOUR PRECEDING AND CURRENT ROW
+            ),
+            w_7d AS (
+                PARTITION BY ue.user_id ORDER BY ue.event_time
+                RANGE BETWEEN INTERVAL 7 DAY PRECEDING AND CURRENT ROW
+            ),
+            w_30d AS (
+                PARTITION BY ue.user_id ORDER BY ue.event_time
+                RANGE BETWEEN INTERVAL 30 DAY PRECEDING AND CURRENT ROW
+            )
         QUALIFY row_number() OVER (PARTITION BY ue.user_id ORDER BY ue.event_time DESC) = 1
         """
 

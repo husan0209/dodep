@@ -4,6 +4,7 @@ Consumes events from Redpanda and runs fraud detection in real-time
 """
 
 import asyncio
+import concurrent.futures
 import json
 import logging
 from datetime import datetime
@@ -17,12 +18,26 @@ logger = logging.getLogger(__name__)
 class RedpandaConsumer:
     """
     Consumes events from Redpanda/Kafka and runs fraud detection
+
+    Threading model: `confluent_kafka.Consumer.poll()` is blocking, so the
+    poll loop runs in an executor thread. Async handlers are scheduled back
+    onto the service event loop with `run_coroutine_threadsafe` (calling
+    `await` from the poll thread is impossible). Waiting for the returned
+    future with a bounded timeout keeps backpressure: at most
+    `processing_timeout` seconds of unprocessed events per poll.
     """
 
-    def __init__(self, brokers: list, fraud_detector: Any, group_id: str = "fraud-ml-service"):
+    def __init__(
+        self,
+        brokers: list,
+        fraud_detector: Any,
+        group_id: str = "fraud-ml-service",
+        processing_timeout: float = 5.0,
+    ):
         self.brokers = brokers
         self.fraud_detector = fraud_detector
         self.group_id = group_id
+        self.processing_timeout = processing_timeout
 
         # Topics to consume
         self.topics = [
@@ -46,8 +61,6 @@ class RedpandaConsumer:
 
         self.consumer: Consumer | None = None
         self.running = False
-        # Event loop of the service, captured in start() so the worker thread
-        # running _consume_loop can dispatch coroutines back onto it.
         self._loop: asyncio.AbstractEventLoop | None = None
 
         # Event handlers
@@ -73,29 +86,27 @@ class RedpandaConsumer:
         loop = asyncio.get_running_loop()
         self._loop = loop
 
-        # Run consumer in background thread
         self.running = True
         self.consumer = Consumer(self.config)
         self.consumer.subscribe(self.topics)
 
         logger.info(f"Redpanda consumer started, subscribed to: {self.topics}")
 
-        # Start consumer loop in executor
+        # Start blocking consumer loop in executor thread
         loop.run_in_executor(None, self._consume_loop)
 
-    def stop(self):
-        """Stop consuming events"""
+    async def stop(self):
+        """Stop consuming events and close the underlying client"""
         self.running = False
-        if self.consumer:
-            self.consumer.close()
+        consumer, self.consumer = self.consumer, None
+        if consumer is not None:
+            # close() blocks; keep the event loop responsive during shutdown.
+            await asyncio.get_running_loop().run_in_executor(None, consumer.close)
+        self._loop = None
         logger.info("Redpanda consumer stopped")
 
     def _consume_loop(self):
-        """Main consumer loop.
-
-        Runs in a worker thread (confluent_kafka's poll() is blocking), so
-        coroutines are dispatched back onto the service event loop.
-        """
+        """Main consumer loop (runs in executor thread — no await allowed)"""
         while self.running:
             consumer = self.consumer
             if consumer is None:
@@ -115,25 +126,35 @@ class RedpandaConsumer:
 
                 self.stats["messages_consumed"] += 1
 
-                # Process message
-                topic = msg.topic()
-                value = msg.value()
-
                 try:
-                    event = json.loads(value.decode("utf-8"))
-                    # This thread has no event loop; hand the coroutine back to
-                    # the one captured in start().
-                    if self._loop is not None:
-                        asyncio.run_coroutine_threadsafe(
-                            self._process_event(topic, event), self._loop
-                        ).result()
+                    event = json.loads(msg.value().decode("utf-8"))
                 except json.JSONDecodeError as e:
                     logger.error(f"Failed to decode message: {e}")
                     self.stats["errors"] += 1
+                    continue
+
+                self._dispatch(msg.topic(), event)
 
             except Exception as e:
                 logger.error(f"Consumer error: {e}")
                 self.stats["errors"] += 1
+
+    def _dispatch(self, topic: str, event: dict[str, Any]) -> None:
+        """Schedule async event handling from the poll thread onto the loop"""
+        loop = self._loop
+        if loop is None or loop.is_closed():
+            return
+
+        future = asyncio.run_coroutine_threadsafe(self._process_event(topic, event), loop)
+        try:
+            future.result(timeout=self.processing_timeout)
+        except concurrent.futures.TimeoutError:
+            logger.warning(f"Event processing timeout on topic {topic}")
+            future.cancel()
+            self.stats["errors"] += 1
+        except Exception as exc:
+            logger.error(f"Event processing failed on topic {topic}: {exc}")
+            self.stats["errors"] += 1
 
     async def _process_event(self, topic: str, event: dict[str, Any]):
         """Process a single event"""

@@ -20,9 +20,12 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  # The workspace depends on crates that need a modern rustc (sqlx 0.7,
-  # rust_decimal 1.36, tonic 0.11 ...). 1.75 could not resolve the lockfile.
-  RUST_VERSION: 'stable'
+  # Floor imposed by the committed lockfile is 1.85 (lockfile v4 + edition2024);
+  # see the comment in ci.yaml. `stable` is used instead so the toolchain always
+  # satisfies it: cargo fmt / clippy -D warnings / build / test were all verified
+  # against current stable (1.94.x), whereas 1.85 is only a lower bound nobody
+  # has run this dependency tree on.
+  RUST_VERSION: "stable"
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
@@ -39,6 +42,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
+      # Report every service instead of cancelling siblings on the first
+      # failure: a cancelled sibling hides the actual error.
+      fail-fast: false
       matrix:
         service: [betting-engine, wallet-core, websocket-gateway]
     
@@ -47,7 +53,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ env.RUST_VERSION }}
           components: clippy, rustfmt
@@ -79,6 +85,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
+      # Report every service instead of cancelling siblings on the first
+      # failure: a cancelled sibling hides the actual error.
+      fail-fast: false
       matrix:
         service: [betting-engine, wallet-core, websocket-gateway]
     
@@ -112,7 +121,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ env.RUST_VERSION }}
 
@@ -154,6 +163,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
+      # Report every service instead of cancelling siblings on the first
+      # failure: a cancelled sibling hides the actual error.
       fail-fast: false
       matrix:
         service: [betting-engine, wallet-core, websocket-gateway]
@@ -163,12 +174,12 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ env.RUST_VERSION }}
 
       # Prebuilt binary. `cargo install cargo-audit` compiles the whole
-      # rustsec/gix tree from source, which does not fit in a 15 minute job.
+      # rustsec/gix tree from source, which does not fit in the 15 minute budget.
       - name: Install cargo-audit
         uses: taiki-e/install-action@cargo-audit
 
@@ -176,12 +187,11 @@ jobs:
         working-directory: services/rust/${{ matrix.service }}
         run: cargo audit --deny warnings
 
-      # NOTE: `cargo deny` used to run here three times from services/rust with
-      # no deny.toml anywhere in the repo, so it could never pass - and each
-      # run spent most of the 15 minute budget compiling cargo-deny from
-      # source. Licence/bans/sources policy needs a deny.toml first; until then
+      # NOTE: `cargo deny check` used to run three times from services/rust with
+      # no deny.toml anywhere in the repo, so it could never pass - and each run
+      # spent most of the budget compiling cargo-deny from source. A licence /
+      # bans / sources policy needs a deny.toml first; until one exists,
       # cargo-audit above is the advisory gate.
-
 
   # ==========================================================================
   # Build
@@ -192,6 +202,9 @@ jobs:
     timeout-minutes: 30
     needs: [lint, test, security]
     strategy:
+      # Report every service instead of cancelling siblings on the first
+      # failure: a cancelled sibling hides the actual error.
+      fail-fast: false
       matrix:
         service: [betting-engine, wallet-core, websocket-gateway]
     

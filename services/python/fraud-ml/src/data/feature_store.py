@@ -12,27 +12,26 @@ import structlog
 
 logger = structlog.get_logger()
 
-# Derived from the platform temp dir rather than a hardcoded "/tmp/..." literal:
-# "/tmp" is world-writable, so a pre-created cache directory there is writable by
-# any local user (bandit B108). Resolve it per call so the value follows TMPDIR.
-DEFAULT_CACHE_DIR = str(Path(tempfile.gettempdir()) / "fraud-ml-features")
-
 
 class FeatureStore:
     """Feature store with parquet-based caching."""
 
-    def __init__(self, cache_dir: str = DEFAULT_CACHE_DIR):
+    def __init__(self, cache_dir: str | None = None):
+        # Default to a private subdirectory of the OS temp dir rather than
+        # the shared /tmp: predictable world-writable paths let another local
+        # user pre-create or swap cache entries.
+        if cache_dir is None:
+            cache_dir = str(Path(tempfile.gettempdir()) / "fraud-ml-features")
         self.cache_dir = Path(cache_dir)
-        # 0o700: the cache holds per-user betting features, so keep it owner-only
-        # even when the temp dir itself is shared.
         self.cache_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
         logger.info("feature_store.initialized", cache_dir=str(self.cache_dir))
 
     def _compute_cache_key(self, user_ids: list[int], as_of: datetime) -> str:
-        """Compute cache key from user IDs and timestamp.
+        """
+        Compute cache key from user IDs and timestamp.
 
-        SHA-256, not MD5: this is a cache filename, not a security primitive, so
-        there is no reason to reach for a broken hash (bandit B324).
+        Uses sha256 (cache keys are derived from user IDs, so collisions are
+        a correctness concern, not just a security one).
         """
         key_str = f"{sorted(user_ids)}_{as_of.isoformat()}"
         return hashlib.sha256(key_str.encode()).hexdigest()

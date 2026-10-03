@@ -43,9 +43,14 @@ pnpm-debug.log*
 
 # Testing
 coverage/
+.coverage
+.coverage.*
+htmlcov/
+junit.xml
+bandit-results.json
+safety-results.json
 *.lcov
 .nyc_output/
-.coverage
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/

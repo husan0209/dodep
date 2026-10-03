@@ -10,11 +10,24 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 
 # Install dependencies
 COPY pyproject.toml .
+# requirements.txt is not a runtime dependency of the install step - it is read by
+# tests/test_dependencies.py, which asserts that it and pyproject.toml declare the
+# same pins. Without it here that suite fails on FileNotFoundError before the image
+# is built, which is exactly the drift the test exists to catch.
+COPY requirements.txt .
 RUN pip install --no-cache-dir -e ".[dev]"
 
-# Copy source code
+# Copy source code.
+# internal/ must be copied here as well as src/. main.py imports both trees
+# (`from internal.api.routes import ...` and `from src.config import ...`), and
+# so do the tests. Leaving internal/ out made this stage fail on
+# `from internal.api.routes import router` before the image was ever produced.
 COPY src/ ./src/
+COPY internal/ ./internal/
 COPY tests/ ./tests/
+# main.py is needed here too, not only in the runner: tests/test_api.py does
+# `from main import app`, so without it this stage failed during collection.
+COPY main.py .
 
 # Run tests
 RUN pytest tests/ --cov=src/ --cov-report=xml
@@ -40,7 +53,11 @@ COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/pytho
 COPY --from=builder /usr/local/bin /usr/local/bin
 
 # Copy application code
+# main.py resolves `internal.*` at import time, so the runner needs the package
+# next to src/ and main.py. Without it `uvicorn main:app` aborts at startup with
+# ModuleNotFoundError: No module named 'internal'.
 COPY --chown=appuser:appuser src/ ./src/
+COPY --chown=appuser:appuser internal/ ./internal/
 COPY --chown=appuser:appuser main.py .
 
 # Create models directory

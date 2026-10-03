@@ -2,18 +2,25 @@
 Configuration for Fraud ML Service
 """
 
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     """Application settings."""
 
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        case_sensitive=False,
+        # settings carry model_* keys (model_path, model_quality_threshold);
+        # pydantic reserves the "model_" namespace for its own models
+        protected_namespaces=(),
+    )
+
     # Server
     http_port: int = 8000
-    # Loopback by default: binding every interface is a decision for the
-    # deployment, not for a config default (bandit B104). The container entrypoint
-    # passes `--host 0.0.0.0` to uvicorn explicitly, so images are unaffected.
-    http_host: str = "127.0.0.1"
+    # 0.0.0.0 is required inside Kubernetes (the pod IP must be reachable);
+    # in-cluster exposure is controlled by NetworkPolicy, not the bind host.
+    http_host: str = "0.0.0.0"  # nosec B104
 
     # Environment
     app_env: str = "development"
@@ -24,7 +31,9 @@ class Settings(BaseSettings):
     clickhouse_port: int = 9000
     clickhouse_database: str = "opus_casino"
     clickhouse_user: str = "default"
-    clickhouse_password: str = ""
+    # Never hardcode credentials: inject CLICKHOUSE_PASSWORD in the
+    # environment (empty is valid for a local dev ClickHouse).
+    clickhouse_password: str = ""  # nosec B107
 
     @property
     def clickhouse_url(self) -> str:
@@ -38,6 +47,9 @@ class Settings(BaseSettings):
     # Model quality thresholds
     model_quality_threshold: float = 0.90  # AUC threshold
     precision_threshold: float = 0.50  # precision@90recall threshold
+    max_fpr: float = 0.05  # hard FPR budget at production operating point
+    min_recall_at_max_fpr: float = 0.70  # min recall within the FPR budget
+    target_recall: float = 0.90  # reporting recall target
 
     # Feature extraction
     lookback_days: int = 90
@@ -46,12 +58,17 @@ class Settings(BaseSettings):
     # Model path
     model_path: str = "/app/models"
 
-    # Redpanda (for notifications)
-    redpanda_brokers: list[str] = ["localhost:9092"]
+    # Redpanda brokers (for notifications). Kept as a raw string: a
+    # list-typed field would make pydantic-settings JSON-decode the env
+    # value and fail on the CSV form used in CI.
+    redpanda_brokers: str = "localhost:9092"
 
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
+    @property
+    def redpanda_broker_list(self) -> list[str]:
+        """Kafka brokers as a list, from a CSV or JSON env value."""
+        from internal.config import parse_brokers
+
+        return parse_brokers(self.redpanda_brokers)
 
 
 settings = Settings()

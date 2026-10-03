@@ -13,19 +13,14 @@ from contextlib import asynccontextmanager
 
 import structlog
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from prometheus_client import make_asgi_app
 
+from internal.api.routes import router as api_router
+from internal.consumers.redpanda_consumer import RedpandaConsumer
+from internal.models.fraud_detector import FraudDetector
 from src.config import settings
 from src.data.clickhouse import ClickHouseClient
-
-# NOTE: the API router, the Redpanda consumer and the batch FraudDetector
-# orchestrator are not implemented under src/ yet (only stale copies live in the
-# undeployed internal/ tree), so they are intentionally not wired in here.
-# main.py is the container entrypoint (CMD uvicorn main:app) and the image only
-# ships src/ + main.py, so every import below must resolve inside src/.
-
-# structlog wants a numeric level; logging.INFO and friends are plain ints.
-LOG_LEVEL = logging.getLevelNamesMapping().get(settings.log_level.upper(), logging.INFO)
 
 # Configure structured logging
 structlog.configure(
@@ -35,7 +30,9 @@ structlog.configure(
         structlog.processors.dict_tracebacks,
         structlog.processors.JSONRenderer(),
     ],
-    wrapper_class=structlog.make_filtering_bound_logger(LOG_LEVEL),
+    wrapper_class=structlog.make_filtering_bound_logger(
+        logging.getLevelNamesMapping().get(settings.log_level.upper(), logging.INFO)
+    ),
     context_class=dict,
     logger_factory=structlog.PrintLoggerFactory(),
     cache_logger_on_first_use=True,
@@ -54,21 +51,47 @@ async def lifespan(app: FastAPI):
         environment=settings.app_env,
     )
 
-    # Initialize ClickHouse client
-    app.state.clickhouse_client = ClickHouseClient(
-        host=settings.clickhouse_host,
-        port=settings.clickhouse_port,
-        database=settings.clickhouse_database,
-        user=settings.clickhouse_user,
-        password=settings.clickhouse_password,
-    )
-    logger.info("clickhouse.connected")
+    # Initialize ClickHouse client. Detection endpoints use in-memory
+    # detectors, so an unavailable analytics store must not take the whole
+    # API down; training jobs fail loudly on their own connection instead.
+    app.state.clickhouse_client = None
+    try:
+        app.state.clickhouse_client = ClickHouseClient(
+            host=settings.clickhouse_host,
+            port=settings.clickhouse_port,
+            database=settings.clickhouse_database,
+            user=settings.clickhouse_user,
+            password=settings.clickhouse_password,
+        )
+        logger.info("clickhouse.connected")
+    except Exception as exc:
+        logger.error("clickhouse.unavailable", error=str(exc))
+
+    # Initialize fraud detector
+    app.state.fraud_detector = FraudDetector(model_path=settings.model_path)
+    logger.info("fraud_detector.initialized")
+
+    # Start Redpanda consumer. The API must stay usable for batch scoring
+    # and model management even when the streaming bus is unavailable.
+    app.state.consumer = None
+    try:
+        app.state.consumer = RedpandaConsumer(
+            brokers=settings.redpanda_broker_list,
+            fraud_detector=app.state.fraud_detector,
+        )
+        await app.state.consumer.start()
+        logger.info("redpanda_consumer.started")
+    except Exception as exc:
+        logger.warning("redpanda_consumer.unavailable", error=str(exc))
 
     yield
 
     # Shutdown
     logger.info("fraud_ml.shutdown")
-    app.state.clickhouse_client.close()
+    if app.state.consumer is not None:
+        await app.state.consumer.stop()
+    if app.state.clickhouse_client is not None:
+        app.state.clickhouse_client.close()
 
 
 # Create FastAPI application
@@ -78,6 +101,9 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+# Include API routes
+app.include_router(api_router, prefix="/api/v1")
 
 # Mount Prometheus metrics endpoint
 metrics_app = make_asgi_app()
@@ -92,7 +118,17 @@ async def health_check():
 
 @app.get("/ready")
 async def readiness_check():
-    """Readiness check endpoint."""
+    """
+    Readiness probe (HTTP 503 when not ready — k8s semantics).
+
+    Ready only when the fraud detector is initialized; otherwise serving
+    requests would return 503 anyway.
+    """
+    if getattr(app.state, "fraud_detector", None) is None:
+        return JSONResponse(
+            status_code=503,
+            content={"status": "not_ready", "reason": "fraud_detector_missing"},
+        )
     return {"status": "ready"}
 
 
@@ -100,8 +136,6 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(
-        # The ASGI app lives in this module (services/python/fraud-ml/main.py);
-        # there is no src/main.py.
         "main:app",
         host=settings.http_host,
         port=settings.http_port,

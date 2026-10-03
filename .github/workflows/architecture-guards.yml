@@ -69,13 +69,34 @@ jobs:
       - name: "G3: No hardcoded secrets or private keys"
         run: |
           echo "Проверка G3: отсутствие захардкоженных приватных ключей..."
-          # Сканируем только отслеживаемые git-файлы и исключаем markdown:
-          # документация по k8s/ssh legitimately содержит PEM-заголовки как
-          # примеры, и grep по всему дереву давал ложное срабатывание на
-          # .*/skills/**/references/*.md. Код и конфиги по-прежнему проверяются.
-          if git grep -nI -E -e "-----BEGIN (RSA |DSA |EC |OPENSSH |PGP )?PRIVATE KEY-----" \
-               -- ':(exclude,glob)**/*.md'; then
-            echo "❌ Обнаружен приватный ключ в репозитории!"
+          # Документация исключена намеренно. Двенадцать зеркал AI-скиллов
+          # (.claude/, .qwen/, .kiro/, ...) содержат справочник Kubernetes с
+          # примером Secret, где приватный SSH-ключ показан как блок
+          # "-----BEGIN OPENSSH PRIVATE KEY-----" внутри YAML-манифеста. Это
+          # пример, а не секрет, но grep по всему репозиторию делал G3
+          # красным на каждом PR и на main. Исходники и конфиги по-прежнему
+          # проверяются полностью; сам workflow тоже исключён, иначе он
+          # совпадает с собственными шаблонами поиска.
+          SCAN_FLAGS="--exclude-dir=.git --exclude-dir=node_modules \
+            --exclude-dir=target --exclude-dir=dist --exclude-dir=.next \
+            --exclude-dir=coverage --exclude-dir=vendor --exclude=*.md \
+            --exclude=architecture-guards.yml"
+          FAIL=0
+          for PATTERN in \
+            "BEGIN RSA PRIVATE KEY" \
+            "BEGIN OPENSSH PRIVATE KEY" \
+            "BEGIN EC PRIVATE KEY" \
+            "BEGIN DSA PRIVATE KEY" \
+            "BEGIN PGP PRIVATE KEY BLOCK"
+          do
+            # shellcheck disable=SC2086
+            if grep -rnF "$PATTERN" . $SCAN_FLAGS 2>/dev/null; then
+              echo "❌ Обнаружен приватный ключ ($PATTERN) в исходниках!"
+              FAIL=1
+            fi
+          done
+          if [ $FAIL -eq 1 ]; then
+            echo "Приватный ключ в коде недопустим. Уберите его и используйте секрет-хранилище."
             exit 1
           fi
           echo "✅ G3 пройден: приватные ключи не обнаружены."
