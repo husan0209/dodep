@@ -42,6 +42,8 @@ func (m *MockAuditLogRepository) ListByReference(ctx context.Context, refType, r
 }
 
 // Helper function to create a test webhook service
+//
+//nolint:unused // Placeholder: unused until the webhook tests are added.
 func newTestWebhookService(
 	paymentRepo repository.PaymentRepository,
 	withdrawalRepo repository.WithdrawalRepository,

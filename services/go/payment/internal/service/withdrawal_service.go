@@ -241,8 +241,9 @@ func (s *WithdrawalService) validateWithdrawalLimits(ctx context.Context, userID
 	}
 
 	// Check if exceeds limit
-	if used.Add(amount).GreaterThan(decimal.NewFromFloat(limit)) {
-		return domain.ErrorDailyLimitExceeded(limit, used.InexactFloat64(), amount.InexactFloat64())
+	limitDecimal := decimal.NewFromFloat(limit)
+	if used.Add(amount).GreaterThan(limitDecimal) {
+		return domain.ErrorDailyLimitExceeded(limitDecimal, used, amount)
 	}
 
 	return nil

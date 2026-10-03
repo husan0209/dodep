@@ -233,9 +233,9 @@ func (s *KYCLimitsService) ValidateDeposit(
 
 	if !result.Allowed {
 		return domain.ErrorDailyLimitExceeded(
-			result.Limit.InexactFloat64(),
-			result.Used.InexactFloat64(),
-			amount.InexactFloat64(),
+			result.Limit,
+			result.Used,
+			amount,
 		)
 	}
 
@@ -256,9 +256,9 @@ func (s *KYCLimitsService) ValidateWithdrawal(
 
 	if !result.Allowed {
 		return domain.ErrorDailyLimitExceeded(
-			result.Limit.InexactFloat64(),
-			result.Used.InexactFloat64(),
-			amount.InexactFloat64(),
+			result.Limit,
+			result.Used,
+			amount,
 		)
 	}
 

@@ -1,105 +1,120 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { useEffect } from 'react'
-import { SportsEvent } from '@components/sportsbook/sports-event'
-import { BetSlip } from '@components/sportsbook/bet-slip'
-import { useBetSlipStore } from '@stores/bet-slip-store'
-import { trackEvent } from '@lib/telemetry'
+import { useState } from "react";
+import { useEffect } from "react";
+import { SportsEvent } from "@components/sportsbook/sports-event";
+import { BetSlip } from "@components/sportsbook/bet-slip";
+import { useBetSlipStore } from "@stores/bet-slip-store";
+import { trackEvent } from "@lib/telemetry";
 
 const mockEvents = [
   {
-    id: '1',
-    sport: 'football',
-    league: 'Premier League',
-    homeTeam: 'Arsenal',
-    awayTeam: 'Liverpool',
-    startTime: '2024-03-24T15:00:00Z',
+    id: "1",
+    sport: "football",
+    league: "Premier League",
+    homeTeam: "Arsenal",
+    awayTeam: "Liverpool",
+    startTime: "2024-03-24T15:00:00Z",
     isLive: true,
     liveMinute: "62'",
     homeScore: 2,
     awayScore: 1,
-    odds: { home: 2.50, draw: 3.20, away: 2.80 },
+    odds: { home: 2.5, draw: 3.2, away: 2.8 },
   },
   {
-    id: '2',
-    sport: 'football',
-    league: 'La Liga',
-    homeTeam: 'Real Madrid',
-    awayTeam: 'Barcelona',
-    startTime: '2024-03-24T20:00:00Z',
+    id: "2",
+    sport: "football",
+    league: "La Liga",
+    homeTeam: "Real Madrid",
+    awayTeam: "Barcelona",
+    startTime: "2024-03-24T20:00:00Z",
     isLive: false,
-    odds: { home: 2.10, draw: 3.40, away: 3.20 },
+    odds: { home: 2.1, draw: 3.4, away: 3.2 },
   },
   {
-    id: '3',
-    sport: 'basketball',
-    league: 'NBA',
-    homeTeam: 'Lakers',
-    awayTeam: 'Celtics',
-    startTime: '2024-03-25T02:00:00Z',
+    id: "3",
+    sport: "basketball",
+    league: "NBA",
+    homeTeam: "Lakers",
+    awayTeam: "Celtics",
+    startTime: "2024-03-25T02:00:00Z",
     isLive: false,
     odds: { home: 1.85, away: 1.95 },
   },
   {
-    id: '4',
-    sport: 'tennis',
-    league: 'ATP Miami',
-    homeTeam: 'Djokovic N.',
-    awayTeam: 'Alcaraz C.',
-    startTime: '2024-03-24T18:00:00Z',
+    id: "4",
+    sport: "tennis",
+    league: "ATP Miami",
+    homeTeam: "Djokovic N.",
+    awayTeam: "Alcaraz C.",
+    startTime: "2024-03-24T18:00:00Z",
     isLive: true,
-    liveMinute: 'Set 2',
+    liveMinute: "Set 2",
     homeScore: 1,
     awayScore: 0,
-    odds: { home: 1.65, away: 2.20 },
+    odds: { home: 1.65, away: 2.2 },
   },
   {
-    id: '5',
-    sport: 'football',
-    league: 'Serie A',
-    homeTeam: 'Juventus',
-    awayTeam: 'AC Milan',
-    startTime: '2024-03-25T19:45:00Z',
+    id: "5",
+    sport: "football",
+    league: "Serie A",
+    homeTeam: "Juventus",
+    awayTeam: "AC Milan",
+    startTime: "2024-03-25T19:45:00Z",
     isLive: false,
-    odds: { home: 2.30, draw: 3.10, away: 3.00 },
+    odds: { home: 2.3, draw: 3.1, away: 3.0 },
   },
-]
+];
 
 const sports = [
-  { id: 'all', name: 'Все', icon: '🏆', count: mockEvents.length },
-  { id: 'football', name: 'Футбол', icon: '⚽', count: mockEvents.filter(e => e.sport === 'football').length },
-  { id: 'basketball', name: 'Баскетбол', icon: '🏀', count: mockEvents.filter(e => e.sport === 'basketball').length },
-  { id: 'tennis', name: 'Теннис', icon: '🎾', count: mockEvents.filter(e => e.sport === 'tennis').length },
-  { id: 'hockey', name: 'Хоккей', icon: '🏒', count: 0 },
-  { id: 'esports', name: 'Киберспорт', icon: '🎮', count: 0 },
-]
+  { id: "all", name: "Все", icon: "🏆", count: mockEvents.length },
+  {
+    id: "football",
+    name: "Футбол",
+    icon: "⚽",
+    count: mockEvents.filter((e) => e.sport === "football").length,
+  },
+  {
+    id: "basketball",
+    name: "Баскетбол",
+    icon: "🏀",
+    count: mockEvents.filter((e) => e.sport === "basketball").length,
+  },
+  {
+    id: "tennis",
+    name: "Теннис",
+    icon: "🎾",
+    count: mockEvents.filter((e) => e.sport === "tennis").length,
+  },
+  { id: "hockey", name: "Хоккей", icon: "🏒", count: 0 },
+  { id: "esports", name: "Киберспорт", icon: "🎮", count: 0 },
+];
 
 export function SportsbookPage() {
-  const [selectedSport, setSelectedSport] = useState('all')
-  const [showLiveOnly, setShowLiveOnly] = useState(false)
-  const { selections } = useBetSlipStore()
-  const [mobileBetSlipOpen, setMobileBetSlipOpen] = useState(false)
+  const [selectedSport, setSelectedSport] = useState("all");
+  const [showLiveOnly, setShowLiveOnly] = useState(false);
+  const { selections } = useBetSlipStore();
+  const [mobileBetSlipOpen, setMobileBetSlipOpen] = useState(false);
 
   const filteredEvents = mockEvents.filter((event) => {
-    if (showLiveOnly && !event.isLive) return false
-    if (selectedSport !== 'all' && event.sport !== selectedSport) return false
-    return true
-  })
+    if (showLiveOnly && !event.isLive) return false;
+    if (selectedSport !== "all" && event.sport !== selectedSport) return false;
+    return true;
+  });
 
-  const liveCount = mockEvents.filter(e => e.isLive).length
-
-  useEffect(() => {
-    trackEvent('page_view', { page: 'sportsbook' })
-  }, [])
+  const liveCount = mockEvents.filter((e) => e.isLive).length;
 
   useEffect(() => {
-    trackEvent('sportsbook_filter_changed', {
+    trackEvent("page_view", { page: "sportsbook" });
+  }, []);
+
+  useEffect(() => {
+    trackEvent("sportsbook_filter_changed", {
       selectedSport,
       showLiveOnly,
       eventsVisible: filteredEvents.length,
-    })
-  }, [selectedSport, showLiveOnly, filteredEvents.length])
+    });
+  }, [selectedSport, showLiveOnly, filteredEvents.length]);
 
   return (
     <div className="flex max-w-[1440px] mx-auto">
@@ -116,8 +131,8 @@ export function SportsbookPage() {
                 onClick={() => setSelectedSport(sport.id)}
                 className={`w-full flex items-center justify-between px-2 py-1.5 rounded text-xs transition-colors ${
                   selectedSport === sport.id
-                    ? 'bg-blue-600 text-white'
-                    : 'text-gray-400 hover:text-white hover:bg-white/5'
+                    ? "bg-blue-600 text-white"
+                    : "text-gray-400 hover:text-white hover:bg-white/5"
                 }`}
               >
                 <span className="flex items-center gap-1.5">
@@ -125,7 +140,9 @@ export function SportsbookPage() {
                   <span>{sport.name}</span>
                 </span>
                 {sport.count > 0 && (
-                  <span className={`text-[10px] ${selectedSport === sport.id ? 'text-blue-200' : 'text-gray-600'}`}>
+                  <span
+                    className={`text-[10px] ${selectedSport === sport.id ? "text-blue-200" : "text-gray-600"}`}
+                  >
                     {sport.count}
                   </span>
                 )}
@@ -146,8 +163,8 @@ export function SportsbookPage() {
                 onClick={() => setSelectedSport(sport.id)}
                 className={`flex items-center gap-1 px-2.5 py-1 rounded whitespace-nowrap text-xs transition-colors ${
                   selectedSport === sport.id
-                    ? 'bg-blue-600 text-white'
-                    : 'text-gray-400 hover:text-white hover:bg-white/5'
+                    ? "bg-blue-600 text-white"
+                    : "text-gray-400 hover:text-white hover:bg-white/5"
                 }`}
               >
                 <span>{sport.icon}</span>
@@ -170,14 +187,14 @@ export function SportsbookPage() {
                 </span>
               )}
             </div>
-            
+
             <label className="flex items-center gap-1.5 cursor-pointer">
               <div className="relative">
                 <input
                   type="checkbox"
                   checked={showLiveOnly}
                   onChange={(e) => {
-                    setShowLiveOnly(e.target.checked)
+                    setShowLiveOnly(e.target.checked);
                   }}
                   className="peer sr-only"
                 />
@@ -193,8 +210,12 @@ export function SportsbookPage() {
             {filteredEvents.length === 0 ? (
               <div className="card text-center py-10">
                 <p className="text-xl mb-2 opacity-20">⚽</p>
-                <h3 className="text-xs font-medium text-gray-400">Нет событий</h3>
-                <p className="text-[10px] text-gray-600 mt-1">Измените параметры фильтрации</p>
+                <h3 className="text-xs font-medium text-gray-400">
+                  Нет событий
+                </h3>
+                <p className="text-[10px] text-gray-600 mt-1">
+                  Измените параметры фильтрации
+                </p>
               </div>
             ) : (
               filteredEvents.map((event) => (
@@ -234,5 +255,5 @@ export function SportsbookPage() {
         </div>
       )}
     </div>
-  )
+  );
 }

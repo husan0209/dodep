@@ -67,7 +67,11 @@ func main() {
 		Password: cfg.RedisPassword,
 		DB:       cfg.RedisDB,
 	})
-	defer rdb.Close()
+	defer func() {
+		if err := rdb.Close(); err != nil {
+			log.Warn("Failed to close Redis connection", zap.Error(err))
+		}
+	}()
 
 	log.Info("Redis connected")
 

@@ -57,7 +57,11 @@ func TestMigrations_UpAndDown(t *testing.T) {
 
 	sqlDB, err := db.DB()
 	require.NoError(t, err, "Failed to get underlying sql.DB")
-	defer sqlDB.Close()
+	defer func() {
+		if cerr := sqlDB.Close(); cerr != nil {
+			t.Logf("close sqlDB: %v", cerr)
+		}
+	}()
 
 	t.Run("run all up migrations", func(t *testing.T) {
 		// Phase 0.9: centralized migrations in libs/migrations/postgresql
@@ -127,7 +131,11 @@ func TestMigrations_UpAndDown(t *testing.T) {
 			ORDER BY enumsortorder
 		`)
 		require.NoError(t, err)
-		defer rows.Close()
+	defer func() {
+		if cerr := rows.Close(); cerr != nil {
+			t.Logf("close rows: %v", cerr)
+		}
+	}()
 
 		var paymentStatusValues []string
 		for rows.Next() {
@@ -163,7 +171,11 @@ func TestMigrations_UpAndDown(t *testing.T) {
 			ORDER BY enumsortorder
 		`)
 		require.NoError(t, err)
-		defer rows.Close()
+	defer func() {
+		if cerr := rows.Close(); cerr != nil {
+			t.Logf("close rows: %v", cerr)
+		}
+	}()
 
 		var withdrawalStatusValues []string
 		for rows.Next() {
@@ -256,7 +268,11 @@ func TestMigrations_UpAndDown(t *testing.T) {
 			ORDER BY ordinal_position
 		`)
 		require.NoError(t, err)
-		defer rows.Close()
+	defer func() {
+		if cerr := rows.Close(); cerr != nil {
+			t.Logf("close rows: %v", cerr)
+		}
+	}()
 
 		columns := make(map[string]struct {
 			dataType    string
@@ -396,7 +412,11 @@ func TestMigrations_IdempotentDown(t *testing.T) {
 
 	sqlDB, err := db.DB()
 	require.NoError(t, err, "Failed to get underlying sql.DB")
-	defer sqlDB.Close()
+	defer func() {
+		if cerr := sqlDB.Close(); cerr != nil {
+			t.Logf("close sqlDB: %v", cerr)
+		}
+	}()
 
 	// Phase 0.9: centralized migration
 	migrationUp, err := os.ReadFile("../../../libs/migrations/postgresql/014_payments_core.sql")
@@ -449,7 +469,11 @@ func TestMigrations_CanReApply(t *testing.T) {
 
 	sqlDB, err := db.DB()
 	require.NoError(t, err, "Failed to get underlying sql.DB")
-	defer sqlDB.Close()
+	defer func() {
+		if cerr := sqlDB.Close(); cerr != nil {
+			t.Logf("close sqlDB: %v", cerr)
+		}
+	}()
 
 	// Phase 0.9: centralized single-file migration cycle
 	migrationUp, err := os.ReadFile("../../../libs/migrations/postgresql/014_payments_core.sql")

@@ -69,12 +69,20 @@ jobs:
       - name: "G3: No hardcoded secrets or private keys"
         run: |
           echo "Проверка G3: отсутствие захардкоженных приватных ключей..."
-          if grep -rn "BEGIN RSA PRIVATE KEY" . 2>/dev/null | grep -v ".git"; then
+          # Scan tracked files only (no node_modules / build output) and skip the
+          # vendored agent-skill documentation (".<tool>/skills/**"). Those files
+          # embed deliberately truncated EXAMPLE keys inside Kubernetes Secret
+          # snippets, which made this guard fail on every run without indicating
+          # a real leak. The glob keeps working as new agent tools are added.
+          EXCLUDES=(
+            ':(exclude)node_modules/**'
+            ':(exclude)**/node_modules/**'
+            ':(exclude).*/skills/**'
+          )
+          MATCHES=$(git grep -nE 'BEGIN (RSA |OPENSSH |EC |DSA )?PRIVATE KEY' -- "${EXCLUDES[@]}" || true)
+          if [ -n "$MATCHES" ]; then
             echo "❌ Обнаружен приватный ключ в репозитории!"
-            exit 1
-          fi
-          if grep -rn "BEGIN OPENSSH PRIVATE KEY" . 2>/dev/null | grep -v ".git"; then
-            echo "❌ Обнаружен SSH приватный ключ в репозитории!"
+            echo "$MATCHES"
             exit 1
           fi
           echo "✅ G3 пройден: приватные ключи не обнаружены."

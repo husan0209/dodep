@@ -55,7 +55,10 @@ export const useBetSlipStore = create<BetSlipState>((set, get) => ({
 
       // Remove other outcomes from same market in the same event.
       const filtered = state.selections.filter(
-        (s) => !(s.eventId === selection.eventId && s.marketId === selection.marketId)
+        (s) =>
+          !(
+            s.eventId === selection.eventId && s.marketId === selection.marketId
+          ),
       );
 
       return { selections: [...filtered, selection] };
@@ -70,7 +73,7 @@ export const useBetSlipStore = create<BetSlipState>((set, get) => ({
 
   toggleSelection: (selection) => {
     const exists = get().selections.find(
-      (s) => s.outcomeId === selection.outcomeId
+      (s) => s.outcomeId === selection.outcomeId,
     );
     if (exists) {
       get().removeSelection(selection.outcomeId);
@@ -82,7 +85,7 @@ export const useBetSlipStore = create<BetSlipState>((set, get) => ({
   updateOdds: (outcomeId, newOdds) => {
     set((state) => ({
       selections: state.selections.map((s) =>
-        s.outcomeId === outcomeId ? { ...s, odds: newOdds } : s
+        s.outcomeId === outcomeId ? { ...s, odds: newOdds } : s,
       ),
     }));
   },

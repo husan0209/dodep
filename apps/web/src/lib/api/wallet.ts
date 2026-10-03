@@ -13,7 +13,14 @@ export interface Transaction {
   id: number;
   user_id: number;
   wallet_id: number;
-  type: "deposit" | "withdrawal" | "bet_place" | "bet_win" | "bet_refund" | "bonus" | "adjustment";
+  type:
+    | "deposit"
+    | "withdrawal"
+    | "bet_place"
+    | "bet_win"
+    | "bet_refund"
+    | "bonus"
+    | "adjustment";
   amount: string;
   balance_before: string;
   balance_after: string;
@@ -50,14 +57,16 @@ export interface TransactionFilters {
 }
 
 export const walletApi = {
-  getBalances: () =>
-    api.get<WalletBalance[]>("/api/v1/wallet/balances"),
+  getBalances: () => api.get<WalletBalance[]>("/api/v1/wallet/balances"),
 
   getBalance: (currency: string) =>
     api.get<WalletBalance>(`/api/v1/wallet/balances/${currency}`),
 
   getTransactions: (filters?: TransactionFilters) =>
-    api.get<Transaction[]>("/api/v1/wallet/transactions", filters as Record<string, string>),
+    api.get<Transaction[]>(
+      "/api/v1/wallet/transactions",
+      filters as Record<string, string>,
+    ),
 
   // async so validation errors surface as rejections, not sync throws.
   deposit: async (data: DepositRequest) =>

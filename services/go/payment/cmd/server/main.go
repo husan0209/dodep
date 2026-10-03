@@ -78,7 +78,11 @@ func run() error {
 		if err != nil {
 			return fmt.Errorf("init tracing: %w", err)
 		}
-		defer shutdownTracing(context.Background())
+		defer func() {
+			if err := shutdownTracing(context.Background()); err != nil {
+				fmt.Fprintf(os.Stderr, "shutdown tracing: %v\n", err)
+			}
+		}()
 	}
 
 	// 4. Initialize database
@@ -89,7 +93,9 @@ func run() error {
 	defer func() {
 		sqlDB, _ := db.DB()
 		if sqlDB != nil {
-			sqlDB.Close()
+			if cerr := sqlDB.Close(); cerr != nil {
+				log.Warn().Err(cerr).Msg("close sql.DB")
+			}
 		}
 	}()
 
@@ -100,14 +106,21 @@ func run() error {
 		DB:       cfg.Redis.DB,
 		PoolSize: cfg.Redis.PoolSize,
 	})
-	defer rdb.Close()
+	defer func() {
+		if err := rdb.Close(); err != nil {
+			log.Warn().Err(err).Msg("close redis")
+		}
+	}()
 
 	// 5.5. Initialize Zap logger for dependencies
 	zapLogger, _ := zap.NewProduction()
 	if cfg.Environment == "development" {
 		zapLogger, _ = zap.NewDevelopment()
 	}
-	defer zapLogger.Sync()
+	defer func() {
+		// Sync flushes buffered entries; not actionable at shutdown.
+		_ = zapLogger.Sync()
+	}()
 
 	// 6. Initialize event producer
 	producer, err := event.NewProducer(event.ProducerConfig{
@@ -117,7 +130,12 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("create producer: %w", err)
 	}
-	defer producer.Close()
+	defer func() {
+		// Close flushes buffered events; a failure must not abort shutdown.
+		if err := producer.Close(); err != nil {
+			log.Warn().Err(err).Msg("close event producer")
+		}
+	}()
 
 	// 7. Build layers
 	repos := buildRepositories(db, rdb)

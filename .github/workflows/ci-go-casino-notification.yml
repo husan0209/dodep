@@ -15,7 +15,9 @@ on:
       - 'libs/proto/**'
 
 env:
-  GO_VERSION: '1.21'
+  # go.mod files require go >= 1.24 (CONVENTIONS NEVER-10: never below 1.22).
+  # Pinning 1.21 made the toolchain silently self-upgrade mid-build.
+  GO_VERSION: '1.24'
   REGISTRY: ghcr.io
   IMAGE_PREFIX: opus-casino
 
@@ -36,9 +38,11 @@ jobs:
             services/go/notification/go.mod
 
       - name: Install golangci-lint
-        uses: golangci/golangci-lint-action@v3
+        uses: golangci/golangci-lint-action@v6
         with:
-          version: latest
+          # Pin an explicit version: `version: latest` on the v3 action resolved
+          # to a golangci-lint major the action cannot install.
+          version: v1.64.8
           working-directory: services/go
 
       - name: Lint Casino Service

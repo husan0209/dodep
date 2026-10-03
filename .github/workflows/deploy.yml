@@ -13,7 +13,9 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUST_VERSION: '1.75'
-  GO_VERSION: '1.21'
+  # go.mod files require go >= 1.24 (CONVENTIONS NEVER-10: never below 1.22).
+  # Pinning 1.21 made the toolchain silently self-upgrade mid-build.
+  GO_VERSION: '1.24'
   PYTHON_VERSION: '3.11'
   NODE_VERSION: '20'
 
@@ -58,6 +60,12 @@ jobs:
           cd services/rust && cargo fetch
           cd ../go/auth && go mod download
           cd ../../python/fraud-ml && pip install -r requirements.txt
+
+      - name: Install golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.64.8
+          working-directory: services/go/auth
 
       - name: Run linters
         run: |
@@ -180,11 +188,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     needs: [deploy-web, deploy-backend, deploy-admin]
-    if: always()
+    # Only notify for real deployments. On pull_request the deploy-* jobs are
+    # skipped, so this job had nothing to report, no SLACK_WEBHOOK secret, and
+    # its "Notify Failure" step ended in `exit 1` - which turned every PR red.
+    if: always() && github.ref == 'refs/heads/main'
     
     steps:
       - name: Notify Slack
-        if: always()
+        if: always() && env.SLACK_WEBHOOK_URL != ''
         uses: 8398a7/action-slack@v3
         with:
           status: ${{ job.status }}

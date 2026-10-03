@@ -125,7 +125,11 @@ func (a *Adapter) BuildLaunchURL(ctx context.Context, req provider.LaunchRequest
 	if err != nil {
 		return "", fmt.Errorf("amusnet: launch http: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			a.log.Warn("Amusnet: failed to close response body", zap.Error(err))
+		}
+	}()
 
 	body, _ := io.ReadAll(resp.Body)
 
@@ -156,7 +160,11 @@ func (a *Adapter) GetGames(ctx context.Context) ([]provider.ProviderGame, error)
 	if err != nil {
 		return nil, fmt.Errorf("amusnet: games http: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			a.log.Warn("Amusnet: failed to close response body", zap.Error(err))
+		}
+	}()
 
 	body, _ := io.ReadAll(resp.Body)
 

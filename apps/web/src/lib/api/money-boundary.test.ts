@@ -60,7 +60,11 @@ describe("wallet API money contract", () => {
   it("sends a decimal string amount for a deposit", async () => {
     const { calls } = mockFetchOk();
 
-    await walletApi.deposit({ amount: "1500.75", method: "card", currency: "USD" });
+    await walletApi.deposit({
+      amount: "1500.75",
+      method: "card",
+      currency: "USD",
+    });
 
     const body = sentBody(calls);
     expect(typeof body.amount).toBe("string");
@@ -148,7 +152,9 @@ describe("betting API money contract", () => {
     await expect(
       betsApi.placeBet({
         ...baseBet,
-        selections: [{ ...baseBet.selections[0], odds: 1.85 as unknown as string }],
+        selections: [
+          { ...baseBet.selections[0], odds: 1.85 as unknown as string },
+        ],
       }),
     ).rejects.toThrow(/bet\.selections\[0\]\.odds/);
   });

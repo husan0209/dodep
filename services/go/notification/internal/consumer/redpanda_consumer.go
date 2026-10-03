@@ -67,7 +67,13 @@ func (c *RedpandaConsumer) consumeTopic(ctx context.Context, topic string) {
 		MinBytes: 10e3, // 10KB
 		MaxBytes: 10e6, // 10MB
 	})
-	defer reader.Close()
+	defer func() {
+		// Close also commits the consumer group offset; a failure here is worth
+		// surfacing but must not crash the process on shutdown.
+		if err := reader.Close(); err != nil {
+			c.log.Error("Failed to close Kafka reader", zap.Error(err))
+		}
+	}()
 
 	c.log.Info("Starting consumer for topic", zap.String("topic", topic))
 

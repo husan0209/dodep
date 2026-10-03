@@ -129,8 +129,7 @@ export function normalizeLink(raw: unknown): AffiliateLink {
   const code = pick<string>(obj, "referral_code", "code") ?? "";
   // Backend AffiliateLink has ReferralURL; older payloads used referral_url.
   const url =
-    pick<string>(obj, "referral_url", "url") ??
-    (code ? `/r/${code}` : "");
+    pick<string>(obj, "referral_url", "url") ?? (code ? `/r/${code}` : "");
   return { ...(obj as AffiliateLink), referral_code: code, referral_url: url };
 }
 
@@ -189,7 +188,10 @@ export const affiliateApi = {
     utm_campaign?: string;
   }) => api.post<unknown>("/api/v1/affiliate/links", input),
 
-  listEarnings: async (params?: { status?: string; limit?: number }): Promise<AffiliateEarning[]> => {
+  listEarnings: async (params?: {
+    status?: string;
+    limit?: number;
+  }): Promise<AffiliateEarning[]> => {
     const raw = await api.get<unknown>("/api/v1/affiliate/earnings", {
       ...(params?.status ? { status: params.status } : {}),
       ...(params?.limit ? { limit: String(params.limit) } : {}),
@@ -207,7 +209,11 @@ export const affiliateApi = {
     return asArray<unknown>(raw, "methods").map(normalizePayoutMethod);
   },
 
-  requestPayout: (input: { method_id: string; amount: string; idempotency_key?: string }) =>
+  requestPayout: (input: {
+    method_id: string;
+    amount: string;
+    idempotency_key?: string;
+  }) =>
     api.post<unknown>("/api/v1/affiliate/payouts/request", {
       ...input,
       idempotency_key: input.idempotency_key ?? crypto.randomUUID(),

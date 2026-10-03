@@ -1,16 +1,21 @@
 """
 ClickHouse data access with Polars integration.
 """
-import structlog
-import polars as pl
+
+# The ClickHouse queries below are built as multi-line template strings; some
+# legitimately exceed the 100-character limit ruff enforces for Python source.
+# ruff: noqa: E501
+
 import clickhouse_connect
+import polars as pl
+import structlog
 
 logger = structlog.get_logger()
 
 
 class ClickHouseClient:
     """ClickHouse client with Polars DataFrame support."""
-    
+
     def __init__(
         self,
         host: str,
@@ -36,7 +41,7 @@ class ClickHouseClient:
             port=port,
             database=database,
         )
-    
+
     def query_to_polars(self, query: str, params: dict | None = None) -> pl.DataFrame:
         """Execute query and return Polars DataFrame."""
         try:
@@ -51,7 +56,7 @@ class ClickHouseClient:
         except Exception as e:
             logger.error("clickhouse.query_failed", error=str(e), query=query)
             raise
-    
+
     def get_daily_betting_stats(self, date: str) -> pl.DataFrame:
         """Get daily betting statistics."""
         return self.query_to_polars("""
@@ -69,7 +74,7 @@ class ClickHouseClient:
             GROUP BY date, sport, country
             ORDER BY total_stake DESC
         """, {"date": date})
-    
+
     def get_user_cohort_retention(self, cohort_month: str, months_forward: int = 6) -> pl.DataFrame:
         """Calculate retention for a registration cohort."""
         return self.query_to_polars("""
@@ -88,7 +93,7 @@ class ClickHouseClient:
             GROUP BY cohort_month, months_since
             ORDER BY months_since
         """, {"cohort": cohort_month, "months": months_forward})
-    
+
     def close(self):
         """Close ClickHouse connection."""
         self.client.close()

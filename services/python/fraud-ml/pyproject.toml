@@ -10,14 +10,20 @@ dependencies = [
     "pyarrow>=15.0.0",
     
     # ML
-    "xgboost>=2.0.3",
-    "scikit-learn>=1.4.0",
+    # Upper bound on xgboost: skl2onnx has no shape calculator for
+    # xgboost >= 3.0, so ONNX export raises MissingShapeCalculator with the
+    # 3.x sklearn wrapper (tests/test_export.py).
+    "xgboost>=2.0.3,<3.0.0",
+    "scikit-learn>=1.4.0,<1.8",
     "imbalanced-learn>=0.12.0",
     
     # Model Export
     "onnx>=1.15.0",
     "onnxruntime>=1.17.0",
     "skl2onnx>=1.17.0",
+    # onnxmltools carries the XGBoost converter; skl2onnx dropped
+    # skl2onnx.xgboost, so ONNX export needs this explicitly.
+    "onnxmltools>=1.12.0",
     
     # Database
     "clickhouse-connect>=0.7.1",
@@ -61,6 +67,13 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B"]
+ignore = [
+    # scikit-learn / numpy convention: `X` / `y` for feature matrices and
+    # targets. N803/N806 flag these as non-lowercase, but renaming them would
+    # break the correspondence with the model APIs and the surrounding docs.
+    "N803",
+    "N806",
+]
 
 [tool.black]
 line-length = 100

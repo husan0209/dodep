@@ -117,8 +117,12 @@ func (s *WebhookService) ProcessDepositWebhook(ctx context.Context, req ProcessW
 		}
 	}
 
-	// Mark as processed
-	s.idempotencyRepo.Set(ctx, idempotencyKey, []byte("processed"), 86400)
+	// Mark as processed. Logged rather than returned: the webhook has already
+	// been applied, and failing here would make the provider retry a mutation
+	// that succeeded.
+	if err := s.idempotencyRepo.Set(ctx, idempotencyKey, []byte("processed"), 86400); err != nil {
+		log.Error().Err(err).Msg("Failed to store deposit idempotency key")
+	}
 
 	// Log audit
 	var outcomeAmount *decimal.Decimal
@@ -183,8 +187,12 @@ func (s *WebhookService) ProcessWithdrawalWebhook(ctx context.Context, req Proce
 		}
 	}
 
-	// Mark as processed
-	s.idempotencyRepo.Set(ctx, idempotencyKey, []byte("processed"), 86400)
+	// Mark as processed. Logged rather than returned: the webhook has already
+	// been applied, and failing here would make the provider retry a mutation
+	// that succeeded.
+	if err := s.idempotencyRepo.Set(ctx, idempotencyKey, []byte("processed"), 86400); err != nil {
+		log.Error().Err(err).Msg("Failed to store withdrawal idempotency key")
+	}
 
 	// Log audit
 	s.logAudit(ctx, withdrawal.UserID, "withdrawal", withdrawal.ID, withdrawal.WithdrawalID, string(withdrawal.Status), string(newStatus), nil)
@@ -221,7 +229,11 @@ func (s *WebhookService) handleDepositFinished(ctx context.Context, payment *dom
 
 	// Update actual amount if different
 	if !payload.OutcomeAmount.IsZero() && !payload.OutcomeAmount.Equal(payment.RequestedAmount) {
-		s.paymentRepo.UpdateActualAmount(ctx, payment.ID, payload.OutcomeAmount)
+		// Reconciliation data only; the status transition above is already
+		// committed, so a failure here is logged rather than returned.
+		if err := s.paymentRepo.UpdateActualAmount(ctx, payment.ID, payload.OutcomeAmount); err != nil {
+			log.Error().Err(err).Msg("Failed to update actual payment amount")
+		}
 	}
 
 	log.Info().

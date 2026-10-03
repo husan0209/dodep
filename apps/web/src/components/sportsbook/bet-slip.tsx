@@ -1,32 +1,33 @@
-'use client'
+"use client";
 
-import { useEffect } from 'react'
-import { useBetSlipStore } from '@stores/bet-slip-store'
-import { XMarkIcon, TrashIcon } from '@heroicons/react/24/outline'
-import { trackEvent } from '@lib/telemetry'
+import { useEffect } from "react";
+import { useBetSlipStore } from "@stores/bet-slip-store";
+import { XMarkIcon, TrashIcon } from "@heroicons/react/24/outline";
+import { trackEvent } from "@lib/telemetry";
 
 export function BetSlip() {
-  const { selections, combinedOdds, stake, removeSelection, clear, setStake } = useBetSlipStore()
+  const { selections, combinedOdds, stake, removeSelection, clear, setStake } =
+    useBetSlipStore();
 
-  const totalOdds = combinedOdds()
-  const potentialWin = stake * totalOdds
+  const totalOdds = combinedOdds();
+  const potentialWin = stake * totalOdds;
 
   useEffect(() => {
     if (selections.length > 0) {
-      trackEvent('betslip_opened', { selections: selections.length })
+      trackEvent("betslip_opened", { selections: selections.length });
     }
-  }, [selections.length])
+  }, [selections.length]);
 
   const handlePlaceBet = () => {
-    if (stake <= 0 || selections.length === 0) return
+    if (stake <= 0 || selections.length === 0) return;
 
-    trackEvent('bet_placed', {
+    trackEvent("bet_placed", {
       selections: selections.length,
       stake,
       totalOdds: Number(totalOdds.toFixed(2)),
       potentialWin: Number(potentialWin.toFixed(2)),
-    })
-  }
+    });
+  };
 
   return (
     <div className="bg-[rgb(var(--bg-secondary))] border border-[rgb(var(--border))]">
@@ -62,11 +63,17 @@ export function BetSlip() {
             >
               <div className="flex items-start justify-between gap-1">
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium text-white truncate">{sel.outcomeName}</p>
-                  <p className="text-[10px] text-gray-500 truncate">{sel.eventName}</p>
+                  <p className="text-xs font-medium text-white truncate">
+                    {sel.outcomeName}
+                  </p>
+                  <p className="text-[10px] text-gray-500 truncate">
+                    {sel.eventName}
+                  </p>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
-                  <span className="text-xs font-bold text-blue-400">{sel.odds.toFixed(2)}</span>
+                  <span className="text-xs font-bold text-blue-400">
+                    {sel.odds.toFixed(2)}
+                  </span>
                   <button
                     onClick={() => removeSelection(sel.outcomeId)}
                     className="p-0.5 rounded hover:bg-white/5 text-gray-600 hover:text-red-400"
@@ -81,14 +88,16 @@ export function BetSlip() {
           {/* Total */}
           <div className="flex items-center justify-between px-1 py-1">
             <span className="text-[10px] text-gray-500">Коэффициент</span>
-            <span className="text-xs font-bold text-blue-400">{totalOdds.toFixed(2)}</span>
+            <span className="text-xs font-bold text-blue-400">
+              {totalOdds.toFixed(2)}
+            </span>
           </div>
 
           {/* Stake */}
           <div className="flex items-center gap-1">
             <input
               type="number"
-              value={stake || ''}
+              value={stake || ""}
               onChange={(e) => setStake(Number(e.target.value))}
               className="input-field flex-1"
               placeholder="Сумма"
@@ -100,7 +109,9 @@ export function BetSlip() {
           {/* Win */}
           <div className="flex items-center justify-between px-1">
             <span className="text-[10px] text-gray-500">Выигрыш</span>
-            <span className="text-xs font-bold text-green-400">{potentialWin.toFixed(2)} ₽</span>
+            <span className="text-xs font-bold text-green-400">
+              {potentialWin.toFixed(2)} ₽
+            </span>
           </div>
 
           {/* Submit */}
@@ -114,5 +125,5 @@ export function BetSlip() {
         </div>
       )}
     </div>
-  )
+  );
 }

@@ -1,10 +1,12 @@
-# Generated code - DO NOT COMMIT
-# Run `buf generate` to regenerate
-
-/gen/
-/gen/go/
+# Generated Go code IS committed on purpose.
+#
+# Every Go service consumes it through the `github.com/opus-casino/proto`
+# module (see the `replace` directive in each services/go/<name>/go.mod), so the
+# generated packages must be part of the module and versioned with the .proto
+# files they come from. Run `buf generate` from this directory to regenerate.
+#
+# Local-only scratch output stays ignored:
 /gen/rust/
-/gen/typescript/
 
 # Build artifacts
 build/

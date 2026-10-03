@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"fmt"
+	
 	"net"
 	"os"
 	"os/signal"
@@ -34,7 +34,11 @@ func main() {
 	} else {
 		log, _ = zap.NewProduction()
 	}
-	defer log.Sync()
+	defer func() {
+		// Sync flushes buffered log entries. On some platforms it returns an
+		// error for stdout/stderr sync that is not actionable at shutdown.
+		_ = log.Sync()
+	}()
 
 	// ── Database ──────────────────────────────────────────────────────────
 	db, err := gorm.Open(postgres.Open(getEnv("DATABASE_URL",
@@ -119,8 +123,10 @@ func main() {
 		if !ok {
 			return c.Status(401).JSON(fiber.Map{"error": "unauthorized"})
 		}
-		var userID int64
-		fmt.Sscanf(userIDStr, "%d", &userID)
+		userID, err := strconv.ParseInt(userIDStr, 10, 64)
+		if err != nil {
+			return c.Status(401).JSON(fiber.Map{"error": "unauthorized"})
+		}
 
 		limit, _ := strconv.Atoi(c.Query("limit", "20"))
 		offset, _ := strconv.Atoi(c.Query("offset", "0"))
@@ -136,8 +142,10 @@ func main() {
 		if !ok {
 			return c.Status(401).JSON(fiber.Map{"error": "unauthorized"})
 		}
-		var userID int64
-		fmt.Sscanf(userIDStr, "%d", &userID)
+		userID, err := strconv.ParseInt(userIDStr, 10, 64)
+		if err != nil {
+			return c.Status(401).JSON(fiber.Map{"error": "unauthorized"})
+		}
 
 		bonus, err := bonusSvc.GetActiveBonus(c.Context(), userID)
 		if err != nil {

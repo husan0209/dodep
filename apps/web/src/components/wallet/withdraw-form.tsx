@@ -1,28 +1,51 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { trackEvent } from '@lib/telemetry'
+import { useState } from "react";
+import { trackEvent } from "@lib/telemetry";
 
 const withdrawMethods = [
-  { id: 'card', name: 'Банковская карта', icon: '💳', min: 500, max: 50000, time: '1-3 дня' },
-  { id: 'sbp', name: 'СБП', icon: '📱', min: 1000, max: 100000, time: 'До 24 часов' },
-  { id: 'crypto', name: 'Cryptocurrency', icon: '₿', min: 1000, max: 500000, time: 'До 1 часа' },
-]
+  {
+    id: "card",
+    name: "Банковская карта",
+    icon: "💳",
+    min: 500,
+    max: 50000,
+    time: "1-3 дня",
+  },
+  {
+    id: "sbp",
+    name: "СБП",
+    icon: "📱",
+    min: 1000,
+    max: 100000,
+    time: "До 24 часов",
+  },
+  {
+    id: "crypto",
+    name: "Cryptocurrency",
+    icon: "₿",
+    min: 1000,
+    max: 500000,
+    time: "До 1 часа",
+  },
+];
 
 export function WithdrawForm() {
-  const [selectedMethod, setSelectedMethod] = useState('card')
-  const [amount, setAmount] = useState<number | null>(null)
+  const [selectedMethod, setSelectedMethod] = useState("card");
+  const [amount, setAmount] = useState<number | null>(null);
 
-  const selectedMethodData = withdrawMethods.find((m) => m.id === selectedMethod)
+  const selectedMethodData = withdrawMethods.find(
+    (m) => m.id === selectedMethod,
+  );
 
   const handleSubmit = () => {
-    if (!amount || amount <= 0 || !selectedMethodData) return
-    trackEvent('withdraw_submitted', {
+    if (!amount || amount <= 0 || !selectedMethodData) return;
+    trackEvent("withdraw_submitted", {
       method: selectedMethodData.id,
       amount,
       eta: selectedMethodData.time,
-    })
-  }
+    });
+  };
 
   return (
     <div className="space-y-4">
@@ -43,8 +66,8 @@ export function WithdrawForm() {
               onClick={() => setSelectedMethod(method.id)}
               className={`p-3 rounded border transition-colors ${
                 selectedMethod === method.id
-                  ? 'border-blue-500 bg-blue-500/10'
-                  : 'border-[rgb(var(--border))] hover:border-[rgb(var(--border-light))]'
+                  ? "border-blue-500 bg-blue-500/10"
+                  : "border-[rgb(var(--border))] hover:border-[rgb(var(--border-light))]"
               }`}
             >
               <span className="text-xl mb-2 block">{method.icon}</span>
@@ -57,13 +80,11 @@ export function WithdrawForm() {
       </div>
 
       <div>
-        <label className="block text-xs text-gray-400 mb-2">
-          Сумма вывода
-        </label>
+        <label className="block text-xs text-gray-400 mb-2">Сумма вывода</label>
         <div className="relative">
           <input
             type="number"
-            value={amount || ''}
+            value={amount || ""}
             onChange={(e) => setAmount(Number(e.target.value))}
             className="input-field pr-12"
             placeholder="0"
@@ -76,12 +97,13 @@ export function WithdrawForm() {
         </div>
         {selectedMethodData && (
           <p className="text-[10px] text-gray-500 mt-1">
-            Мин: {selectedMethodData.min}₽ | Макс: {selectedMethodData.max}₽ | Время: {selectedMethodData.time}
+            Мин: {selectedMethodData.min}₽ | Макс: {selectedMethodData.max}₽ |
+            Время: {selectedMethodData.time}
           </p>
         )}
       </div>
 
-      <button 
+      <button
         onClick={handleSubmit}
         disabled={!amount || amount <= 0}
         className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"
@@ -89,5 +111,5 @@ export function WithdrawForm() {
         Вывести {amount || 0}₽
       </button>
     </div>
-  )
+  );
 }

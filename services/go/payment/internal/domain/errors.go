@@ -3,6 +3,8 @@ package domain
 import (
 	"errors"
 	"fmt"
+
+	"github.com/shopspring/decimal"
 )
 
 // Payment error codes (5000-5999 range)
@@ -131,19 +133,26 @@ func ErrorKYCRequiredLevel(level int) error {
 	})
 }
 
-func ErrorDailyLimitExceeded(limit, used, requested float64) error {
+// ErrorDailyLimitExceeded reports a KYC daily limit breach.
+//
+// Money arguments are decimal.Decimal, never float: CONVENTIONS NEVER-6 forbids
+// float/double for money, and the values below end up in audit logs and API
+// responses where a float would already have lost precision.
+func ErrorDailyLimitExceeded(limit, used, requested decimal.Decimal) error {
 	return WithDetails(ErrDailyLimitExceeded, ErrCodeDailyLimitExceeded, map[string]interface{}{
-		"limit":      limit,
-		"used":       used,
-		"requested":  requested,
-		"available":  limit - used,
+		"limit":      limit.String(),
+		"used":       used.String(),
+		"requested":  requested.String(),
+		"available":  limit.Sub(used).String(),
 	})
 }
 
-func ErrorInsufficientBalance(available, requested float64) error {
+// ErrorInsufficientBalance reports a payout/withdrawal that exceeds the
+// available balance. Amounts stay decimal for the same reason as above.
+func ErrorInsufficientBalance(available, requested decimal.Decimal) error {
 	return WithDetails(ErrInsufficientBalance, ErrCodeInsufficientBalance, map[string]interface{}{
-		"available":  available,
-		"requested":  requested,
+		"available":  available.String(),
+		"requested":  requested.String(),
 	})
 }
 
@@ -169,19 +178,18 @@ func ErrorProviderUnavailable(provider string, reason error) error {
 
 // HTTPStatus returns the appropriate HTTP status code for an error
 func HTTPStatus(err error) int {
-	code := GetErrorCode(err)
-	switch {
-	case code == ErrCodePaymentNotFound || code == ErrCodeWithdrawalNotFound:
+	switch GetErrorCode(err) {
+	case ErrCodePaymentNotFound, ErrCodeWithdrawalNotFound:
 		return 404
-	case code == ErrCodeKYCRequired:
+	case ErrCodeKYCRequired:
 		return 403
-	case code == ErrCodeInsufficientBalance || code == ErrCodeDailyLimitExceeded:
+	case ErrCodeInsufficientBalance, ErrCodeDailyLimitExceeded:
 		return 422
-	case code == ErrCodeWebhookSignatureInvalid:
+	case ErrCodeWebhookSignatureInvalid:
 		return 401
-	case code == ErrCodeProviderUnavailable:
+	case ErrCodeProviderUnavailable:
 		return 502
-	case code == ErrCodeInvalidCryptoAddress || code == ErrCodeInvalidAmount:
+	case ErrCodeInvalidCryptoAddress, ErrCodeInvalidAmount:
 		return 400
 	default:
 		return 500

@@ -6,7 +6,10 @@ description = "Real-time WebSocket gateway for Opus Casino platform"
 
 [dependencies]
 # Async runtime
-tokio = { version = "1.35", features = ["full", "rt-multi-thread", "io-uring"] }
+# NOTE: do not add tokio's "io-uring" feature here. It is gated behind
+# --cfg tokio_unstable and only builds on Linux, so enabling it made
+# `cargo build` fail for the whole workspace.
+tokio = { version = "1.35", features = ["full", "rt-multi-thread"] }
 
 # Web framework
 axum = { version = "0.7", features = ["macros", "ws"] }

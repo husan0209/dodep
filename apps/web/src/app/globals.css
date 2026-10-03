@@ -150,7 +150,11 @@
   }
 
   .bg-gradient-radial {
-    background: radial-gradient(ellipse at top, rgb(var(--bg-tertiary)) 0%, rgb(var(--bg-primary)) 60%);
+    background: radial-gradient(
+      ellipse at top,
+      rgb(var(--bg-tertiary)) 0%,
+      rgb(var(--bg-primary)) 60%
+    );
   }
 
   /* Glassmorphism */
@@ -166,7 +170,9 @@
 
   /* Glow effects */
   .glow-gold {
-    box-shadow: 0 0 20px -5px rgb(var(--shadow-frost) / 0.2), 0 0 40px -10px rgb(var(--shadow-cyan) / 0.12);
+    box-shadow:
+      0 0 20px -5px rgb(var(--shadow-frost) / 0.2),
+      0 0 40px -10px rgb(var(--shadow-cyan) / 0.12);
   }
 
   .glow-gold-sm {
@@ -174,7 +180,9 @@
   }
 
   .glow-frost {
-    box-shadow: 0 0 20px -5px rgb(var(--shadow-frost) / 0.2), 0 0 40px -10px rgb(var(--shadow-cyan) / 0.12);
+    box-shadow:
+      0 0 20px -5px rgb(var(--shadow-frost) / 0.2),
+      0 0 40px -10px rgb(var(--shadow-cyan) / 0.12);
   }
 
   .glow-frost-sm {
@@ -191,8 +199,15 @@
   }
 
   @keyframes livePulse {
-    0%, 100% { opacity: 1; transform: scale(1); }
-    50% { opacity: 0.5; transform: scale(0.92); }
+    0%,
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.5;
+      transform: scale(0.92);
+    }
   }
 
   /* Animations */
@@ -201,8 +216,12 @@
   }
 
   @keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
   }
 
   .slide-up {
@@ -210,8 +229,14 @@
   }
 
   @keyframes slideUp {
-    from { opacity: 0; transform: translateY(12px); }
-    to { opacity: 1; transform: translateY(0); }
+    from {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
 
   .scale-in {
@@ -219,19 +244,34 @@
   }
 
   @keyframes scaleIn {
-    from { opacity: 0; transform: scale(0.95); }
-    to { opacity: 1; transform: scale(1); }
+    from {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
   }
 
   .shimmer {
     animation: shimmer 2s infinite linear;
-    background: linear-gradient(90deg, transparent 0%, rgb(var(--bg-elevated) / 0.5) 50%, transparent 100%);
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgb(var(--bg-elevated) / 0.5) 50%,
+      transparent 100%
+    );
     background-size: 200% 100%;
   }
 
   @keyframes shimmer {
-    0% { background-position: 200% 0; }
-    100% { background-position: -200% 0; }
+    0% {
+      background-position: 200% 0;
+    }
+    100% {
+      background-position: -200% 0;
+    }
   }
 
   /* Hover lift effect */
@@ -269,7 +309,9 @@
   /* Cards - Premium */
   .card {
     @apply bg-[rgb(var(--bg-secondary))] border border-[rgb(var(--border))] rounded-2xl overflow-hidden;
-    box-shadow: 0 4px 24px -6px rgb(0 0 0 / 0.4), inset 0 1px 0 0 rgb(255 255 255 / 0.03);
+    box-shadow:
+      0 4px 24px -6px rgb(0 0 0 / 0.4),
+      inset 0 1px 0 0 rgb(255 255 255 / 0.03);
   }
 
   .card-hover {
@@ -277,7 +319,9 @@
   }
   .card-hover:hover {
     @apply border-[rgb(var(--border-light))];
-    box-shadow: 0 8px 40px -8px rgb(0 0 0 / 0.5), inset 0 1px 0 0 rgb(255 255 255 / 0.05);
+    box-shadow:
+      0 8px 40px -8px rgb(0 0 0 / 0.5),
+      inset 0 1px 0 0 rgb(255 255 255 / 0.05);
     transform: translateY(-2px);
   }
 

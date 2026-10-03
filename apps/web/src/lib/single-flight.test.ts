@@ -4,7 +4,8 @@ describe("createSingleFlight", () => {
   test("deduplicates concurrent register attempts", async () => {
     const gate = createSingleFlight<string>();
     const task = jest.fn(
-      async () => new Promise<string>((resolve) => setTimeout(() => resolve("ok"), 10))
+      async () =>
+        new Promise<string>((resolve) => setTimeout(() => resolve("ok"), 10)),
     );
 
     const [first, second] = await Promise.all([gate.run(task), gate.run(task)]);

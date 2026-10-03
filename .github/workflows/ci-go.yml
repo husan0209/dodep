@@ -20,7 +20,9 @@ on:
       - '.github/workflows/ci-go.yml'
 
 env:
-  GO_VERSION: '1.21'
+  # go.mod files require go >= 1.24 (CONVENTIONS NEVER-10: never below 1.22).
+  # Pinning 1.21 made the toolchain silently self-upgrade mid-build.
+  GO_VERSION: '1.24'
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
@@ -51,9 +53,12 @@ jobs:
           cache-dependency-path: services/go/${{ matrix.service }}/go.sum
 
       - name: Install golangci-lint
-        uses: golangci/golangci-lint-action@v4
+        uses: golangci/golangci-lint-action@v6
         with:
-          version: latest
+          # Pin an explicit version. `version: latest` combined with the v4 action
+          # resolved to a golangci-lint major that the v4 action cannot install,
+          # so every Lint job failed before running a single linter.
+          version: v1.64.8
           working-directory: services/go/${{ matrix.service }}
 
       - name: Run golangci-lint

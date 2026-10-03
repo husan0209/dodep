@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
@@ -34,8 +35,15 @@ func (h *NotificationGRPCHandler) SendNotification(ctx context.Context, req *pb.
 		return nil, status.Error(codes.InvalidArgument, "user_id is required")
 	}
 
+	// user_id travels as a string in the proto; reject a malformed value instead
+	// of silently treating it as user 0.
+	userID, err := strconv.ParseUint(req.UserId.Value, 10, 64)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid user_id: %q", req.UserId.Value)
+	}
+
 	serviceReq := &service.SendNotificationRequest{
-		UserID:      func() uint64 { var v uint64; fmt.Sscanf(req.UserId.Value, "%d", &v); return v }(),
+		UserID:      userID,
 		Channel:     req.Channel.String(),
 		Type:        req.Type.String(),
 		Subject:     req.Subject,
@@ -78,7 +86,11 @@ func (h *NotificationGRPCHandler) SendNotification(ctx context.Context, req *pb.
 func (h *NotificationGRPCHandler) SendBulkNotification(ctx context.Context, req *pb.SendBulkNotificationRequest) (*pb.SendBulkNotificationResponse, error) {
 	userIDs := make([]uint64, len(req.UserIds))
 	for i, id := range req.UserIds {
-		userIDs[i] = func() uint64 { var v uint64; fmt.Sscanf(id.Value, "%d", &v); return v }()
+		parsed, err := strconv.ParseUint(id.Value, 10, 64)
+		if err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "invalid user_id at index %d: %q", i, id.Value)
+		}
+		userIDs[i] = parsed
 	}
 
 	var userSegment *string
@@ -134,8 +146,13 @@ func (h *NotificationGRPCHandler) GetUserNotifications(ctx context.Context, req 
 	if req.Pagination != nil && req.Pagination.PageSize > 0 {
 		pageSize = req.Pagination.PageSize
 	}
+	userID, err := strconv.ParseUint(req.UserId.Value, 10, 64)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid user_id: %q", req.UserId.Value)
+	}
+
 	serviceReq := &service.GetUserNotificationsRequest{
-		UserID: func() uint64 { var v uint64; fmt.Sscanf(req.UserId.Value, "%d", &v); return v }(),
+		UserID: userID,
 		Limit:  pageSize,
 		Offset: 0,
 	}
@@ -183,7 +200,12 @@ func (h *NotificationGRPCHandler) MarkAsRead(ctx context.Context, req *pb.MarkAs
 		}, nil
 	}
 
-	err := h.service.MarkAsRead(ctx, req.NotificationId, func() uint64 { var v uint64; fmt.Sscanf(req.UserId.Value, "%d", &v); return v }())
+	userID, err := strconv.ParseUint(req.UserId.Value, 10, 64)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid user_id: %q", req.UserId.Value)
+	}
+
+	err = h.service.MarkAsRead(ctx, req.NotificationId, userID)
 	if err != nil {
 		h.log.Error("MarkAsRead failed", zap.Error(err))
 		return &pb.MarkAsReadResponse{
@@ -213,7 +235,12 @@ func (h *NotificationGRPCHandler) MarkAllAsRead(ctx context.Context, req *pb.Mar
 		typeFilter = &typeStr
 	}
 
-	count, err := h.service.MarkAllAsRead(ctx, func() uint64 { var v uint64; fmt.Sscanf(req.UserId.Value, "%d", &v); return v }(), typeFilter)
+	userID, err := strconv.ParseUint(req.UserId.Value, 10, 64)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid user_id: %q", req.UserId.Value)
+	}
+
+	count, err := h.service.MarkAllAsRead(ctx, userID, typeFilter)
 	if err != nil {
 		h.log.Error("MarkAllAsRead failed", zap.Error(err))
 		return &pb.MarkAllAsReadResponse{
@@ -237,7 +264,12 @@ func (h *NotificationGRPCHandler) DeleteNotification(ctx context.Context, req *p
 		}, nil
 	}
 
-	err := h.service.DeleteNotification(ctx, req.NotificationId, func() uint64 { var v uint64; fmt.Sscanf(req.UserId.Value, "%d", &v); return v }())
+	userID, err := strconv.ParseUint(req.UserId.Value, 10, 64)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid user_id: %q", req.UserId.Value)
+	}
+
+	err = h.service.DeleteNotification(ctx, req.NotificationId, userID)
 	if err != nil {
 		h.log.Error("DeleteNotification failed", zap.Error(err))
 		return &pb.DeleteNotificationResponse{
@@ -259,7 +291,12 @@ func (h *NotificationGRPCHandler) GetNotificationSettings(ctx context.Context, r
 		return nil, status.Error(codes.InvalidArgument, "user_id is required")
 	}
 
-	settings, err := h.service.GetNotificationSettings(ctx, func() uint64 { var v uint64; fmt.Sscanf(req.UserId.Value, "%d", &v); return v }())
+	userID, err := strconv.ParseUint(req.UserId.Value, 10, 64)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid user_id: %q", req.UserId.Value)
+	}
+
+	settings, err := h.service.GetNotificationSettings(ctx, userID)
 	if err != nil {
 		h.log.Error("GetNotificationSettings failed", zap.Error(err))
 		return nil, status.Error(codes.Internal, "failed to get notification settings")
@@ -276,8 +313,13 @@ func (h *NotificationGRPCHandler) UpdateNotificationSettings(ctx context.Context
 		return nil, status.Error(codes.InvalidArgument, "user_id is required")
 	}
 
+	userID, err := strconv.ParseUint(req.UserId.Value, 10, 64)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid user_id: %q", req.UserId.Value)
+	}
+
 	serviceReq := &service.UpdateNotificationSettingsRequest{
-		UserID:       func() uint64 { var v uint64; fmt.Sscanf(req.UserId.Value, "%d", &v); return v }(),
+		UserID:       userID,
 		EmailEnabled: req.EmailEnabled,
 		SMSEnabled:   req.SmsEnabled,
 		PushEnabled:  req.PushEnabled,

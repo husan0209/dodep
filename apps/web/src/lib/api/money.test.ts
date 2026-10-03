@@ -95,7 +95,9 @@ describe("exact decimal arithmetic", () => {
 
 describe("formatting", () => {
   it("groups thousands without float conversion", () => {
-    expect(formatMoney("1234567.891", { display: "none" })).toBe("1,234,567.89");
+    expect(formatMoney("1234567.891", { display: "none" })).toBe(
+      "1,234,567.89",
+    );
     expect(formatMoney("9999999999.99999999", { display: "none" })).toBe(
       "10,000,000,000",
     );

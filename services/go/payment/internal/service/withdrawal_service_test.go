@@ -81,6 +81,8 @@ func (m *MockWithdrawalRepository) CountByUserIDStatus(ctx context.Context, user
 }
 
 // Helper function to create a test withdrawal service
+//
+//nolint:unused // Placeholder: unused until the withdrawal tests are added.
 func newTestWithdrawalService(
 	withdrawalRepo repository.WithdrawalRepository,
 	idempotencyRepo repository.IdempotencyRepository,
@@ -97,6 +99,7 @@ func newTestWithdrawalService(
 		nil, // user
 		nil, // producer
 		nil, // tracer
+		"",  // ipnCallbackURL
 	)
 }
 

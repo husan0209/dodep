@@ -70,6 +70,8 @@ func respondError(c *fiber.Ctx, status int, message string) error {
 }
 
 // respondPaginated sends a paginated response
+//
+//nolint:unused // Reserved for the paginated list endpoints still being migrated.
 func respondPaginated(c *fiber.Ctx, items interface{}, nextCursor string, hasMore bool) error {
 	return c.Status(200).JSON(PaginatedResponse{
 		Data: items,

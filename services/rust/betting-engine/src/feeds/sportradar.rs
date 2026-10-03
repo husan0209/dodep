@@ -9,35 +9,35 @@
 use std::time::Duration;
 
 use fred::prelude::*;
+use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use tokio::time::sleep;
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 use tracing::{error, info, warn};
-use futures_util::{SinkExt, StreamExt};
 
 /// An inbound odds update from Sportradar
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OddsUpdate {
-    pub event_id:   String,
-    pub market_id:  String,
+    pub event_id: String,
+    pub market_id: String,
     pub outcome_id: String,
-    pub odds:       f64,
-    pub status:     String,  // "active" | "suspended" | "settled"
-    pub timestamp:  i64,     // Unix millis
+    pub odds: f64,
+    pub status: String, // "active" | "suspended" | "settled"
+    pub timestamp: i64, // Unix millis
 }
 
 /// Configuration for the Sportradar feed client
 #[derive(Debug, Clone)]
 pub struct SportradarConfig {
-    pub api_key:        String,
-    pub ws_url:         String,
-    pub live_ttl_secs:  u64,
-    pub enabled:        bool,
+    pub api_key: String,
+    pub ws_url: String,
+    pub live_ttl_secs: u64,
+    pub enabled: bool,
 }
 
 /// Live odds feed client
 pub struct SportradarFeedClient {
-    cfg:   SportradarConfig,
+    cfg: SportradarConfig,
     redis: RedisClient,
 }
 
@@ -59,13 +59,19 @@ impl SportradarFeedClient {
         let mut backoff = Duration::from_secs(1);
 
         loop {
-            info!("Connecting to Sportradar live odds feed: {}", self.cfg.ws_url);
+            info!(
+                "Connecting to Sportradar live odds feed: {}",
+                self.cfg.ws_url
+            );
             match connect_async(&url).await {
                 Ok((ws_stream, _response)) => {
                     info!("Connected to Sportradar feed");
                     backoff = Duration::from_secs(1);
                     self.handle_stream(ws_stream).await;
-                    warn!("Sportradar feed disconnected, reconnecting in {:?}", backoff);
+                    warn!(
+                        "Sportradar feed disconnected, reconnecting in {:?}",
+                        backoff
+                    );
                 }
                 Err(e) => {
                     error!("Sportradar connection error: {}", e);
@@ -106,7 +112,10 @@ impl SportradarFeedClient {
     async fn process_message(&self, text: &str) -> anyhow::Result<()> {
         // Sportradar sends an array of OddsUpdates per message
         let updates: Vec<OddsUpdate> = serde_json::from_str(text).map_err(|e| {
-            anyhow::anyhow!("Sportradar parse error: {e} — raw: {}", &text[..text.len().min(200)])
+            anyhow::anyhow!(
+                "Sportradar parse error: {e} — raw: {}",
+                &text[..text.len().min(200)]
+            )
         })?;
 
         for update in updates {

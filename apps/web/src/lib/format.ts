@@ -3,7 +3,7 @@
  */
 export function formatMoney(amount: number | string, currency: string): string {
   const num = typeof amount === "string" ? parseFloat(amount) : amount;
-  
+
   const symbols: Record<string, string> = {
     RUB: "₽",
     USD: "$",
@@ -17,13 +17,21 @@ export function formatMoney(amount: number | string, currency: string): string {
     currency: currency.toUpperCase(),
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  }).format(num).replace(symbols[currency.toUpperCase()] || currency, ` ${symbols[currency.toUpperCase()] || currency}`);
+  })
+    .format(num)
+    .replace(
+      symbols[currency.toUpperCase()] || currency,
+      ` ${symbols[currency.toUpperCase()] || currency}`,
+    );
 }
 
 /**
  * Format odds in different formats
  */
-export function formatOdds(odds: number, format: "decimal" | "fractional" | "american" = "decimal"): string {
+export function formatOdds(
+  odds: number,
+  format: "decimal" | "fractional" | "american" = "decimal",
+): string {
   switch (format) {
     case "decimal":
       return odds.toFixed(2);
@@ -52,9 +60,12 @@ export function formatOdds(odds: number, format: "decimal" | "fractional" | "ame
 /**
  * Format date
  */
-export function formatDate(date: string | Date, options?: Intl.DateTimeFormatOptions): string {
+export function formatDate(
+  date: string | Date,
+  options?: Intl.DateTimeFormatOptions,
+): string {
   const d = typeof date === "string" ? new Date(date) : date;
-  
+
   const defaultOptions: Intl.DateTimeFormatOptions = {
     year: "numeric",
     month: "short",
@@ -82,7 +93,7 @@ export function formatRelativeTime(date: string | Date): string {
   if (minutes < 60) return `${minutes} мин назад`;
   if (hours < 24) return `${hours} ч назад`;
   if (days < 7) return `${days} дн назад`;
-  
+
   return formatDate(d, { day: "numeric", month: "short", year: "numeric" });
 }
 

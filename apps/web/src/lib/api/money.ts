@@ -17,7 +17,10 @@ export const MONEY_TOTAL_PRECISION = 18;
 const MONEY_RE = /^(-?)(\d{1,10})(?:\.(\d{1,8}))?$/;
 
 export class MoneyError extends Error {
-  constructor(message: string, readonly field?: string) {
+  constructor(
+    message: string,
+    readonly field?: string,
+  ) {
     super(field ? `${field}: ${message}` : message);
     this.name = "MoneyError";
   }
@@ -81,7 +84,8 @@ export function assertMoney(value: unknown, field?: string): string {
 export function addMoney(a: string, b: string, field?: string): string {
   const left = parse(a, field);
   const right = parse(b, field);
-  const total = (left.negative ? -left.minor : left.minor) +
+  const total =
+    (left.negative ? -left.minor : left.minor) +
     (right.negative ? -right.minor : right.minor);
   const negative = total < 0n;
   return unparse({ negative, minor: negative ? -total : total });
@@ -91,7 +95,8 @@ export function addMoney(a: string, b: string, field?: string): string {
 export function subtractMoney(a: string, b: string, field?: string): string {
   const left = parse(a, field);
   const right = parse(b, field);
-  const total = (left.negative ? -left.minor : left.minor) -
+  const total =
+    (left.negative ? -left.minor : left.minor) -
     (right.negative ? -right.minor : right.minor);
   const negative = total < 0n;
   return unparse({ negative, minor: negative ? -total : total });

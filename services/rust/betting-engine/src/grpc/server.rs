@@ -2,8 +2,8 @@ use std::net::SocketAddr;
 
 use tracing::info;
 
-use super::BettingEngineService;
 use super::betting_engine_server;
+use super::BettingEngineService;
 
 use crate::services::bet_service::BetService;
 use crate::services::settlement_service::SettlementService;
