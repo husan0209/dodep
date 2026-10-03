@@ -37,7 +37,7 @@ jobs:
           cache: 'npm'
 
       - name: Setup Rust
-        uses: dtolnay/rust-action@stable
+        uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_VERSION }}
           components: clippy, rustfmt
@@ -181,10 +181,16 @@ jobs:
     timeout-minutes: 5
     needs: [deploy-web, deploy-backend, deploy-admin]
     if: always()
-    
+
+    # Секрет поднимаем на уровне job: step-level env недоступен в own `if`.
+    env:
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+
     steps:
+      # Slack-нотификация не должна ронять workflow, когда webhook не задан:
+      # action-slack падает с "Specify secrets.SLACK_WEBHOOK_URL" на пустом секрете.
       - name: Notify Slack
-        if: always()
+        if: always() && env.SLACK_WEBHOOK_URL != ''
         uses: 8398a7/action-slack@v3
         with:
           status: ${{ job.status }}
@@ -193,8 +199,6 @@ jobs:
             Web: ${{ needs.deploy-web.result }}
             Backend: ${{ needs.deploy-backend.result }}
             Admin: ${{ needs.deploy-admin.result }}
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
 
       - name: Notify Success
         if: success()
@@ -208,4 +212,5 @@ jobs:
         run: |
           echo "❌ Deployment failed!"
           echo "Check GitHub Actions logs for details"
-          exit 1
+          # Не роняем job: notify — это observability, а не проверка качества.
+          # Иначе красный Deploy-чек маскирует реальную причину в build-and-test.

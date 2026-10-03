@@ -69,12 +69,13 @@ jobs:
       - name: "G3: No hardcoded secrets or private keys"
         run: |
           echo "Проверка G3: отсутствие захардкоженных приватных ключей..."
-          if grep -rn "BEGIN RSA PRIVATE KEY" . 2>/dev/null | grep -v ".git"; then
+          # Сканируем только отслеживаемые git-файлы и исключаем markdown:
+          # документация по k8s/ssh legitimately содержит PEM-заголовки как
+          # примеры, и grep по всему дереву давал ложное срабатывание на
+          # .*/skills/**/references/*.md. Код и конфиги по-прежнему проверяются.
+          if git grep -nI -E -e "-----BEGIN (RSA |DSA |EC |OPENSSH |PGP )?PRIVATE KEY-----" \
+               -- ':(exclude,glob)**/*.md'; then
             echo "❌ Обнаружен приватный ключ в репозитории!"
-            exit 1
-          fi
-          if grep -rn "BEGIN OPENSSH PRIVATE KEY" . 2>/dev/null | grep -v ".git"; then
-            echo "❌ Обнаружен SSH приватный ключ в репозитории!"
             exit 1
           fi
           echo "✅ G3 пройден: приватные ключи не обнаружены."
