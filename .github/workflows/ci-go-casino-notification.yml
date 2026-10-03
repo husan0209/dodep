@@ -47,15 +47,20 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: services/go/${{ matrix.service }}/go.sum
 
+      # v1 (action v3/v4) is built with go1.24 and cannot type-check these modules,
+      # whose `go` directive is newer; it reports every protobuf-importing
+      # package as `undefined: <pkg> (typecheck)`. v2.14.0 is built with
+      # go1.27.0 and type-checks the whole module. Note that v2 also removed
+      # `--out-format`, hence the flag below.
       - name: Install golangci-lint
-        uses: golangci/golangci-lint-action@v4
+        uses: golangci/golangci-lint-action@v9
         with:
-          version: latest
+          version: v2.14.0
           working-directory: services/go/${{ matrix.service }}
 
       - name: Run golangci-lint
         working-directory: services/go/${{ matrix.service }}
-        run: golangci-lint run --out-format=github-actions
+        run: golangci-lint run --output.text.path=stdout
 
   test:
     name: Test Go Services

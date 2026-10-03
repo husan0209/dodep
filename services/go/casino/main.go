@@ -41,7 +41,7 @@ func main() {
 	if cfg.Env == "development" {
 		log, _ = zap.NewDevelopment()
 	}
-	// Sync flushes buffered entries; it legitimately fails on stdout/stderr
+// Sync flushes buffered entries; it legitimately fails on stdout/stderr
 	// on some platforms, which is not worth failing the process over.
 	defer func() { _ = log.Sync() }()
 
@@ -57,7 +57,7 @@ func main() {
 		Password: cfg.RedisPassword,
 		DB:       cfg.RedisDB,
 	})
-	defer rdb.Close()
+	defer func() { _ = rdb.Close() }()
 
 	// ── Repository ────────────────────────────────────────────────────────
 	casinoRepo := repository.NewCasinoRepository(db, rdb)

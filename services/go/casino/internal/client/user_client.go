@@ -36,6 +36,9 @@ type userGRPCClient struct {
 
 // NewUserClient creates a gRPC user client.
 func NewUserClient(cfg UserClientConfig, log *zap.Logger) (UserServiceClient, error) {
+// grpc.Dial is deprecated in favour of grpc.NewClient, which no longer
+	// blocks and always uses the dns resolver. The address is host:port, so the
+	// resolver behaviour is unchanged.
 	conn, err := grpc.NewClient(
 		cfg.Address,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),

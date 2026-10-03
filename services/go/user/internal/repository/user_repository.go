@@ -258,7 +258,7 @@ func (r *UserRepository) GetActivity(ctx context.Context, userID int64, limit, o
 		var action, oldData, newData string
 		var logUserID *int64
 		var createdAt time.Time
-		// A failed Scan left every destination at its zero value, so the row
+// A failed Scan left every destination at its zero value, so the row
 		// was appended with id 0, an empty action and a zero timestamp
 		// instead of the error being reported.
 		if err := rows.Scan(&id, &action, &oldData, &newData, &logUserID, &createdAt); err != nil {
