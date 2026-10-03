@@ -12,14 +12,43 @@ import (
 	"github.com/opus-casino/notification/internal/repository"
 )
 
+// Repository is the persistence contract the service needs.
+//
+// It exists so the service can be exercised without a live PostgreSQL/Redis
+// pair: *repository.NotificationRepository satisfies it implicitly, and tests
+// can supply a fake instead of a nil-backed repository whose every call fails
+// with "database client is not initialized".
+type Repository interface {
+	CreateNotification(ctx context.Context, notif *repository.Notification) error
+	GetNotification(ctx context.Context, id string) (*repository.Notification, error)
+	GetUserNotifications(
+		ctx context.Context,
+		userID uint64,
+		typeFilter *string,
+		isRead *bool,
+		dateFrom, dateTo *time.Time,
+		limit, offset int32,
+	) ([]repository.Notification, int64, error)
+	GetUnreadCount(ctx context.Context, userID uint64) (int32, error)
+	MarkAsRead(ctx context.Context, id string, userID uint64) error
+	MarkAllAsRead(ctx context.Context, userID uint64, typeFilter *string) (int32, error)
+	DeleteNotification(ctx context.Context, id string, userID uint64) error
+	UpdateNotificationStatus(ctx context.Context, id string, status, errorMessage string) error
+	GetNotificationSettings(ctx context.Context, userID uint64) (*repository.NotificationSettings, error)
+	UpdateNotificationSettings(ctx context.Context, settings *repository.NotificationSettings) error
+	IncrementUnreadCount(ctx context.Context, userID uint64) error
+	DecrementUnreadCount(ctx context.Context, userID uint64) error
+	SetUnreadCount(ctx context.Context, userID uint64, count int32) error
+}
+
 // NotificationService handles notification business logic
 type NotificationService struct {
-	repo *repository.NotificationRepository
+	repo Repository
 	log  *zap.Logger
 }
 
 // NewNotificationService creates a new notification service
-func NewNotificationService(repo *repository.NotificationRepository, log *zap.Logger) *NotificationService {
+func NewNotificationService(repo Repository, log *zap.Logger) *NotificationService {
 	return &NotificationService{
 		repo: repo,
 		log:  log,

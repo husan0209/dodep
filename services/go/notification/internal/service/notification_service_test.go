@@ -5,12 +5,10 @@ import (
 	"testing"
 
 	"go.uber.org/zap"
-
-	"github.com/opus-casino/notification/internal/repository"
 )
 
 func TestProcessEvent_SupportedEventAliases(t *testing.T) {
-	repo := repository.NewNotificationRepository(nil, nil)
+	repo := newFakeRepository()
 	svc := NewNotificationService(repo, zap.NewNop())
 
 	testCases := []struct {
@@ -70,6 +68,10 @@ func TestProcessEvent_SupportedEventAliases(t *testing.T) {
 				t.Fatalf("expected no error, got: %v", err)
 			}
 		})
+	}
+
+	if len(repo.created) != len(testCases) {
+		t.Fatalf("expected %d persisted notifications, got %d", len(testCases), len(repo.created))
 	}
 }
 
