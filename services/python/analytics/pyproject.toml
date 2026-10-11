@@ -4,9 +4,13 @@ version = "0.1.0"
 description = "Analytics pipelines and reporting for Opus Casino platform"
 requires-python = ">=3.11"
 dependencies = [
-    "fastapi>=0.109.0",
+    # Kept in step with requirements.txt: fastapi 0.142.x needs pydantic>=2.9.0,
+    # and its starlette floor is what resolves the starlette advisories that
+    # 0.109.0 (starlette 0.35.1) pulls in. See requirements.txt for details.
+    "fastapi>=0.142.2",
+    "starlette>=1.3.1",
     "uvicorn[standard]>=0.27.0",
-    "pydantic>=2.5.0",
+    "pydantic>=2.9.0",
     "pydantic-settings>=2.1.0",
     "pandas>=2.2.0",
     "polars>=0.20.0",

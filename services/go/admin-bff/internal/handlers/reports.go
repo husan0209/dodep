@@ -34,18 +34,6 @@ type playerAnalyticsStats struct {
 	lastActive  time.Time
 }
 
-type gameAnalyticsStats struct {
-	gameID         string
-	gameName       string
-	provider       string
-	betAmount      float64
-	winAmount      float64
-	rounds         int64
-	uniquePlayers  map[int64]struct{}
-	actualRTP      float64
-	theoreticalRTP float64
-}
-
 type analyticsQueryClient interface {
 	FinancialReportRows(ctx context.Context, from, to time.Time) ([]client.FinancialReportRow, error)
 	CasinoAnalyticsRows(ctx context.Context, from, to time.Time) ([]client.CasinoAnalyticsRow, error)
@@ -569,15 +557,14 @@ func formatMoney(v float64) string {
 	return strconv.FormatFloat(v, 'f', 2, 64)
 }
 
+// parseMoney converts a decimal string as stored by the database into a float64.
+// A malformed value is a data-integrity problem rather than a request problem, so
+// the row is reported as 0 instead of aborting the whole report; the signature is
+// shared by ~16 aggregation call sites that cannot surface per-row errors.
 func parseMoney(s string) float64 {
-	var v float64
-	fmt.Sscanf(s, "%f", &v)
-	return v
-}
-
-func abs(v float64) float64 {
-	if v < 0 {
-		return -v
+	v, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return 0
 	}
 	return v
 }

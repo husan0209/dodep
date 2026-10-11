@@ -5,7 +5,8 @@ bool isValidEmail(String email) {
 
 /// Password validator (min 8 chars, at least 1 uppercase, 1 lowercase, 1 number)
 bool isValidPassword(String password) {
-  return RegExp(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[a-zA-Z\d]{8,}$').hasMatch(password);
+  return RegExp(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[a-zA-Z\d]{8,}$')
+      .hasMatch(password);
 }
 
 /// Phone validator (international format)

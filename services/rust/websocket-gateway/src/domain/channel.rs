@@ -83,9 +83,7 @@ pub fn kafka_to_topic(kafka_topic: &str, key: &str) -> Option<Topic> {
     let id: i64 = key.parse().ok()?;
     match kafka_topic {
         "events.odds_updated" => Some(Topic::EventOdds(id)),
-        "bets.bet.placed" | "bets.bet.settled" | "bets.bet.cashout" => {
-            Some(Topic::UserBets(id))
-        }
+        "bets.bet.placed" | "bets.bet.settled" | "bets.bet.cashout" => Some(Topic::UserBets(id)),
         "analytics.events" => Some(Topic::EventStats(id)),
         _ => None,
     }

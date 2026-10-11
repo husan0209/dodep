@@ -5,20 +5,25 @@ import (
 )
 
 type Affiliate struct {
-	ID                  string            `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
-	UserID              string            `gorm:"type:varchar(36);not null;index" json:"user_id"`
-	Status              string            `gorm:"type:varchar(20);not null;default:'pending'" json:"status"`
-	DealType            string            `gorm:"type:varchar(20);not null;default:'revenue_share'" json:"deal_type"`
-	RevenueSharePct     float64           `gorm:"not null;default:0" json:"revenue_share_pct"`
-	CPAAmount           string            `gorm:"type:numeric(18,2);not null;default:0" json:"cpa_amount"`
-	HoldPeriodDays      int               `gorm:"not null;default:0" json:"hold_period_days"`
-	MinPayoutAmount     string            `gorm:"type:numeric(18,2);not null;default:0" json:"min_payout_amount"`
-	Currency            string            `gorm:"type:varchar(3);not null;default:'USD'" json:"currency"`
-	SubAffiliateEnabled bool              `gorm:"not null;default:false" json:"sub_affiliate_enabled"`
-	SubAffiliatePct     float64           `gorm:"not null;default:0" json:"sub_affiliate_pct"`
-	PostbackConfigs     []PostbackConfig  `gorm:"type:jsonb;not null;default:'[]'" json:"postback_configs"`
-	CreatedAt           time.Time         `gorm:"not null;default:now()" json:"created_at"`
-	UpdatedAt           time.Time         `gorm:"not null;default:now()" json:"updated_at"`
+	ID              string           `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
+	UserID          string           `gorm:"type:varchar(36);not null;index" json:"user_id"`
+	Status          string           `gorm:"type:varchar(20);not null;default:'pending'" json:"status"`
+	DealType        string           `gorm:"type:varchar(20);not null;default:'revenue_share'" json:"deal_type"`
+	// Commission rate as a fraction (0.20 = 20%). Stored as NUMERIC, never
+	// float (CONVENTIONS NEVER-6). Canonical range 0..1, enforced by
+	// parseCommissionRate in handlers and chk constraints in affiliate-service
+	// migrations (NUMERIC(10,4)).
+	RevenueSharePct string           `gorm:"type:numeric(10,4);not null;default:0" json:"revenue_share_pct"`
+	CPAAmount       string           `gorm:"type:numeric(18,2);not null;default:0" json:"cpa_amount"`
+	HoldPeriodDays  int              `gorm:"not null;default:0" json:"hold_period_days"`
+	MinPayoutAmount string           `gorm:"type:numeric(18,2);not null;default:0" json:"min_payout_amount"`
+	Currency        string           `gorm:"type:varchar(3);not null;default:'USD'" json:"currency"`
+	// NOTE: sub-affiliate / multi-level is explicitly out of MVP scope
+	// (tasks/задача.md: "не делать multi-level/sub-affiliate"). No
+	// SubAffiliateEnabled / SubAffiliatePct fields by design.
+	PostbackConfigs []PostbackConfig `gorm:"type:jsonb;not null;default:'[]'" json:"postback_configs"`
+	CreatedAt       time.Time        `gorm:"not null;default:now()" json:"created_at"`
+	UpdatedAt       time.Time        `gorm:"not null;default:now()" json:"updated_at"`
 }
 
 type PostbackConfig struct {

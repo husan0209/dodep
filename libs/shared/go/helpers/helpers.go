@@ -171,7 +171,7 @@ func Retry[T any](operation func() (T, error), config RetryConfig) (T, error) {
 
 // Debouncer for rate limiting
 type Debouncer struct {
-	delay time.Duration
+	delay    time.Duration
 	lastCall time.Time
 }
 
@@ -194,7 +194,7 @@ func (d *Debouncer) ShouldAllow() bool {
 
 // Throttler for rate limiting
 type Throttler struct {
-	limit time.Duration
+	limit         time.Duration
 	lastExecution time.Time
 }
 

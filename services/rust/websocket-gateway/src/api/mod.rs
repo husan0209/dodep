@@ -1,9 +1,6 @@
 pub mod handlers;
 
-use axum::{
-    routing::get,
-    Router,
-};
+use axum::{routing::get, Router};
 use tower::ServiceBuilder;
 use tower_http::{
     compression::CompressionLayer,
@@ -48,8 +45,7 @@ pub fn build(state: AppState) -> Router {
         .route("/healthz", get(handlers::health_handler::liveness))
         .route("/readyz", get(handlers::health_handler::readiness));
 
-    let ws = Router::new()
-        .route("/ws", get(handlers::ws_handler::ws_handler));
+    let ws = Router::new().route("/ws", get(handlers::ws_handler::ws_handler));
 
     Router::new()
         .merge(health)

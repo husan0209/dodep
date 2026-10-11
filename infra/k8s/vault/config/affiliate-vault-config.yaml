@@ -1,0 +1,132 @@
+# ============================================================
+# Vault grants for Affiliate Service
+# ============================================================
+# Standalone file — does NOT edit vault-config.yaml (shared Vault config,
+# owned by parallel work). Same CRD style: vault.upbound.io/v1alpha1.
+#
+# Least privilege is driven by the real schema:
+#   libs/migrations/postgresql/021_affiliates.sql (15 affiliate_* tables)
+# Affiliate money lives in its OWN tables, so the DB role must NOT get
+# access to wallets / transactions / bets — that separation is the whole
+# point of the affiliate ledger (tasks/задача.md "не смешивать affiliate
+# earnings с player wallet").
+#
+# Dynamic DB creds TTL: 1h (default in DatabaseSecretEngineRole), max 24h —
+# matches STAGES.md §1.5 ("TTL на dynamic secrets: 1 hour").
+
+---
+# Vault Policy: Affiliate Service
+apiVersion: vault.upbound.io/v1alpha1
+kind: Policy
+metadata:
+  name: affiliate
+spec:
+  name: affiliate
+  policy: |
+    # Service-scoped secrets only (DB creds, CORS, misc).
+    path "secret/data/affiliate/*" {
+      capabilities = ["read", "list"]
+    }
+
+    # Dynamic PostgreSQL credentials.
+    path "database/creds/affiliate" {
+      capabilities = ["read"]
+    }
+
+    # Transit: encrypt/decrypt payout-method PII at rest.
+    # affiliate_payout_methods.details is PII (bank/crypto/e-wallet destination),
+    # so it must be encrypted before insert, per security-general.skill.md.
+    path "transit/encrypt/affiliate-payout-key" {
+      capabilities = ["update"]
+    }
+    path "transit/decrypt/affiliate-payout-key" {
+      capabilities = ["update"]
+    }
+
+    # No write access to secrets, no KMS, no PKI issuance, no other service paths.
+
+---
+# Kubernetes Auth Role: Affiliate Service
+apiVersion: vault.upbound.io/v1alpha1
+kind: KubernetesAuthBackendRole
+metadata:
+  name: affiliate
+spec:
+  name: affiliate
+  backendRef:
+    name: kubernetes
+  boundServiceAccountNames:
+    - affiliate
+  boundServiceAccountNamespaces:
+    - production
+    - platform
+    - staging
+    - dev
+  ttl: "1h"
+  maxTtl: "24h"
+  policies:
+    - affiliate
+
+---
+# Database Role: Affiliate Service
+# Grants are table-scoped to affiliate_* — no blanket schema rights.
+apiVersion: vault.upbound.io/v1alpha1
+kind: DatabaseSecretEngineRole
+metadata:
+  name: affiliate
+spec:
+  backendRef:
+    name: database
+  name: affiliate
+  dbName: postgresql
+  creationStatements:
+    - |
+      CREATE ROLE "{{name}}" WITH LOGIN PASSWORD '{{password}}' VALID UNTIL '{{expiration}}';
+
+      -- Enrollment / profiles / plans / links
+      GRANT SELECT, INSERT, UPDATE ON TABLE
+        affiliate_enrollment_requests,
+        affiliate_commission_plans,
+        affiliate_profiles,
+        affiliate_links
+        TO "{{name}}";
+
+      -- Tracking + attribution (high write volume from /r/* redirects)
+      GRANT SELECT, INSERT ON TABLE
+        affiliate_clicks,
+        affiliate_attributions
+        TO "{{name}}";
+      GRANT UPDATE ON TABLE
+        affiliate_attributions
+        TO "{{name}}";
+
+      -- Commission engine + ledger (financial; no DELETE by design —
+      -- reversals are new rows, per ledger model in service README).
+      GRANT SELECT, INSERT, UPDATE ON TABLE
+        affiliate_daily_aggregates,
+        affiliate_earnings,
+        affiliate_ledger_accounts,
+        affiliate_ledger_entries,
+        affiliate_adjustments
+        TO "{{name}}";
+
+      -- Payouts + fraud flags + transactional outbox.
+      -- Outbox rows are claimed with SELECT ... FOR UPDATE SKIP LOCKED,
+      -- which UPDATE privilege covers.
+      GRANT SELECT, INSERT, UPDATE ON TABLE
+        affiliate_payout_methods,
+        affiliate_payouts,
+        affiliate_fraud_flags,
+        affiliate_outbox
+        TO "{{name}}";
+
+      # Sequence usage for BIGSERIAL inserts. USAGE only, never UPDATE.
+      GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO "{{name}}";
+  defaultTtl: "1h"
+  maxTtl: "24h"
+
+---
+# NOTE for the shared vault-config.yaml (deliberately NOT edited here):
+# add `- affiliate` to the allowedRoles list of the existing
+# DatabaseSecretEngineConfig `postgresql` (see vault-config.yaml, allowedRoles:
+# betting-engine, wallet-core, auth) — otherwise this role is never issued.

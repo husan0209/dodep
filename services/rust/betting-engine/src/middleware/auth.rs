@@ -6,7 +6,15 @@ use axum::{
     middleware::Next,
     response::Response,
 };
-use jwt_simple::prelude::*;
+// Import the specific items we need: `jwt_simple::prelude::*` also re-exports
+// `ct_codecs::Decoder`, which shadows the `base64::Engine::decode` method.
+use base64::Engine as _;
+// Import the specific items we need: the glob prelude also re-exports
+// `ct_codecs::Decoder`, which shadows `base64::Engine::decode`.
+use jwt_simple::{
+    algorithms::{Ed25519PublicKey, EdDSAPublicKeyLike},
+    common::VerificationOptions,
+};
 use serde::Deserialize;
 
 use crate::state::AppState;
@@ -49,11 +57,11 @@ fn parse_roles(raw: Option<&str>) -> Vec<String> {
         .collect()
 }
 
-pub async fn require_auth<B>(
+pub async fn require_auth(
     State(state): State<AppState>,
     headers: HeaderMap,
-    mut req: Request<B>,
-    next: Next<B>,
+    mut req: Request<axum::body::Body>,
+    next: Next,
 ) -> Result<Response, StatusCode> {
     let public_key_b64 = state.config().auth_ed25519_public_key.trim();
     if public_key_b64.is_empty() {
@@ -65,18 +73,16 @@ pub async fn require_auth<B>(
 
     let auth_key = {
         // Decode key per-request for now (MVP). If this becomes hot, cache in state.
-        let pk = Ed25519PublicKey::from_bytes(
-            &base64::engine::general_purpose::STANDARD
-                .decode(public_key_b64)
-                .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?,
-        )
-        .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
+        let raw = base64::engine::general_purpose::STANDARD
+            .decode(public_key_b64)
+            .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
+        let pk = Ed25519PublicKey::from_bytes(&raw).map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
         AuthKey { key: Arc::new(pk) }
     };
 
+    // Enforce issuer to match the Go auth service.
     let options = VerificationOptions {
-        // Enforce issuer to match Go auth service.
-        issuer: Some("opus-casino-auth".to_string()),
+        allowed_issuers: Some(["opus-casino-auth".to_string()].into_iter().collect()),
         ..Default::default()
     };
 
@@ -104,7 +110,11 @@ pub async fn require_auth<B>(
 }
 
 pub fn require_admin(user: &AuthUser) -> Result<(), StatusCode> {
-    if user.roles.iter().any(|r| r == "admin" || r == "super_admin") {
+    if user
+        .roles
+        .iter()
+        .any(|r| r == "admin" || r == "super_admin")
+    {
         Ok(())
     } else {
         Err(StatusCode::FORBIDDEN)

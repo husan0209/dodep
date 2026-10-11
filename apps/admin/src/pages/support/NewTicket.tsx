@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { Card, Form, Input, Select, Button, message, Space, Typography } from "antd";
@@ -11,7 +10,6 @@ const { Title } = Typography;
 export default function NewTicket() {
   const navigate = useNavigate();
   const [form] = Form.useForm();
-  const [loading, setLoading] = useState(false);
 
   const createMutation = useMutation({
     mutationFn: (values: {

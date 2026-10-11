@@ -1,7 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:injectable/injectable.dart';
 
-import '../../../core/error/exceptions.dart';
+import '../../../../core/error/exceptions.dart';
 import '../models/auth_tokens.dart';
 import '../models/user_model.dart';
 import 'auth_remote_datasource.dart';

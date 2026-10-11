@@ -15,7 +15,6 @@ import {
   WarningOutlined,
   CheckCircleOutlined,
   InboxOutlined,
-  MessageOutlined,
   PauseCircleOutlined,
 } from "@ant-design/icons";
 import { supportService } from "@/services/support.service";

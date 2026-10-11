@@ -13,7 +13,7 @@ abstract class Failure extends Equatable {
 
 /// Server-side errors (API errors)
 class ServerFailure extends Failure {
-  const ServerFailure(super.message, {String? code}) : super(code: code);
+  const ServerFailure(super.message, {super.code});
 
   factory ServerFailure.fromJson(Map<String, dynamic> json) {
     return ServerFailure(
@@ -25,23 +25,24 @@ class ServerFailure extends Failure {
 
 /// Network connectivity errors
 class NetworkFailure extends Failure {
-  const NetworkFailure() : super('Нет подключения к интернету', code: 'NETWORK_ERROR');
+  const NetworkFailure()
+      : super('Нет подключения к интернету', code: 'NETWORK_ERROR');
 }
 
 /// Authentication errors
 class AuthFailure extends Failure {
-  const AuthFailure(super.message, {String? code}) : super(code: code);
+  const AuthFailure(super.message, {super.code});
 
   factory AuthFailure.fromCode(String code) {
     switch (code) {
       case 'AUTH_INVALID_CREDENTIALS':
-        return const AuthFailure('Неверный email или пароль', code: code);
+        return AuthFailure('Неверный email или пароль', code: code);
       case 'AUTH_TOKEN_EXPIRED':
-        return const AuthFailure('Сессия истекла', code: code);
+        return AuthFailure('Сессия истекла', code: code);
       case 'AUTH_ACCOUNT_LOCKED':
-        return const AuthFailure('Аккаунт заблокирован', code: code);
+        return AuthFailure('Аккаунт заблокирован', code: code);
       case 'AUTH_ACCOUNT_SUSPENDED':
-        return const AuthFailure('Аккаунт приостановлен', code: code);
+        return AuthFailure('Аккаунт приостановлен', code: code);
       default:
         return AuthFailure(code, code: code);
     }
@@ -50,31 +51,32 @@ class AuthFailure extends Failure {
 
 /// Validation errors
 class ValidationFailure extends Failure {
-  const ValidationFailure(super.message, {String? code}) : super(code: code);
+  const ValidationFailure(super.message, {super.code});
 }
 
 /// Insufficient balance errors
 class InsufficientBalanceFailure extends Failure {
   const InsufficientBalanceFailure({String? code})
-      : super('Недостаточно средств', code: code ?? 'WALLET_INSUFFICIENT_BALANCE');
+      : super('Недостаточно средств',
+            code: code ?? 'WALLET_INSUFFICIENT_BALANCE');
 }
 
 /// Bet placement errors
 class BetFailure extends Failure {
-  const BetFailure(super.message, {String? code}) : super(code: code);
+  const BetFailure(super.message, {super.code});
 
   factory BetFailure.fromCode(String code) {
     switch (code) {
       case 'BET_EVENT_SUSPENDED':
-        return const BetFailure('Событие приостановлено', code: code);
+        return BetFailure('Событие приостановлено', code: code);
       case 'BET_MARKET_CLOSED':
-        return const BetFailure('Рынок закрыт', code: code);
+        return BetFailure('Рынок закрыт', code: code);
       case 'BET_ODDS_CHANGED':
-        return const BetFailure('Коэффициенты изменились', code: code);
+        return BetFailure('Коэффициенты изменились', code: code);
       case 'BET_STAKE_TOO_LOW':
-        return const BetFailure('Ставка слишком маленькая', code: code);
+        return BetFailure('Ставка слишком маленькая', code: code);
       case 'BET_STAKE_TOO_HIGH':
-        return const BetFailure('Ставка слишком большая', code: code);
+        return BetFailure('Ставка слишком большая', code: code);
       default:
         return BetFailure(code, code: code);
     }
@@ -83,10 +85,11 @@ class BetFailure extends Failure {
 
 /// Not found errors
 class NotFoundFailure extends Failure {
-  const NotFoundFailure(super.message, {String? code}) : super(code: code);
+  const NotFoundFailure(super.message, {super.code});
 }
 
 /// Unknown/unexpected errors
 class UnknownFailure extends Failure {
-  const UnknownFailure([String? message]) : super(message ?? 'Произошла неизвестная ошибка', code: 'UNKNOWN');
+  const UnknownFailure([String? message])
+      : super(message ?? 'Произошла неизвестная ошибка', code: 'UNKNOWN');
 }

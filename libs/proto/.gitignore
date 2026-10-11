@@ -1,8 +1,9 @@
-# Generated code - DO NOT COMMIT
-# Run `buf generate` to regenerate
-
-/gen/
-/gen/go/
+# Generated code.
+#
+# The Go stubs (gen/go) ARE committed on purpose: six services resolve
+# github.com/opus-casino/proto/gen/go/... through
+# `replace github.com/opus-casino/proto => ../../../libs/proto`, so a clean
+# checkout must build without running buf first.
 /gen/rust/
 /gen/typescript/
 

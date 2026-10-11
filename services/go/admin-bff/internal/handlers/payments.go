@@ -249,10 +249,14 @@ func RegisterPaymentRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger) {
 
 	pm.Post("/p2p/:id/reject", func(c *fiber.Ctx) error {
 		var req struct { Reason string `json:"reason"` }
-		c.BodyParser(&req)
-		db.Model(&models.P2PTransaction{}).Where("id = ?", c.Params("id")).Updates(map[string]any{
+		if err := c.BodyParser(&req); err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": "invalid request body"})
+		}
+		if err := db.Model(&models.P2PTransaction{}).Where("id = ?", c.Params("id")).Updates(map[string]any{
 			"status": "rejected", "notes": req.Reason,
-		})
+		}).Error; err != nil {
+			return c.Status(500).JSON(fiber.Map{"error": "database error"})
+		}
 		return c.JSON(fiber.Map{"success": true})
 	})
 

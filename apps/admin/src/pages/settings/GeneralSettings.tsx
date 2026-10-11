@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Card,
@@ -23,9 +22,8 @@ const { TabPane } = Tabs;
 export default function GeneralSettings() {
   const queryClient = useQueryClient();
   const [form] = Form.useForm();
-  const [loading, setLoading] = useState(false);
 
-  const { data, isLoading } = useQuery({
+  const { data } = useQuery({
     queryKey: ["general-settings"],
     queryFn: () => systemService.getSettings() as Promise<Record<string, unknown>>,
   });

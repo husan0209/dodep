@@ -1,53 +1,53 @@
 //! Error handling for Opus Casino platform
 
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use serde::{Serialize, Deserialize};
 
 /// Application error type
 #[derive(Debug, Error)]
 pub enum AppError {
     #[error("Validation error: {0}")]
     ValidationError(String),
-    
+
     #[error("Authentication error: {0}")]
     AuthError(String),
-    
+
     #[error("Authorization error: {0}")]
     AuthzError(String),
-    
+
     #[error("Not found: {0}")]
     NotFound(String),
-    
+
     #[error("Already exists: {0}")]
     AlreadyExists(String),
-    
+
     #[error("Invalid argument: {0}")]
     InvalidArgument(String),
-    
+
     #[error("Insufficient balance: {0}")]
     InsufficientBalance(String),
-    
+
     #[error("Rate limit exceeded: {0}")]
     RateLimitExceeded(String),
-    
+
     #[error("Service unavailable: {0}")]
     ServiceUnavailable(String),
-    
+
     #[error("Internal error: {0}")]
     InternalError(String),
-    
+
     #[error("Database error: {0}")]
     DatabaseError(#[from] sqlx::Error),
-    
+
     #[error("Redis error: {0}")]
     RedisError(#[from] redis::RedisError),
-    
+
     #[error("Serialization error: {0}")]
     SerializationError(#[from] serde_json::Error),
-    
+
     #[error("Parse error: {0}")]
     ParseError(String),
-    
+
     #[error("Business rule violation: {0}")]
     BusinessRuleViolation(String),
 }
@@ -86,17 +86,17 @@ impl ErrorDetails {
             trace_id: None,
         }
     }
-    
+
     pub fn with_metadata(mut self, metadata: std::collections::HashMap<String, String>) -> Self {
         self.metadata = Some(metadata);
         self
     }
-    
+
     pub fn with_field_error(mut self, field_error: FieldError) -> Self {
         self.field_errors.push(field_error);
         self
     }
-    
+
     pub fn with_trace_id(mut self, trace_id: &str) -> Self {
         self.trace_id = Some(trace_id.to_string());
         self
@@ -122,7 +122,7 @@ impl From<AppError> for ErrorDetails {
             AppError::ParseError(_) => "PARSE_ERROR",
             AppError::BusinessRuleViolation(_) => "BUSINESS_RULE_VIOLATION",
         };
-        
+
         ErrorDetails::new(error_code, &err.to_string())
     }
 }
@@ -142,7 +142,7 @@ impl FieldErrorBuilder {
             error_message: error_message.to_string(),
         }
     }
-    
+
     pub fn build(self) -> FieldError {
         FieldError {
             field: self.field,

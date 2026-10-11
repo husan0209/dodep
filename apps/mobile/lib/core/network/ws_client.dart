@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:injectable/injectable.dart';
+import 'package:logger/logger.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../config/app_config.dart';
@@ -25,7 +26,8 @@ class WsMessage {
       type: json['type'] as String? ?? 'unknown',
       channel: json['channel'] as String? ?? '',
       data: json['data'],
-      timestamp: DateTime.tryParse(json['timestamp'] as String? ?? '') ?? DateTime.now(),
+      timestamp: DateTime.tryParse(json['timestamp'] as String? ?? '') ??
+          DateTime.now(),
     );
   }
 
@@ -42,6 +44,8 @@ class WsMessage {
 /// WebSocket client manager
 @singleton
 class WsClient {
+  static final Logger _log = Logger();
+
   WebSocketChannel? _channel;
   final _controller = StreamController<WsMessage>.broadcast();
   final _subscriptions = <String, Set<void Function(WsMessage)>>{};
@@ -80,12 +84,13 @@ class WsClient {
               }
             }
           } catch (e) {
-            print('Error parsing WebSocket message: $e');
+            _log.log(Level.warning, 'Error parsing WebSocket message',
+                error: e);
           }
         },
         onDone: () => _reconnect(),
         onError: (error) {
-          print('WebSocket error: $error');
+          _log.log(Level.warning, 'WebSocket error', error: error);
           _reconnect();
         },
       );
@@ -93,7 +98,7 @@ class WsClient {
       _reconnectAttempts = 0;
       _startHeartbeat();
     } catch (e) {
-      print('Failed to connect WebSocket: $e');
+      _log.log(Level.warning, 'Failed to connect WebSocket', error: e);
       _reconnect();
     }
   }
@@ -152,14 +157,16 @@ class WsClient {
     _stopHeartbeat();
 
     if (_reconnectAttempts >= _maxReconnectAttempts) {
-      print('Max reconnection attempts reached');
+      _log.log(Level.warning, 'Max reconnection attempts reached');
       return;
     }
 
     final delay = Duration(milliseconds: 1000 * (_reconnectAttempts + 1));
     _reconnectAttempts++;
 
-    Future.delayed(delay.min(const Duration(seconds: 30)), () {
+    // Duration has no `min`; clamp the backoff to the 30s ceiling manually.
+    const ceiling = Duration(seconds: 30);
+    Future.delayed(delay > ceiling ? ceiling : delay, () {
       if (_token != null) {
         connect(_token!);
       }

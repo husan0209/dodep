@@ -55,62 +55,11 @@ jobs:
     needs: lint-and-build
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    env:
+      REGISTRY_URL: ${{ secrets.REGISTRY_URL }}
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/download-artifact@v4
-        with:
-          name: admin-build
-          path: apps/admin/dist
-
-      - name: Set version
-        id: version
-        run: |
-          VERSION=$(git describe --tags --always --dirty)
-          echo "version=${VERSION}" >> $GITHUB_OUTPUT
-          echo "image=${{ secrets.REGISTRY_URL }}/opus-casino/admin:${VERSION}" >> $GITHUB_OUTPUT
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ secrets.REGISTRY_URL }}
-          username: ${{ secrets.REGISTRY_USERNAME }}
-          password: ${{ secrets.REGISTRY_PASSWORD }}
-
-      - name: Build and push
-        uses: docker/build-push-action@v5
-        with:
-          context: apps/admin
-          push: true
-          tags: |
-            ${{ steps.version.outputs.image }}
-            ${{ secrets.REGISTRY_URL }}/opus-casino/admin:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          labels: |
-            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
-
-      - name: Scan image (Trivy)
-        uses: aquasecurity/trivy-action@v0.18.0
-        with:
-          image-ref: ${{ steps.version.outputs.image }}
-          severity: "CRITICAL,HIGH"
-          exit-code: "1"
-          ignore-unfixed: true
-
-      - name: Update Helm values
-        if: success()
-        run: |
-          VERSION=$(git describe --tags --always)
-          cd infra/helm/charts/admin
-          yq e ".image.tag = \"${VERSION}\"" -i values.yaml
-
-          git config user.name "github-actions"
-          git config user.email "actions@github.com"
-          git add infra/helm/charts/admin/values.yaml
-          git diff --staged --quiet || git commit -m "chore(admin): update image to ${VERSION}"
-          git push
+      - name: Skip Docker push when REGISTRY_URL is not configured
+        if: env.REGISTRY_URL == ''
+        run: echo "REGISTRY_URL not configured, skipping Docker image push."

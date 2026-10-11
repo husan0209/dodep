@@ -1,0 +1,337 @@
+# Grafana Alerting Rules — Bonus Service
+# Standalone ConfigMap (consumed the same way as grafana-alerting-rules),
+# does NOT edit alerting/alerting-rules.yaml (shared file, parallel work).
+#
+# Unlike affiliate, bonus DOES expose /metrics: the chart enables the
+# ServiceMonitor and names the port `metrics`
+# (infra/helm/charts/bonus/values.yaml -> serviceMonitor.enabled=true,
+# service.extraPorts[metrics]). So these rules are real PromQL over
+# bonus_* series from services/go/bonus/internal/telemetry/metrics.go —
+# no invented metrics, no placeholder rules.
+#
+# Label values below are the enums the service actually emits
+# (internal/service/bonus_service.go constants), not guesses:
+#   bonus_conversion_credits_total{result}  = credited | skipped_no_wallet | failed
+#   bonus_wagers_recorded_total{result}     = recorded | no_active_bonus | expired |
+#                                            credit_failed | invalid_amount | repository_failure
+#   bonus_bonuses_award_skipped_total{reason}= already_awarded | invalid_amount
+#   bonus_payment_events_total{result}       = awarded | skipped_not_first | malformed | failed
+#   bonus_http_requests_total{status}        = HTTP status code
+#
+# Rule bonus-conversion-credit-failed and bonus-completed-without-credit are
+# the two that protect player money: they cover the bug class where wagering
+# completed but wallet-core was never credited.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-alerting-rules-bonus
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/component: alerting
+    app.kubernetes.io/domain: bonus
+data:
+  bonus-alerting-rules.yaml: |
+    groups:
+      # =============================================================================
+      # Bonus — availability (kube-state-metrics)
+      # =============================================================================
+      - name: BonusAvailability
+        interval: 1m
+        rules:
+          - uid: bonus-no-ready-pods
+            title: Bonus Service Has No Ready Pods
+            condition: C
+            data:
+              - refId: A
+                datasourceUid: VictoriaMetrics
+                model:
+                  expr: sum(kube_pod_status_ready{namespace="platform", pod=~"bonus-.*", condition="true"})
+              - refId: C
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: A
+                  reducer: last
+                  comparator: lt
+                  threshold: 1
+            for: 3m
+            annotations:
+              summary: "No ready bonus pod — partner cabinet and bonus accrual are down"
+              description: "bonus has 0 ready replicas in platform. Welcome bonus awards stop and wagering cannot be recorded. Runbook BON-RB-01."
+            labels:
+              severity: critical
+              runbook: "docs/infra/runbooks/bonus-service.md#bon-rb-01-bonus-service-not-ready"
+
+          - uid: bonus-crash-looping
+            title: Bonus Service CrashLooping
+            condition: C
+            data:
+              - refId: A
+                datasourceUid: VictoriaMetrics
+                model:
+                  expr: sum(increase(kube_pod_container_status_restarts_total{namespace="platform", container="bonus", pod=~"bonus-.*"}[15m]))
+              - refId: C
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: A
+                  reducer: last
+                  comparator: gt
+                  threshold: 0
+            for: 5m
+            annotations:
+              summary: "Bonus pod restarting repeatedly"
+              description: "Restarts interrupt the payments.completed consumer mid-batch and can stall wagering completion credits. Runbook BON-RB-01."
+            labels:
+              severity: warning
+              runbook: "docs/infra/runbooks/bonus-service.md#bon-rb-01-bonus-service-not-ready"
+
+          # The affiliate rules had to skip HTTP-level alerts because that
+          # service exposes no /metrics. For bonus the endpoint exists, so the
+          # dangerous silent state is the opposite one: the exposition itself
+          # disappears (misconfigured ServiceMonitor, port rename, probe
+          # change) and every other rule below turns into a permanent no-op.
+          - uid: bonus-metrics-absent
+            title: Bonus Metrics Endpoint Is Missing
+            condition: C
+            data:
+              - refId: A
+                datasourceUid: VictoriaMetrics
+                model:
+                  expr: absent(bonus_http_requests_total)
+              - refId: C
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: A
+                  reducer: last
+                  comparator: gt
+                  threshold: 0.5
+            for: 10m
+            annotations:
+              summary: "bonus_http_requests_total is absent — all bonus_* alerts are silently blind"
+              description: "ServiceMonitor or the metrics port is broken. Until this is fixed every other rule in this file evaluates to an empty series and cannot fire. Runbook BON-RB-04."
+            labels:
+              severity: warning
+              runbook: "docs/infra/runbooks/bonus-service.md#bon-rb-04-metrics-endpoint-missing"
+
+      # =============================================================================
+      # Bonus — money correctness (player balance depends on these)
+      # =============================================================================
+      - name: BonusMoney
+        interval: 5m
+        rules:
+          # Wagering was completed but the wallet credit came back failed.
+          # The bonus is already marked completed, so without an alert the
+          # player silently loses the converted amount and reconciliation
+          # never sees it.
+          - uid: bonus-conversion-credit-failed
+            title: Bonus Conversion Credit Failed (Player Was Owed Wallet Credit)
+            condition: C
+            data:
+              - refId: A
+                datasourceUid: VictoriaMetrics
+                model:
+                  expr: sum(increase(bonus_conversion_credits_total{result="failed"}[15m]))
+              - refId: C
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: A
+                  reducer: last
+                  comparator: gt
+                  threshold: 0
+            for: 5m
+            annotations:
+              summary: "wallet-core rejected the bonus conversion credit"
+              description: "Wagering completed but the wallet credit failed. WALLET_GRPC_ADDR or wallet-core is failing; the bonus is already completed so the money is owed. Runbook BON-RB-02."
+            labels:
+              severity: critical
+              runbook: "docs/infra/runbooks/bonus-service.md#bon-rb-02-conversion-credit-failed"
+
+          # The gap rule: completions happen, successful credits do not.
+          # Catches the case where credits land under an unexpected label and
+          # result="failed" stays flat — i.e. a metric regression rather than
+          # a wallet outage. `and on()` keeps the LHS value so a plain
+          # "greater than 0" threshold is enough, and an empty result means
+          # healthy.
+          - uid: bonus-completed-without-credit
+            title: Wagering Completed Without Any Successful Conversion Credit
+            condition: C
+            data:
+              - refId: A
+                datasourceUid: VictoriaMetrics
+                model:
+                  expr: sum(increase(bonus_wagering_completed_total[15m])) > 0 and on() (sum(increase(bonus_conversion_credits_total{result="credited"}[15m])) == 0)
+              - refId: C
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: A
+                  reducer: last
+                  comparator: gt
+                  threshold: 0
+            for: 10m
+            annotations:
+              summary: "Bonuses completed wagering in the last 15m but not one wallet credit succeeded"
+              description: "Either every credit failed, or credits stopped being counted (metric regression). Player balances are wrong until this is resolved. Runbook BON-RB-02."
+            labels:
+              severity: critical
+              runbook: "docs/infra/runbooks/bonus-service.md#bon-rb-02-conversion-credit-failed"
+
+          # Wager credit is the other wallet path: the wager itself could not
+          # be turned into balance while recording progress.
+          - uid: bonus-wager-credit-failed
+            title: Wager Credit Failed While Recording Wagering Progress
+            condition: C
+            data:
+              - refId: A
+                datasourceUid: VictoriaMetrics
+                model:
+                  expr: sum(increase(bonus_wagers_recorded_total{result="credit_failed"}[15m]))
+              - refId: C
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: A
+                  reducer: last
+                  comparator: gt
+                  threshold: 0
+            for: 5m
+            annotations:
+              summary: "Wagering progress recorded but the wager credit failed"
+              description: "Players are playing against a bonus whose wager value was not credited. Runbook BON-RB-03."
+            labels:
+              severity: critical
+              runbook: "docs/infra/runbooks/bonus-service.md#bon-rb-03-wager-credit-failed"
+
+          # invalid_amount on award means the configured decimal could not be
+          # parsed (or is non-positive). That is a config bug, not player
+          # behaviour, and it silently blocks every welcome bonus.
+          - uid: bonus-award-invalid-amount
+            title: Welcome Bonus Awards Rejected as Invalid Amount
+            condition: C
+            data:
+              - refId: A
+                datasourceUid: VictoriaMetrics
+                model:
+                  expr: sum(increase(bonus_bonuses_award_skipped_total{reason="invalid_amount"}[30m]))
+              - refId: C
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: A
+                  reducer: last
+                  comparator: gt
+                  threshold: 5
+            for: 15m
+            annotations:
+              summary: "More than 5 welcome bonus awards rejected as invalid_amount in 30m"
+              description: "WELCOME_BONUS_MAX_AMOUNT / WELCOME_BONUS_PERCENTAGE could not be parsed as a positive decimal, or resolve to zero. No player receives the welcome bonus. Runbook BON-RB-05."
+            labels:
+              severity: warning
+              runbook: "docs/infra/runbooks/bonus-service.md#bon-rb-05-welcome-bonus-not-awarded"
+
+          # Malformed/failed payment events = first deposits whose welcome
+          # bonus was never granted.
+          - uid: bonus-payment-events-failing
+            title: Payments Events Cannot Be Turned Into Welcome Bonuses
+            condition: C
+            data:
+              - refId: A
+                datasourceUid: VictoriaMetrics
+                model:
+                  expr: sum(increase(bonus_payment_events_total{result=~"malformed|failed"}[15m]))
+              - refId: C
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: A
+                  reducer: last
+                  comparator: gt
+                  threshold: 0
+            for: 10m
+            annotations:
+              summary: "payments.completed events are malformed or failing to award"
+              description: "The consumer cannot award the welcome bonus for completed deposits. Check KAFKA_BROKERS and the payments.v1 event contract. Runbook BON-RB-05."
+            labels:
+              severity: warning
+              runbook: "docs/infra/runbooks/bonus-service.md#bon-rb-05-welcome-bonus-not-awarded"
+
+      # =============================================================================
+      # Bonus — RED (latency budget: partner API p95 < 500ms, errors < 1%)
+      # =============================================================================
+      - name: BonusRED
+        interval: 1m
+        rules:
+          - uid: bonus-http-5xx-rate
+            title: Bonus HTTP 5xx Rate Above 5%
+            condition: C
+            data:
+              - refId: A
+                datasourceUid: VictoriaMetrics
+                model:
+                  expr: sum(rate(bonus_http_requests_total{status=~"5.."}[5m])) / clamp_min(sum(rate(bonus_http_requests_total[5m])), 0.000000001)
+              - refId: C
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: A
+                  reducer: last
+                  comparator: gt
+                  threshold: 0.05
+            for: 5m
+            annotations:
+              summary: "More than 5% of bonus HTTP requests return 5xx"
+              description: "Clamp keeps the ratio defined when traffic drops to zero. Check wallet-core reachability and the DB. Runbook BON-RB-03."
+            labels:
+              severity: critical
+              runbook: "docs/infra/runbooks/bonus-service.md#bon-rb-03-wager-credit-failed"
+
+          - uid: bonus-http-p95-latency
+            title: Bonus Partner API p95 Latency Above Budget
+            condition: C
+            data:
+              - refId: A
+                datasourceUid: VictoriaMetrics
+                model:
+                  expr: histogram_quantile(0.95, sum by (le) (rate(bonus_http_request_duration_seconds_bucket[5m])))
+              - refId: C
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: A
+                  reducer: last
+                  comparator: gt
+                  threshold: 0.5
+            for: 10m
+            annotations:
+              summary: "Partner API p95 above 500ms (architecture budget)"
+              description: "Latency budget for the bonus cabinet is p95 < 500ms. The histogram uses the platform buckets, so this is the same measure the k6 scenario gates on. Runbook BON-RB-03."
+            labels:
+              severity: warning
+              runbook: "docs/infra/runbooks/bonus-service.md#bon-rb-03-wager-credit-failed"
+
+          - uid: bonus-grpc-errors
+            title: Bonus gRPC Calls Returning Non-OK
+            condition: C
+            data:
+              - refId: A
+                datasourceUid: VictoriaMetrics
+                model:
+                  expr: sum(rate(bonus_grpc_requests_total{code!="OK"}[5m]))
+              - refId: C
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: A
+                  reducer: last
+                  comparator: gt
+                  threshold: 0.05
+            for: 5m
+            annotations:
+              summary: "Bonus gRPC surface returning errors (wallet-core / internal clients)"
+              description: "Above 0.05 errors/s on bonus.v1.BonusService or its outbound calls. Pair with bonus-conversion-credit-failed. Runbook BON-RB-02."
+            labels:
+              severity: warning
+              runbook: "docs/infra/runbooks/bonus-service.md#bon-rb-02-conversion-credit-failed"

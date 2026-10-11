@@ -105,9 +105,10 @@ func RegisterDashboardRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger, 
 	analytics.Get("/charts/ggr", func(c *fiber.Ctx) error {
 		period := c.Query("period", "30d")
 		days := 30
-		if period == "7d" {
+		switch period {
+		case "7d":
 			days = 7
-		} else if period == "90d" {
+		case "90d":
 			days = 90
 		}
 		from := time.Now().AddDate(0, 0, -days)
@@ -187,11 +188,12 @@ func RegisterDashboardRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger, 
 		limit := c.QueryInt("limit", 5)
 		period := c.Query("period", "today")
 		var start time.Time
-		if period == "today" {
+		switch period {
+		case "today":
 			start = time.Now().Truncate(24 * time.Hour)
-		} else if period == "7d" {
+		case "7d":
 			start = time.Now().AddDate(0, 0, -7)
-		} else {
+		default:
 			start = time.Now().AddDate(0, 0, -30)
 		}
 		var rounds []models.CasinoGameRound
@@ -248,7 +250,7 @@ func RegisterDashboardRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger, 
 		limit := c.QueryInt("limit", 5)
 		// Return empty list until sportsbook betting data is wired to admin-bff
 		var result []fiber.Map
-		if result == nil || len(result) == 0 {
+		if len(result) == 0 {
 			// Stub placeholder so UI renders empty state
 			result = []fiber.Map{}
 		}

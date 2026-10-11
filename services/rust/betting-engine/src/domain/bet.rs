@@ -5,7 +5,7 @@ use sqlx::Type;
 use uuid::Uuid;
 use validator::Validate;
 
-use super::selection::{Selection, SelectionResult};
+use super::selection::Selection;
 
 // ── Newtype IDs ──
 
@@ -37,6 +37,12 @@ impl std::fmt::Display for UserId {
 }
 
 impl std::fmt::Display for EventId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl std::fmt::Display for MarketId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
     }
@@ -99,18 +105,13 @@ impl BetStatus {
     }
 }
 
-#[derive(Debug, Clone, Copy, Deserialize)]
+#[derive(Debug, Clone, Copy, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum AcceptOddsChanges {
+    #[default]
     None,
     Higher,
     Any,
-}
-
-impl Default for AcceptOddsChanges {
-    fn default() -> Self {
-        Self::None
-    }
 }
 
 // ── Core Entity ──
@@ -209,7 +210,7 @@ pub struct PlaceBetRequest {
     pub device_fingerprint: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Validate)]
+#[derive(Debug, Clone, Deserialize, Serialize, Validate)]
 pub struct SelectionRequest {
     pub event_id: i64,
     pub market_id: i64,

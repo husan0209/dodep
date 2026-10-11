@@ -61,7 +61,9 @@ func (c *SumsubClient) GetApplicantStatus(ctx context.Context, externalUserID st
 	}
 	defer resp.Body.Close()
 	var result map[string]any
-	json.NewDecoder(resp.Body).Decode(&result)
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("sumsub decode applicant status: %w", err)
+	}
 	return result, nil
 }
 
@@ -81,7 +83,9 @@ func (c *SumsubClient) GenerateAccessToken(ctx context.Context, externalUserID, 
 	var result struct {
 		Token string `json:"token"`
 	}
-	json.NewDecoder(resp.Body).Decode(&result)
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", fmt.Errorf("sumsub decode access token: %w", err)
+	}
 	return result.Token, nil
 }
 
@@ -132,9 +136,14 @@ func (c *ComplyAdvantageClient) SearchPEPSanctions(ctx context.Context, req Scre
 	}
 	defer resp.Body.Close()
 
-	raw, _ := io.ReadAll(resp.Body)
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("complyadvantage read body: %w", err)
+	}
 	var result ScreeningResponse
-	json.Unmarshal(raw, &result)
+	if err := json.Unmarshal(raw, &result); err != nil {
+		return nil, fmt.Errorf("complyadvantage decode screening response: %w", err)
+	}
 	result.RawPayload = raw
 	return &result, nil
 }
@@ -180,7 +189,9 @@ func (c *ChainalysisClient) CheckAddress(ctx context.Context, address, asset str
 	defer resp.Body.Close()
 
 	var result CryptoRiskResponse
-	json.NewDecoder(resp.Body).Decode(&result)
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("chainalysis decode address risk: %w", err)
+	}
 	return &result, nil
 }
 
@@ -231,7 +242,9 @@ func (c *SportradarClient) GetLiveScore(ctx context.Context, eventID string) (*L
 	defer resp.Body.Close()
 
 	var raw map[string]any
-	json.NewDecoder(resp.Body).Decode(&raw)
+	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+		return nil, fmt.Errorf("sportradar decode live timeline: %w", err)
+	}
 
 	// Parse Sportradar response structure
 	result := &LiveScoreData{EventID: eventID, Status: "live"}
@@ -289,7 +302,9 @@ func (c *VictoriaMetricsClient) QueryProviderHealth(ctx context.Context, provide
 	defer resp.Body.Close()
 
 	var result map[string]any
-	json.NewDecoder(resp.Body).Decode(&result)
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("victoriametrics decode query result: %w", err)
+	}
 
 	metrics := &ProviderHealthMetrics{ProviderID: providerID}
 	if data, ok := result["data"].(map[string]any); ok {
@@ -297,7 +312,11 @@ func (c *VictoriaMetricsClient) QueryProviderHealth(ctx context.Context, provide
 			if r, ok := results[0].(map[string]any); ok {
 				if vals, ok := r["value"].([]any); ok && len(vals) == 2 {
 					if v, ok := vals[1].(string); ok {
-						fmt.Sscanf(v, "%f", &metrics.SuccessRate)
+						// A non-numeric sample must not silently keep the zero value,
+						// which the dashboard would render as "0% provider success".
+						if _, err := fmt.Sscanf(v, "%f", &metrics.SuccessRate); err != nil {
+							return nil, fmt.Errorf("victoriametrics parse sample %q: %w", v, err)
+						}
 						metrics.SuccessRate *= 100
 					}
 				}

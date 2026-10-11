@@ -1,149 +1,186 @@
 # Bonus Service Helm Chart Values
 # Управление бонусами и промоакциями
+#
+# ВАЖНО: все значения лежат под ключом `service-chart`. Этот чарт состоит
+# только из зависимости service-chart, а Helm передаёт subchart значения
+# исключительно из одноимённого namespace. Плоская структура рендерилась
+# дефолтами service-chart: чужой image (ghcr.io/opus-casino/service),
+# replicas=1 и пустой env — проверено через `helm template`.
+# nameOverride: bonus даёт ресурсам имя `bonus` вместо `bonus-service-chart`,
+# чтобы Service/DNS совпадали с CONVENTIONS.md и работали ссылки из
+# istio/k6/health-check скриптов.
+service-chart:
+  nameOverride: bonus
+  replicaCount: 2
 
-replicaCount: 2
+  image:
+    repository: ghcr.io/opus-casino/bonus
+    pullPolicy: IfNotPresent
+    tag: "latest"
 
-image:
-  repository: ghcr.io/opus-casino/bonus
-  pullPolicy: IfNotPresent
-  tag: "latest"
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: ""
 
-serviceAccount:
-  create: true
-  annotations:
-    eks.amazonaws.com/role-arn: ""
+  podAnnotations:
+    prometheus.io/scrape: "true"
 
-podAnnotations:
-  prometheus.io/scrape: "true"
+  podSecurityContext:
+    fsGroup: 1000
 
-podSecurityContext:
-  fsGroup: 1000
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
 
-securityContext:
-  runAsNonRoot: true
-  runAsUser: 1000
-  allowPrivilegeEscalation: false
-  readOnlyRootFilesystem: true
-  capabilities:
-    drop:
-      - ALL
+  service:
+    type: ClusterIP
+    # HTTP (Fiber). Must match PORT env below and CONVENTIONS.md (bonus: 8088).
+    port: 8088
+    targetPort: 8088
+    # gRPC (tonic-style tonic equivalent: google.golang.org/grpc).
+    # Must match GRPC_PORT env below and CONVENTIONS.md (bonus: 50056).
+    grpcPort: 50056
+    grpcTargetPort: 50056
+    # Named Prometheus port on the same container port as HTTP: /metrics is
+    # served by the app on PORT, and only needs its own Service port name for
+    # the ServiceMonitor to select it.
+    extraPorts:
+      - name: metrics
+        containerPort: 8088
+        port: 8088
+        targetPort: 8088
 
-service:
-  type: ClusterIP
-  httpPort: 8080
-  httpTargetPort: 8080
-  grpcPort: 9090
-  grpcTargetPort: 9090
-
-ingress:
-  enabled: true
-  className: "alb"
-  annotations:
-    alb.ingress.kubernetes.io/scheme: internet-facing
-    alb.ingress.kubernetes.io/target-type: ip
-    alb.ingress.kubernetes.io/healthcheck-path: /health
-    alb.ingress.kubernetes.io/ssl-redirect: "443"
-  hosts:
-    - host: api.opus.casino
-      paths:
-        - path: /api/v1/bonuses
-          pathType: Prefix
-  tls:
-    - secretName: opus-casino-tls
-      hosts:
-        - api.opus.casino
-
-resources:
-  limits:
-    cpu: 2000m
-    memory: 2Gi
-  requests:
-    cpu: 500m
-    memory: 512Mi
-
-autoscaling:
-  enabled: true
-  minReplicas: 2
-  maxReplicas: 10
-  targetCPUUtilizationPercentage: 60
-  targetMemoryUtilizationPercentage: 70
-
-nodeSelector:
-  node-type: application
-
-healthCheck:
-  path: /health
-  port: 8080
-  liveness:
-    initialDelaySeconds: 10
-    periodSeconds: 10
-    timeoutSeconds: 5
-    failureThreshold: 3
-  readiness:
-    initialDelaySeconds: 5
-    periodSeconds: 5
-    timeoutSeconds: 3
-    failureThreshold: 3
-
-env:
-  - name: GIN_MODE
-    value: "release"
-  - name: APP_ENV
-    valueFrom:
-      configMapKeyRef:
-        name: bonus-config
-        key: app-env
-  - name: DATABASE_URL
-    valueFrom:
-      secretKeyRef:
-        name: bonus-secrets
-        key: database-url
-  - name: REDIS_URL
-    valueFrom:
-      secretKeyRef:
-        name: bonus-secrets
-        key: redis-url
-  - name: REDPANDA_BROKERS
-    valueFrom:
-      configMapKeyRef:
-        name: bonus-config
-        key: redpanda-brokers
-
-podDisruptionBudget:
-  enabled: true
-  minAvailable: 1
-
-networkPolicy:
-  enabled: true
   ingress:
-    - from:
-        - namespaceSelector:
-            matchLabels:
-              name: istio-system
-        - namespaceSelector:
-            matchLabels:
-              name: monitoring
-      ports:
-        - protocol: TCP
-          port: 8080
-        - protocol: TCP
-          port: 9090
-  egress:
-    - to:
-        - namespaceSelector:
-            matchLabels:
-              name: data
-      ports:
-        - protocol: TCP
-          port: 5432
-        - protocol: TCP
-          port: 6379
-        - protocol: TCP
-          port: 9092
+    enabled: true
+    className: "alb"
+    annotations:
+      alb.ingress.kubernetes.io/scheme: internet-facing
+      alb.ingress.kubernetes.io/target-type: ip
+      alb.ingress.kubernetes.io/healthcheck-path: /health
+      alb.ingress.kubernetes.io/ssl-redirect: "443"
+    hosts:
+      - host: api.opus.casino
+        paths:
+          - path: /api/v1/bonuses
+            pathType: Prefix
+    tls:
+      - secretName: opus-casino-tls
+        hosts:
+          - api.opus.casino
 
-serviceMonitor:
-  enabled: true
-  interval: 30s
-  scrapeTimeout: 10s
-  path: /metrics
-  port: metrics
+  resources:
+    limits:
+      cpu: 2000m
+      memory: 2Gi
+    requests:
+      cpu: 500m
+      memory: 512Mi
+
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 60
+    targetMemoryUtilizationPercentage: 70
+
+  nodeSelector:
+    node-type: application
+
+  healthCheck:
+    path: /health
+    port: 8088
+    liveness:
+      initialDelaySeconds: 10
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 3
+    readiness:
+      initialDelaySeconds: 5
+      periodSeconds: 5
+      timeoutSeconds: 3
+      failureThreshold: 3
+
+  env:
+    # NOTE: every name below must match what the service actually reads
+    # (see services/go/bonus/internal/config/config.go). Do NOT add
+    # framework vars (e.g. GIN_MODE вЂ” the service is Fiber, NEVER-8) or
+    # broker vars the service does not read (it reads KAFKA_BROKERS).
+    - name: APP_ENV
+      value: "development"
+    - name: PORT
+      value: "8088"
+    - name: GRPC_PORT
+      value: "50056"
+    - name: DATABASE_URL
+      valueFrom:
+        secretKeyRef:
+          name: bonus-secrets
+          key: database-url
+    - name: JWT_SECRET_KEY
+      valueFrom:
+        secretKeyRef:
+          name: bonus-secrets
+          key: jwt-secret-key
+    - name: KAFKA_BROKERS
+      value: "redpanda.data.svc.cluster.local:9092"
+    - name: WALLET_GRPC_ADDR
+      value: "wallet-core.platform.svc.cluster.local:50053"
+    - name: CORS_ORIGINS
+      value: "https://www.opus.casino,https://m.opus.casino"
+    - name: WELCOME_BONUS_PERCENTAGE
+      value: "100"
+    - name: WELCOME_BONUS_MAX_AMOUNT
+      value: "200"
+    - name: WELCOME_BONUS_WAGERING_REQUIREMENT
+      value: "30"
+    - name: WELCOME_BONUS_EXPIRY_DAYS
+      value: "30"
+
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+
+  networkPolicy:
+    enabled: true
+    ingress:
+      - from:
+          - namespaceSelector:
+              matchLabels:
+                name: istio-system
+          - namespaceSelector:
+              matchLabels:
+                name: monitoring
+        ports:
+          - protocol: TCP
+            port: 8088
+          - protocol: TCP
+            port: 50056
+          # Prometheus scrape (same port as HTTP, distinct reason).
+    egress:
+      - to:
+          - namespaceSelector:
+              matchLabels:
+                name: data
+        ports:
+          - protocol: TCP
+            port: 5432
+          - protocol: TCP
+            port: 6379
+          - protocol: TCP
+            port: 9092
+
+  serviceMonitor:
+    # Prometheus scrapes /metrics on the service HTTP port (the exposition is
+    # served by the app itself, see internal/telemetry). Named `metrics` via
+    # service.extraPorts so the ServiceMonitor selector matches.
+    enabled: true
+    interval: 30s
+    scrapeTimeout: 10s
+    path: /metrics
+    port: metrics

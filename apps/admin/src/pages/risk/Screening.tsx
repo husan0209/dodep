@@ -11,7 +11,7 @@ import {
   Modal,
   message,
 } from "antd";
-import { CheckCircleOutlined, ReloadOutlined, EyeOutlined } from "@ant-design/icons";
+import { CheckCircleOutlined, ReloadOutlined } from "@ant-design/icons";
 import { riskService } from "@/services/risk.service";
 
 const { Title } = Typography;

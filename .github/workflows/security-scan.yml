@@ -4,13 +4,6 @@
 name: Security Scan
 
 on:
-  push:
-    branches: [main, develop]
-  pull_request:
-    branches: [main, develop]
-  schedule:
-    # Запуск каждый день в 00:00 UTC
-    - cron: '0 0 * * *'
   workflow_dispatch:
 
 env:

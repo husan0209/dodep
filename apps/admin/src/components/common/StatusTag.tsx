@@ -1,14 +1,4 @@
 import { Tag } from "antd";
-import type {
-  USER_STATUSES,
-  KYC_LEVELS,
-  BET_STATUSES,
-  TRANSACTION_STATUSES,
-  WITHDRAWAL_STATUSES,
-  ALERT_SEVERITIES,
-  ALERT_STATUSES,
-  BONUS_TYPES,
-} from "@/utils/constants";
 
 export type StatusConfig = { label: string; color: string };
 

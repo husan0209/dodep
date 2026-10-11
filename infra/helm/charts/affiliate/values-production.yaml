@@ -1,0 +1,142 @@
+# Affiliate Service - Production Environment Values
+# RevShare from NGR partner program. Ports: 8090 (HTTP) / 50061 (gRPC).
+
+replicaCount: 4
+
+image:
+  tag: "v1.0.0"
+  pullPolicy: Always
+
+serviceAccount:
+  create: true
+  annotations:
+    eks.amazonaws.com/role-arn: "arn:aws:iam::ACCOUNT_ID:role/opus-casino-production-affiliate-role"
+
+resources:
+  limits:
+    cpu: 2000m
+    memory: 2Gi
+  requests:
+    cpu: 500m
+    memory: 512Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 15
+  targetCPUUtilizationPercentage: 50
+  targetMemoryUtilizationPercentage: 60
+
+serviceMonitor:
+  # Disabled: service currently exposes only /health + /ready (see main.go).
+  # Enable once a /metrics endpoint lands; template is ready.
+  enabled: false
+  interval: 15s
+  scrapeTimeout: 10s
+  path: /metrics
+  port: http
+
+# Routing / disruption / network isolation are standalone manifests, not chart
+# values — see the note in values.yaml. Production specifics (3-15 replicas,
+# minAvailable 2, prod network peers) already live in those files.
+
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: node-type
+              operator: In
+              values:
+                - application
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - affiliate
+          topologyKey: kubernetes.io/hostname
+
+tolerations:
+  - key: "application"
+    operator: "Equal"
+    value: "true"
+    effect: "NoSchedule"
+
+env:
+  - name: APP_ENV
+    value: "production"
+  - name: PORT
+    value: "8090"
+  - name: GRPC_PORT
+    value: "50061"
+  - name: DATABASE_URL
+    valueFrom:
+      secretKeyRef:
+        name: affiliate-secrets-production
+        key: database-url
+  - name: REDIS_ADDR
+    valueFrom:
+      secretKeyRef:
+        name: affiliate-secrets-production
+        key: redis-addr
+  - name: REDIS_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: affiliate-secrets-production
+        key: redis-password
+  - name: JWT_SECRET_KEY
+    valueFrom:
+      secretKeyRef:
+        name: affiliate-secrets-production
+        key: jwt-secret-key
+  - name: REDPANDA_BROKERS
+    value: "redpanda.data.svc.cluster.local:9092,redpanda.data.svc.cluster.local:9093,redpanda.data.svc.cluster.local:9094"
+  - name: CORS_ORIGINS
+    value: "https://www.opus.casino,https://opus.casino"
+  - name: HOLD_RELEASE_INTERVAL
+    value: "1h"
+  - name: OTEL_EXPORTER_OTLP_ENDPOINT
+    value: "http://otel-collector.monitoring.svc.cluster.local:4317"
+  - name: OTEL_SERVICE_NAME
+    value: "affiliate-production"
+
+affiliate:
+  commission:
+    default_rate: "0.20"
+    hold_period_days: 30
+    min_payout_amount: "100"
+    approval_mode: manual
+    payout_schedule: monthly
+    negative_carryover_enabled: false
+  redpanda:
+    enabled: true
+    brokers: "redpanda.data.svc.cluster.local:9092"
+    consumer_group: affiliate-service-production
+    consume_topics:
+      - casino.rounds.settled
+      - betting.bets.settled
+      - affiliate.player.activity
+    produce_topics:
+      - affiliate.enrollment.requested
+      - affiliate.enrollment.approved
+      - affiliate.enrollment.rejected
+      - affiliate.click.tracked
+      - affiliate.attribution.created
+      - affiliate.commission.accrued
+      - affiliate.commission.released
+      - affiliate.commission.reversed
+      - affiliate.payout.requested
+      - affiliate.payout.updated
+      - affiliate.payout.paid
+      - affiliate.payout.rejected
+      - affiliate.fraud.flagged
+      - affiliate.adjustment.created
+  tracking:
+    click_cookie_name: aff_click
+    click_cookie_ttl_days: 30
+    redirect_default: "/"

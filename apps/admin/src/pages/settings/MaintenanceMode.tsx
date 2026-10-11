@@ -1,10 +1,8 @@
-import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Card,
   Typography,
   Button,
-  Switch,
   Alert,
   Form,
   Input,
@@ -14,7 +12,7 @@ import {
   Descriptions,
   Tag,
 } from "antd";
-import { ReloadOutlined, SaveOutlined, PoweroffOutlined } from "@ant-design/icons";
+import { SaveOutlined, PoweroffOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 import { systemService } from "@/services/system.service";
 
@@ -33,7 +31,7 @@ export default function MaintenanceMode() {
   const queryClient = useQueryClient();
   const [form] = Form.useForm();
 
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ["maintenance-status"],
     queryFn: () => systemService.getMaintenanceStatus() as unknown as Promise<MaintenanceStatus>,
   });

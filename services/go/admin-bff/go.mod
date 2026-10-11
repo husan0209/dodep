@@ -14,6 +14,7 @@ require (
 	github.com/pquerna/otp v1.5.0
 	github.com/redis/go-redis/v9 v9.3.0
 	github.com/segmentio/kafka-go v0.4.47
+	github.com/shopspring/decimal v1.4.0
 	github.com/valyala/fasthttp v1.51.0
 	go.uber.org/zap v1.27.1
 	golang.org/x/crypto v0.48.0
@@ -60,7 +61,6 @@ require (
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	github.com/ryanuber/go-glob v1.0.0 // indirect
 	github.com/segmentio/asm v1.2.1 // indirect
-	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/tcplisten v1.0.0 // indirect
 	go.opentelemetry.io/otel v1.41.0 // indirect

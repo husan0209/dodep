@@ -1,9 +1,6 @@
 //! HTTP API for health, metrics, and admin endpoints
 
-use axum::{
-    routing::{get, post},
-    Router, Json, extract::State, http::StatusCode, response::IntoResponse,
-};
+use axum::{extract::State, http::StatusCode, response::IntoResponse, routing::get, Json, Router};
 use serde_json::json;
 use std::sync::Arc;
 
@@ -26,36 +23,48 @@ async fn health_check(State(state): State<Arc<AppState>>) -> impl IntoResponse {
         .fetch_one(&state.db_pool)
         .await
         .is_ok();
-    
+
     // Check Redis connection
-    let redis_healthy = state.redis_client
+    let redis_healthy = state
+        .redis_client
         .get_multiplexed_tokio_connection()
         .await
         .is_ok();
-    
+
     let status = if db_healthy && redis_healthy {
         StatusCode::OK
     } else {
         StatusCode::SERVICE_UNAVAILABLE
     };
-    
-    (status, Json(json!({
-        "status": if status == StatusCode::OK { "healthy" } else { "unhealthy" },
-        "database": if db_healthy { "ok" } else { "error" },
-        "redis": if redis_healthy { "ok" } else { "error" },
-        "version": state.config.app.version,
-    })))
+
+    (
+        status,
+        Json(json!({
+            "status": if status == StatusCode::OK { "healthy" } else { "unhealthy" },
+            "database": if db_healthy { "ok" } else { "error" },
+            "redis": if redis_healthy { "ok" } else { "error" },
+            "version": state.config.app.version,
+        })),
+    )
 }
 
 /// Readiness check handler
 async fn readiness_check(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     // Check if service is ready to accept traffic
-    let ready = state.db_pool.is_connected();
-    
+    // `Pool` has no `is_connected`; probe it instead, reusing the same
+    // round-trip the health check uses.
+    let ready = sqlx::query("SELECT 1")
+        .fetch_one(&state.db_pool)
+        .await
+        .is_ok();
+
     if ready {
         (StatusCode::OK, Json(json!({"ready": true})))
     } else {
-        (StatusCode::SERVICE_UNAVAILABLE, Json(json!({"ready": false})))
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({"ready": false})),
+        )
     }
 }
 
@@ -69,9 +78,12 @@ async fn liveness_check() -> impl IntoResponse {
 async fn metrics(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     // Prometheus metrics are exposed on a separate port
     // This endpoint returns basic service metrics
-    (StatusCode::OK, Json(json!({
-        "service": state.config.app.name,
-        "version": state.config.app.version,
-        "environment": state.config.app.env,
-    })))
+    (
+        StatusCode::OK,
+        Json(json!({
+            "service": state.config.app.name,
+            "version": state.config.app.version,
+            "environment": state.config.app.env,
+        })),
+    )
 }

@@ -1,15 +1,19 @@
-import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
-import '../features/auth/presentation/bloc/auth_state.dart';
-import '../features/auth/presentation/pages/login_page.dart';
-import '../features/auth/presentation/pages/register_page.dart';
-import '../features/sportsbook/presentation/pages/sportsbook_page.dart';
-import '../features/casino/presentation/pages/casino_page.dart';
-import '../features/wallet/presentation/pages/wallet_page.dart';
-import '../features/profile/presentation/pages/profile_page.dart';
-import '../features/bonuses/presentation/pages/bonuses_page.dart';
-import '../features/notifications/presentation/pages/notifications_page.dart';
+import '../../features/auth/presentation/bloc/auth_bloc.dart';
+
+import '../../features/auth/presentation/bloc/auth_state.dart';
+import '../../features/auth/presentation/pages/login_page.dart';
+import '../../features/auth/presentation/pages/register_page.dart';
+import '../../features/sportsbook/presentation/pages/sportsbook_page.dart';
+import '../../features/casino/presentation/pages/casino_page.dart';
+import '../../features/wallet/presentation/pages/wallet_page.dart';
+import '../../features/profile/presentation/pages/profile_page.dart';
+import '../../features/bonuses/presentation/pages/bonuses_page.dart';
+import '../../features/notifications/presentation/pages/notifications_page.dart';
+import '../../features/affiliate/presentation/pages/affiliate_page.dart';
+import '../../features/responsible_gambling/presentation/pages/rg_page.dart';
 import 'main_shell.dart';
 
 /// App router configuration
@@ -51,32 +55,49 @@ GoRouter appRouter({required AuthState authState}) {
           GoRoute(
             path: '/sportsbook',
             name: 'sportsbook',
-            pageBuilder: (context, state) => const NoTransitionPage(child: SportsbookPage()),
+            pageBuilder: (context, state) =>
+                NoTransitionPage(child: const SportsbookPage()),
           ),
           GoRoute(
             path: '/casino',
             name: 'casino',
-            pageBuilder: (context, state) => const NoTransitionPage(child: CasinoPage()),
+            pageBuilder: (context, state) =>
+                NoTransitionPage(child: const CasinoPage()),
           ),
           GoRoute(
             path: '/wallet',
             name: 'wallet',
-            pageBuilder: (context, state) => const NoTransitionPage(child: WalletPage()),
+            pageBuilder: (context, state) =>
+                NoTransitionPage(child: const WalletPage()),
           ),
           GoRoute(
             path: '/profile',
             name: 'profile',
-            pageBuilder: (context, state) => const NoTransitionPage(child: ProfilePage()),
+            pageBuilder: (context, state) =>
+                NoTransitionPage(child: const ProfilePage()),
           ),
           GoRoute(
             path: '/bonuses',
             name: 'bonuses',
-            pageBuilder: (context, state) => const NoTransitionPage(child: BonusesPage()),
+            pageBuilder: (context, state) =>
+                NoTransitionPage(child: const BonusesPage()),
           ),
           GoRoute(
             path: '/notifications',
             name: 'notifications',
-            pageBuilder: (context, state) => const NoTransitionPage(child: NotificationsPage()),
+            pageBuilder: (context, state) =>
+                NoTransitionPage(child: const NotificationsPage()),
+          ),
+          GoRoute(
+            path: '/affiliate',
+            name: 'affiliate',
+            pageBuilder: (context, state) =>
+                NoTransitionPage(child: const AffiliatePage()),
+          ),
+          GoRoute(
+            path: '/responsible-gambling',
+            name: 'responsible-gambling',
+            builder: (context, state) => const RGPage(),
           ),
         ],
       ),
@@ -84,14 +105,19 @@ GoRouter appRouter({required AuthState authState}) {
   );
 }
 
-/// Simple page without transition
+/// Simple page without transition.
+///
+/// NOTE: this constructor is intentionally NOT `const` — it forwards a
+/// closure to [CustomTransitionPage.transitionsBuilder], and closures are
+/// not constant expressions in Dart.
 class NoTransitionPage extends CustomTransitionPage<void> {
-  const NoTransitionPage({
+  NoTransitionPage({
     required super.child,
     super.name,
     super.arguments,
     super.restorationId,
   }) : super(
-          transitionsBuilder: (context, animation, secondaryAnimation, child) => child,
+          transitionsBuilder: (context, animation, secondaryAnimation, child) =>
+              child,
         );
 }

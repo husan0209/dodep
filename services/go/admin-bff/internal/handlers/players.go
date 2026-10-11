@@ -4,13 +4,18 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/opus-casino/admin-bff/internal/models"
 	"github.com/opus-casino/admin-bff/internal/service"
+	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
+
+	commonv1 "github.com/opus-casino/proto/gen/go/common/v1"
+	userv1 "github.com/opus-casino/proto/gen/go/user/v1"
 )
 
 // PlayerNote is stored in the admin_notes table (simple append-only log).
@@ -40,9 +45,13 @@ type PlayerMergeRecord struct {
 func (PlayerMergeRecord) TableName() string { return "player_merge_records" }
 
 // RegisterPlayerRoutes mounts all player mutator and merge endpoints.
-func RegisterPlayerRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger, auditSvc *service.AuditService) {
+// usersSvc is used for downstream User Service gRPC calls (limits, blocks).
+// It may be nil in tests; endpoints degrade to audit-only with 502 on failure.
+func RegisterPlayerRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger, auditSvc *service.AuditService, usersSvc *service.UsersService) {
 	// Auto-migrate the local tables managed by this handler.
-	db.AutoMigrate(&PlayerNote{}, &PlayerMergeRecord{})
+	if err := db.AutoMigrate(&PlayerNote{}, &PlayerMergeRecord{}); err != nil {
+		log.Error("player auto-migration failed", zap.Error(err))
+	}
 
 	players := router.Group("/players")
 
@@ -107,7 +116,7 @@ func RegisterPlayerRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger, aud
 		return c.JSON(fiber.Map{"success": true})
 	})
 
-	// ── Limits ─────────────────────────────────────────────────────────────────
+	// ── Limits (propagated to User Service gRPC SetLimits) ───────────────────
 	players.Post("/:id/limits", func(c *fiber.Ctx) error {
 		var req struct {
 			MaxDepositDaily    *string `json:"max_deposit_daily"`
@@ -120,11 +129,44 @@ func RegisterPlayerRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger, aud
 		if err := c.BodyParser(&req); err != nil || req.Reason == "" {
 			return c.Status(400).JSON(fiber.Map{"error": "reason required"})
 		}
-		// TODO: call User/Wallet Service gRPC SetLimits.
+		if req.MaxDepositDaily == nil && req.MaxDepositWeekly == nil &&
+			req.MaxWithdrawalDaily == nil && req.MaxBet == nil && req.MaxLossDaily == nil {
+			return c.Status(400).JSON(fiber.Map{"error": "at least one limit required"})
+		}
+		playerID, err := strconv.ParseInt(c.Params("id"), 10, 64)
+		if err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": "invalid player id"})
+		}
+		if usersSvc == nil {
+			return c.Status(502).JSON(fiber.Map{"error": "user service unavailable"})
+		}
+
+		// Currency for Money payloads comes from the user profile (fallback USD).
+		currency := "USD"
+		if u, err := usersSvc.GetUser(c.Context(), playerID); err == nil && u != nil && u.GetCurrency() != "" {
+			currency = u.GetCurrency()
+		}
+
+		protoReq, notApplied, err := buildSetLimitsRequest(currency, req.MaxDepositDaily, req.MaxDepositWeekly, req.MaxBet, req.MaxLossDaily)
+		if err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": err.Error()})
+		}
+		if req.MaxWithdrawalDaily != nil {
+			notApplied["max_withdrawal_daily"] = "not supported by user service limits API"
+		}
+
+		limits, err := usersSvc.SetLimits(c.Context(), playerID, protoReq)
+		if err != nil {
+			log.Error("SetLimits downstream failed", zap.Int64("player_id", playerID), zap.Error(err))
+			logAudit(auditSvc, c, "player.limits.set.failed", "player", c.Params("id"), fiber.Map{
+				"limits": req, "reason": req.Reason, "error": err.Error(),
+			})
+			return c.Status(502).JSON(fiber.Map{"error": "user service set limits failed"})
+		}
 		logAudit(auditSvc, c, "player.limits.set", "player", c.Params("id"), fiber.Map{
 			"limits": req, "reason": req.Reason,
 		})
-		return c.JSON(fiber.Map{"success": true})
+		return c.JSON(fiber.Map{"success": true, "data": limits, "not_applied": notApplied})
 	})
 
 	// ── Adjust Balance (requires TOTP confirmation in the request body) ─────────
@@ -360,6 +402,45 @@ func RegisterPlayerRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger, aud
 			Delete(&models.CommunicationSuppression{})
 		return c.JSON(fiber.Map{"success": true})
 	})
+}
+
+// moneyLimit validates a decimal-string amount (NEVER float) and wraps it
+// into a user-service MoneyLimit payload. Nil input means "leave unchanged".
+func moneyLimit(raw *string, currency string) (*userv1.MoneyLimit, error) {
+	if raw == nil {
+		return nil, nil
+	}
+	amount, err := decimal.NewFromString(strings.TrimSpace(*raw))
+	if err != nil || amount.IsNegative() {
+		return nil, fmt.Errorf("invalid limit amount %q: must be a non-negative decimal", *raw)
+	}
+	return &userv1.MoneyLimit{
+		Amount:   &commonv1.Money{Amount: amount.String(), Currency: currency},
+		IsActive: true,
+	}, nil
+}
+
+// buildSetLimitsRequest maps admin limit fields onto the user-service
+// SetLimits RPC. Returns the request plus a map of fields that were
+// acknowledged but not applied downstream.
+func buildSetLimitsRequest(currency string, dailyDeposit, weeklyDeposit, dailyBet, dailyLoss *string) (*userv1.SetLimitsRequest, map[string]string, error) {
+	req := &userv1.SetLimitsRequest{}
+	notApplied := map[string]string{}
+	var err error
+
+	if req.DailyDepositLimit, err = moneyLimit(dailyDeposit, currency); err != nil {
+		return nil, nil, fmt.Errorf("max_deposit_daily: %w", err)
+	}
+	if req.WeeklyDepositLimit, err = moneyLimit(weeklyDeposit, currency); err != nil {
+		return nil, nil, fmt.Errorf("max_deposit_weekly: %w", err)
+	}
+	if req.DailyBetLimit, err = moneyLimit(dailyBet, currency); err != nil {
+		return nil, nil, fmt.Errorf("max_bet: %w", err)
+	}
+	if req.DailyLossLimit, err = moneyLimit(dailyLoss, currency); err != nil {
+		return nil, nil, fmt.Errorf("max_loss_daily: %w", err)
+	}
+	return req, notApplied, nil
 }
 
 // listPlayers returns paginated player list with filters.

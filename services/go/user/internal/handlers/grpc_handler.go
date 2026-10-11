@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"fmt"
+	"math"
 	"strconv"
 
 	"go.uber.org/zap"
@@ -48,7 +49,7 @@ func (h *UserGRPCHandler) GetUserByEmail(ctx context.Context, req *pb.GetUserByE
 	user, err := h.service.GetUserByEmail(ctx, req.Email)
 	if err != nil {
 		return &pb.GetUserByEmailResponse{
-			Error: &commonv1.ErrorDetails{ ErrorMessage: err.Error()},
+			Error: &commonv1.ErrorDetails{ErrorMessage: err.Error()},
 		}, nil
 	}
 	return &pb.GetUserByEmailResponse{User: toProtoUser(user)}, nil
@@ -56,21 +57,41 @@ func (h *UserGRPCHandler) GetUserByEmail(ctx context.Context, req *pb.GetUserByE
 
 func (h *UserGRPCHandler) UpdateUser(ctx context.Context, req *pb.UpdateUserRequest) (*pb.UpdateUserResponse, error) {
 	updateReq := &domain.UpdateUserRequest{UserID: parseUID(req.UserId.Value)}
-	if req.Username != nil { updateReq.Username = req.Username }
-	if req.FirstName != nil { updateReq.FirstName = req.FirstName }
-	if req.LastName != nil { updateReq.LastName = req.LastName }
-	if req.Phone != nil { updateReq.Phone = req.Phone }
-	if req.DateOfBirth != nil { updateReq.DateOfBirth = req.DateOfBirth }
-	if req.Address != nil { updateReq.Address = req.Address }
-	if req.City != nil { updateReq.City = req.City }
-	if req.PostalCode != nil { updateReq.PostalCode = req.PostalCode }
-	if req.Language != nil { updateReq.Language = req.Language }
-	if req.Timezone != nil { updateReq.Timezone = req.Timezone }
+	if req.Username != nil {
+		updateReq.Username = req.Username
+	}
+	if req.FirstName != nil {
+		updateReq.FirstName = req.FirstName
+	}
+	if req.LastName != nil {
+		updateReq.LastName = req.LastName
+	}
+	if req.Phone != nil {
+		updateReq.Phone = req.Phone
+	}
+	if req.DateOfBirth != nil {
+		updateReq.DateOfBirth = req.DateOfBirth
+	}
+	if req.Address != nil {
+		updateReq.Address = req.Address
+	}
+	if req.City != nil {
+		updateReq.City = req.City
+	}
+	if req.PostalCode != nil {
+		updateReq.PostalCode = req.PostalCode
+	}
+	if req.Language != nil {
+		updateReq.Language = req.Language
+	}
+	if req.Timezone != nil {
+		updateReq.Timezone = req.Timezone
+	}
 
 	user, err := h.service.UpdateUser(ctx, updateReq)
 	if err != nil {
 		return &pb.UpdateUserResponse{
-			Error: &commonv1.ErrorDetails{ ErrorMessage: err.Error()},
+			Error: &commonv1.ErrorDetails{ErrorMessage: err.Error()},
 		}, nil
 	}
 	return &pb.UpdateUserResponse{User: toProtoUser(user)}, nil
@@ -80,7 +101,7 @@ func (h *UserGRPCHandler) DeleteUser(ctx context.Context, req *pb.DeleteUserRequ
 	if err := h.service.DeleteUser(ctx, parseUID(req.UserId.Value), req.Reason); err != nil {
 		return &pb.DeleteUserResponse{
 			Success: false,
-			Error:   &commonv1.ErrorDetails{ ErrorMessage: err.Error()},
+			Error:   &commonv1.ErrorDetails{ErrorMessage: err.Error()},
 		}, nil
 	}
 	return &pb.DeleteUserResponse{Success: true}, nil
@@ -96,21 +117,41 @@ func (h *UserGRPCHandler) GetPreferences(ctx context.Context, req *pb.GetPrefere
 
 func (h *UserGRPCHandler) UpdatePreferences(ctx context.Context, req *pb.UpdatePreferencesRequest) (*pb.UpdatePreferencesResponse, error) {
 	pref := &domain.UserPreferences{UserID: parseUID(req.UserId.Value)}
-	if req.Language != nil { pref.Language = *req.Language }
-	if req.Timezone != nil { pref.Timezone = *req.Timezone }
-	if req.CurrencyDisplay != nil { pref.CurrencyDisplay = *req.CurrencyDisplay }
-	if req.MarketingEmails != nil { pref.MarketingEmails = *req.MarketingEmails }
-	if req.SmsNotifications != nil { pref.SMSNotifications = *req.SmsNotifications }
-	if req.PushNotifications != nil { pref.PushNotifications = *req.PushNotifications }
-	if req.RealityCheck != nil { pref.RealityCheck = *req.RealityCheck }
-	if req.RealityCheckIntervalMinutes != nil { pref.RealityCheckIntervalMinutes = int(*req.RealityCheckIntervalMinutes) }
-	if req.AutoPlay != nil { pref.AutoPlay = *req.AutoPlay }
-	if req.SoundPreference != nil { pref.SoundPreference = *req.SoundPreference }
+	if req.Language != nil {
+		pref.Language = *req.Language
+	}
+	if req.Timezone != nil {
+		pref.Timezone = *req.Timezone
+	}
+	if req.CurrencyDisplay != nil {
+		pref.CurrencyDisplay = *req.CurrencyDisplay
+	}
+	if req.MarketingEmails != nil {
+		pref.MarketingEmails = *req.MarketingEmails
+	}
+	if req.SmsNotifications != nil {
+		pref.SMSNotifications = *req.SmsNotifications
+	}
+	if req.PushNotifications != nil {
+		pref.PushNotifications = *req.PushNotifications
+	}
+	if req.RealityCheck != nil {
+		pref.RealityCheck = *req.RealityCheck
+	}
+	if req.RealityCheckIntervalMinutes != nil {
+		pref.RealityCheckIntervalMinutes = int(*req.RealityCheckIntervalMinutes)
+	}
+	if req.AutoPlay != nil {
+		pref.AutoPlay = *req.AutoPlay
+	}
+	if req.SoundPreference != nil {
+		pref.SoundPreference = *req.SoundPreference
+	}
 
 	updated, err := h.service.UpdatePreferences(ctx, pref)
 	if err != nil {
 		return &pb.UpdatePreferencesResponse{
-			Error: &commonv1.ErrorDetails{ ErrorMessage: err.Error()},
+			Error: &commonv1.ErrorDetails{ErrorMessage: err.Error()},
 		}, nil
 	}
 	return &pb.UpdatePreferencesResponse{Preferences: toProtoPreferences(updated)}, nil
@@ -153,7 +194,7 @@ func (h *UserGRPCHandler) SetLimits(ctx context.Context, req *pb.SetLimitsReques
 	limits, err := h.service.SetLimits(ctx, setReq)
 	if err != nil {
 		return &pb.SetLimitsResponse{
-			Error: &commonv1.ErrorDetails{ ErrorMessage: err.Error()},
+			Error: &commonv1.ErrorDetails{ErrorMessage: err.Error()},
 		}, nil
 	}
 	return &pb.SetLimitsResponse{Limits: toProtoLimits(limits)}, nil
@@ -174,8 +215,8 @@ func (h *UserGRPCHandler) GetActivity(ctx context.Context, req *pb.GetActivityRe
 	var pbActivities []*pb.ActivityEntry
 	for _, a := range activities {
 		pbActivities = append(pbActivities, &pb.ActivityEntry{
-			Id:      fmt.Sprintf("%v", a["id"]),
-			UserId:  &commonv1.UserId{Value: req.UserId.Value},
+			Id:          fmt.Sprintf("%v", a["id"]),
+			UserId:      &commonv1.UserId{Value: req.UserId.Value},
 			Description: fmt.Sprintf("%v", a["action"]),
 		})
 	}
@@ -186,18 +227,34 @@ func (h *UserGRPCHandler) GetActivity(ctx context.Context, req *pb.GetActivityRe
 	}, nil
 }
 
+// clampToInt32 converts a platform-sized int to int32 without wrapping.
+//
+// The domain models these values as `int` (64-bit on most targets) while protobuf
+// encodes them as int32. Limits are validated on the way in, but a mapper must not be
+// able to emit a wrapped, negative number if a row ever arrives out of range - that
+// would turn "session limit of 4294967296 minutes" into a negative value on the wire.
+// gosec G115 flagged each of these conversions as an integer overflow.
+func clampToInt32(v int) int32 {
+	if v > math.MaxInt32 {
+		return math.MaxInt32
+	}
+	if v < math.MinInt32 {
+		return math.MinInt32
+	}
+	return int32(v)
+}
+
 func toProtoUser(user *domain.User) *pb.User {
 	return &pb.User{
-		Id:          &commonv1.UserId{Value: fmt.Sprintf("%d", user.ID)},
-		Email:       user.Email,
-		Username:    user.Username,
-		Country:     user.CountryCode,
-		Currency:    user.CurrencyCode,
-		Status:      pb.UserStatus(pb.UserStatus_value[string(user.Status)]),
-		// #nosec G115 -- KYC level is 0..3 by domain invariant, far below int32 range.
-		KycLevel:    pb.KycLevel(user.KYCLevel),
-		CreatedAt:   timestamppb.New(user.CreatedAt),
-		UpdatedAt:   timestamppb.New(user.UpdatedAt),
+		Id:        &commonv1.UserId{Value: fmt.Sprintf("%d", user.ID)},
+		Email:     user.Email,
+		Username:  user.Username,
+		Country:   user.CountryCode,
+		Currency:  user.CurrencyCode,
+		Status:    pb.UserStatus(pb.UserStatus_value[string(user.Status)]),
+		KycLevel:  pb.KycLevel(clampToInt32(int(user.KYCLevel))),
+		CreatedAt: timestamppb.New(user.CreatedAt),
+		UpdatedAt: timestamppb.New(user.UpdatedAt),
 	}
 }
 
@@ -211,8 +268,7 @@ func toProtoPreferences(pref *domain.UserPreferences) *pb.UserPreferences {
 		SmsNotifications:            pref.SMSNotifications,
 		PushNotifications:           pref.PushNotifications,
 		RealityCheck:                pref.RealityCheck,
-		// #nosec G115 -- reality-check interval is minutes (bounded by RG limits), far below int32 range.
-		RealityCheckIntervalMinutes: int32(pref.RealityCheckIntervalMinutes),
+		RealityCheckIntervalMinutes: clampToInt32(pref.RealityCheckIntervalMinutes),
 		AutoPlay:                    pref.AutoPlay,
 		SoundPreference:             pref.SoundPreference,
 		UpdatedAt:                   timestamppb.New(pref.UpdatedAt),
@@ -226,12 +282,9 @@ func toProtoLimits(limits *domain.UserLimits) *pb.UserLimits {
 	}
 	if limits.SessionTimeLimit != nil {
 		result.SessionTimeLimit = &pb.TimeLimit{
-			// #nosec G115 -- session limit is minutes (bounded by RG limits), far below int32 range.
-			Minutes:  int32(limits.SessionTimeLimit.Minutes),
+			Minutes:  clampToInt32(limits.SessionTimeLimit.Minutes),
 			IsActive: limits.SessionTimeLimit.IsActive,
 		}
 	}
 	return result
 }
-
-
