@@ -5,7 +5,7 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use super::{WalletType, TransactionType, TransactionStatus};
+use super::{TransactionStatus, TransactionType, WalletType};
 
 /// Wallet domain events
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -201,88 +201,90 @@ impl FundUnlockedEvent {
     }
 }
 
+/// Shared payload for the transaction lifecycle events.
+#[derive(Debug, Clone)]
+pub struct TransactionEventSubject {
+    pub transaction_id: Uuid,
+    pub user_id: Uuid,
+    pub wallet_id: Uuid,
+    pub wallet_type: WalletType,
+    pub transaction_type: TransactionType,
+    pub amount: Decimal,
+    pub currency: String,
+}
+
 impl TransactionCreatedEvent {
-    pub fn new(
-        transaction_id: Uuid,
-        user_id: Uuid,
-        wallet_id: Uuid,
-        wallet_type: WalletType,
-        transaction_type: TransactionType,
-        amount: Decimal,
-        currency: String,
-        status: TransactionStatus,
-        reference_id: Option<Uuid>,
-        reference_type: Option<String>,
-        idempotency_key: Option<String>,
-    ) -> Self {
+    pub fn new(subject: TransactionEventSubject, created: TransactionCreated) -> Self {
         Self {
             event_id: Uuid::new_v4(),
             timestamp: Utc::now(),
-            transaction_id,
-            user_id,
-            wallet_id,
-            wallet_type,
-            transaction_type,
-            amount,
-            currency,
-            status,
-            reference_id,
-            reference_type,
-            idempotency_key,
+            transaction_id: subject.transaction_id,
+            user_id: subject.user_id,
+            wallet_id: subject.wallet_id,
+            wallet_type: subject.wallet_type,
+            transaction_type: subject.transaction_type,
+            amount: subject.amount,
+            currency: subject.currency,
+            status: created.status,
+            reference_id: created.reference_id,
+            reference_type: created.reference_type,
+            idempotency_key: created.idempotency_key,
         }
     }
 }
 
+/// Extra fields carried by a `transaction.created` event.
+#[derive(Debug, Clone)]
+pub struct TransactionCreated {
+    pub status: TransactionStatus,
+    pub reference_id: Option<Uuid>,
+    pub reference_type: Option<String>,
+    pub idempotency_key: Option<String>,
+}
+
 impl TransactionCompletedEvent {
-    pub fn new(
-        transaction_id: Uuid,
-        user_id: Uuid,
-        wallet_id: Uuid,
-        wallet_type: WalletType,
-        transaction_type: TransactionType,
-        amount: Decimal,
-        currency: String,
-    ) -> Self {
+    pub fn new(subject: TransactionEventSubject) -> Self {
         Self {
             event_id: Uuid::new_v4(),
             timestamp: Utc::now(),
-            transaction_id,
-            user_id,
-            wallet_id,
-            wallet_type,
-            transaction_type,
-            amount,
-            currency,
+            transaction_id: subject.transaction_id,
+            user_id: subject.user_id,
+            wallet_id: subject.wallet_id,
+            wallet_type: subject.wallet_type,
+            transaction_type: subject.transaction_type,
+            amount: subject.amount,
+            currency: subject.currency,
             completed_at: Utc::now(),
         }
     }
 }
 
 impl TransactionFailedEvent {
-    pub fn new(
-        transaction_id: Uuid,
-        user_id: Uuid,
-        wallet_id: Uuid,
-        wallet_type: WalletType,
-        transaction_type: TransactionType,
-        amount: Decimal,
-        currency: String,
-        error_code: String,
-        error_message: String,
-    ) -> Self {
+    pub fn new(subject: TransactionEventSubject, error: TransactionFailure) -> Self {
+        let TransactionFailure {
+            error_code,
+            error_message,
+        } = error;
         Self {
             event_id: Uuid::new_v4(),
             timestamp: Utc::now(),
-            transaction_id,
-            user_id,
-            wallet_id,
-            wallet_type,
-            transaction_type,
-            amount,
-            currency,
+            transaction_id: subject.transaction_id,
+            user_id: subject.user_id,
+            wallet_id: subject.wallet_id,
+            wallet_type: subject.wallet_type,
+            transaction_type: subject.transaction_type,
+            amount: subject.amount,
+            currency: subject.currency,
             error_code,
             error_message,
             failed_at: Utc::now(),
         }
     }
+}
+
+/// Failure detail carried by a `transaction.failed` event.
+#[derive(Debug, Clone)]
+pub struct TransactionFailure {
+    pub error_code: String,
+    pub error_message: String,
 }

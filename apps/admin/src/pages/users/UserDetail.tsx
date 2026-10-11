@@ -47,7 +47,6 @@ import { USER_STATUSES, KYC_LEVELS, TRANSACTION_STATUSES } from "@/utils/constan
 import { getErrorMessage } from "@/utils/errors";
 import type { ColumnsType } from "antd/es/table";
 import type {
-  UserProfile,
   PlayerGroup,
   BlockUserPayload,
   KycDocument,
@@ -111,13 +110,7 @@ export default function UserDetail() {
     enabled: !!id && activeTab === "withdrawals",
   });
 
-  const { data: transactions, isLoading: transactionsLoading } = useQuery({
-    queryKey: ["user-transactions", id],
-    queryFn: () => financeService.getTransactions({ user_id: id, page: 1, page_size: 20 }),
-    enabled: !!id && activeTab === "transactions",
-  });
-
-  const { data: casinoBets, isLoading: casinoBetsLoading } = useQuery({
+  const { data: casinoBets } = useQuery({
     queryKey: ["user-casino-bets", id],
     queryFn: () => casinoService.getCasinoBets({ user_id: id, page: 1, page_size: 20 }),
     enabled: !!id && activeTab === "casino_bets",
@@ -141,7 +134,7 @@ export default function UserDetail() {
     enabled: !!id && activeTab === "kyc",
   });
 
-  const { data: limits, isLoading: limitsLoading } = useQuery({
+  const { data: limits } = useQuery({
     queryKey: ["user-limits", id],
     queryFn: () => usersService.getLimits(id!),
     enabled: !!id && activeTab === "rg",

@@ -27,49 +27,52 @@
 package shared
 
 import (
+	"github.com/opus-casino/shared/go/constants"
 	"github.com/opus-casino/shared/go/errors"
+	"github.com/opus-casino/shared/go/helpers"
 	"github.com/opus-casino/shared/go/types"
 	"github.com/opus-casino/shared/go/validators"
-	"github.com/opus-casino/shared/go/constants"
-	"github.com/opus-casino/shared/go/helpers"
 )
 
 // Re-export types
 type (
-	UserId         = types.UserId
-	BetId          = types.BetId
-	TransactionId  = types.TransactionId
-	GameId         = types.GameId
-	SessionId      = types.SessionId
-	Money          = types.Money
+	UserId           = types.UserId
+	BetId            = types.BetId
+	TransactionId    = types.TransactionId
+	GameId           = types.GameId
+	SessionId        = types.SessionId
+	Money            = types.Money
 	PaginationParams = types.PaginationParams
-	PaginationResult[T any] = types.PaginationResult[T]
-	DateRange      = types.DateRange
-	ErrorDetails   = types.ErrorDetails
-	FieldError     = types.FieldError
-	ApiResponse[T any] = types.ApiResponse[T]
-	HealthStatus   = types.HealthStatus
-	DeviceType     = types.DeviceType
-	WalletType     = types.WalletType
-	TransactionType = types.TransactionType
-	BetType        = types.BetType
-	BetStatus      = types.BetStatus
-	KycLevel       = types.KycLevel
+	// NOTE: generic types cannot be aliases (spec); defined types keep the
+	// re-export compiling. The module never built before, so no caller depends
+	// on alias identity.
+	PaginationResult[T any] types.PaginationResult[T]
+	DateRange               = types.DateRange
+	ErrorDetails            = types.ErrorDetails
+	FieldError              = types.FieldError
+	ApiResponse[T any]      types.ApiResponse[T]
+	HealthStatus            = types.HealthStatus
+	DeviceType              = types.DeviceType
+	WalletType              = types.WalletType
+	TransactionType         = types.TransactionType
+	BetType                 = types.BetType
+	BetStatus               = types.BetStatus
+	KycLevel                = types.KycLevel
 )
 
 // Re-export validators
 var (
-	IsValidEmail       = validators.IsValidEmail
-	IsValidUUID        = validators.IsValidUUID
-	IsValidCountryCode = validators.IsValidCountryCode
+	IsValidEmail        = validators.IsValidEmail
+	IsValidUUID         = validators.IsValidUUID
+	IsValidCountryCode  = validators.IsValidCountryCode
 	IsValidCurrencyCode = validators.IsValidCurrencyCode
-	IsValidPassword    = validators.IsValidPassword
-	IsValidPhone       = validators.IsValidPhone
-	IsValidOdds        = validators.IsValidOdds
-	IsValidPercentage  = validators.IsValidPercentage
-	IsValidIP          = validators.IsValidIP
-	IsValidDate        = validators.IsValidDate
-	IsValidUsername    = validators.IsValidUsername
+	IsValidPassword     = validators.IsValidPassword
+	IsValidPhone        = validators.IsValidPhone
+	IsValidOdds         = validators.IsValidOdds
+	IsValidPercentage   = validators.IsValidPercentage
+	IsValidIP           = validators.IsValidIP
+	IsValidDate         = validators.IsValidDate
+	IsValidUsername     = validators.IsValidUsername
 )
 
 // Re-export constants
@@ -85,18 +88,24 @@ var (
 
 // Re-export helpers
 var (
-	FormatMoney    = helpers.FormatMoney
-	ParseMoney     = helpers.ParseMoney
-	AddMoney       = helpers.AddMoney
-	SubtractMoney  = helpers.SubtractMoney
-	MultiplyMoney  = helpers.MultiplyMoney
-	CompareMoney   = helpers.CompareMoney
-	GenerateUUID   = helpers.GenerateUUID
-	NowMs          = helpers.NowMs
-	NowISO         = helpers.NowISO
-	DeepClone      = helpers.DeepClone
+	FormatMoney   = helpers.FormatMoney
+	ParseMoney    = helpers.ParseMoney
+	AddMoney      = helpers.AddMoney
+	SubtractMoney = helpers.SubtractMoney
+	MultiplyMoney = helpers.MultiplyMoney
+	CompareMoney  = helpers.CompareMoney
+	GenerateUUID  = helpers.GenerateUUID
+	NowMs         = helpers.NowMs
+	NowISO        = helpers.NowISO
+	// NOTE: generic functions cannot be re-exported via var alias;
+	// a thin wrapper preserves the API for all type arguments.
 	CalculatePercentage = helpers.CalculatePercentage
 )
+
+// DeepClone re-exports helpers.DeepClone for all type arguments.
+func DeepClone[T any](obj T) (*T, error) {
+	return helpers.DeepClone(obj)
+}
 
 // Re-export errors
 type (
@@ -104,14 +113,14 @@ type (
 )
 
 var (
-	NewValidationError     = errors.NewValidationError
-	NewAuthError          = errors.NewAuthError
-	NewAuthzError         = errors.NewAuthzError
-	NewNotFoundError      = errors.NewNotFoundError
-	NewAlreadyExistsError = errors.NewAlreadyExistsError
-	NewInvalidArgumentError = errors.NewInvalidArgumentError
+	NewValidationError          = errors.NewValidationError
+	NewAuthError                = errors.NewAuthError
+	NewAuthzError               = errors.NewAuthzError
+	NewNotFoundError            = errors.NewNotFoundError
+	NewAlreadyExistsError       = errors.NewAlreadyExistsError
+	NewInvalidArgumentError     = errors.NewInvalidArgumentError
 	NewInsufficientBalanceError = errors.NewInsufficientBalanceError
-	NewRateLimitExceededError = errors.NewRateLimitExceededError
-	NewServiceUnavailableError = errors.NewServiceUnavailableError
-	NewInternalError      = errors.NewInternalError
+	NewRateLimitExceededError   = errors.NewRateLimitExceededError
+	NewServiceUnavailableError  = errors.NewServiceUnavailableError
+	NewInternalError            = errors.NewInternalError
 )

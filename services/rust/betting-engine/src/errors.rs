@@ -61,7 +61,10 @@ pub enum AppError {
     CashoutUnavailable,
 
     #[error("Insufficient balance: required {required}, available {available}")]
-    InsufficientBalance { required: Decimal, available: Decimal },
+    InsufficientBalance {
+        required: Decimal,
+        available: Decimal,
+    },
 
     #[error("Service unavailable: {0}")]
     ServiceUnavailable(String),
@@ -88,7 +91,12 @@ impl From<validator::ValidationErrors> for AppError {
                 field: field.to_string(),
                 message: errors
                     .first()
-                    .map(|e| e.message.as_ref().map(|m| m.to_string()).unwrap_or_default())
+                    .map(|e| {
+                        e.message
+                            .as_ref()
+                            .map(|m| m.to_string())
+                            .unwrap_or_default()
+                    })
                     .unwrap_or_default(),
             })
             .collect();
@@ -142,12 +150,9 @@ impl IntoResponse for AppError {
                 format!("{entity} not found"),
                 Some(serde_json::json!({"id": id})),
             ),
-            AppError::Conflict { reason } => (
-                StatusCode::CONFLICT,
-                "CONFLICT",
-                reason.clone(),
-                None,
-            ),
+            AppError::Conflict { reason } => {
+                (StatusCode::CONFLICT, "CONFLICT", reason.clone(), None)
+            }
             AppError::BetEventNotFound { event_id } => (
                 StatusCode::NOT_FOUND,
                 "BET_EVENT_NOT_FOUND",
@@ -166,7 +171,11 @@ impl IntoResponse for AppError {
                 format!("Market {market_id} closed"),
                 None,
             ),
-            AppError::BetOddsChanged { index, submitted, current } => (
+            AppError::BetOddsChanged {
+                index,
+                submitted,
+                current,
+            } => (
                 StatusCode::CONFLICT,
                 "BET_ODDS_CHANGED",
                 "Odds changed".to_string(),
@@ -192,7 +201,9 @@ impl IntoResponse for AppError {
                 StatusCode::UNPROCESSABLE_ENTITY,
                 "BET_MAX_PAYOUT_EXCEEDED",
                 format!("Max payout {max}"),
-                Some(serde_json::json!({"max_payout": max.to_string(), "potential_win": potential.to_string()})),
+                Some(
+                    serde_json::json!({"max_payout": max.to_string(), "potential_win": potential.to_string()}),
+                ),
             ),
             AppError::BetRejected { reason } => (
                 StatusCode::UNPROCESSABLE_ENTITY,
@@ -212,11 +223,16 @@ impl IntoResponse for AppError {
                 "Cashout unavailable".to_string(),
                 None,
             ),
-            AppError::InsufficientBalance { required, available } => (
+            AppError::InsufficientBalance {
+                required,
+                available,
+            } => (
                 StatusCode::UNPROCESSABLE_ENTITY,
                 "WALLET_INSUFFICIENT_BALANCE",
                 "Insufficient balance".to_string(),
-                Some(serde_json::json!({"required": required.to_string(), "available": available.to_string()})),
+                Some(
+                    serde_json::json!({"required": required.to_string(), "available": available.to_string()}),
+                ),
             ),
             AppError::RateLimited { retry_after_secs } => (
                 StatusCode::TOO_MANY_REQUESTS,
@@ -260,7 +276,11 @@ impl IntoResponse for AppError {
         };
 
         let body = ErrorResponse {
-            error: ErrorBody { code, message, details },
+            error: ErrorBody {
+                code,
+                message,
+                details,
+            },
         };
 
         (status, Json(body)).into_response()

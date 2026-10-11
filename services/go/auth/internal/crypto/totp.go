@@ -52,18 +52,44 @@ func ValidateTOTP(secret, code string) bool {
 	return totp.Validate(code, secret)
 }
 
-// GenerateBackupCodes generates backup codes for 2FA recovery
+// GenerateBackupCodes generates backup codes for 2FA recovery.
+// Codes are guaranteed to be unique within the batch: a duplicate would
+// silently reduce the effective number of usable recovery attempts.
 func GenerateBackupCodes(count int) ([]string, error) {
-	codes := make([]string, count)
-	for i := 0; i < count; i++ {
-		b := make([]byte, 5)
-		if _, err := rand.Read(b); err != nil {
-			return nil, fmt.Errorf("failed to generate backup code: %w", err)
-		}
-		code := base32.StdEncoding.EncodeToString(b)
-		code = strings.TrimRight(code, "=")
-		codes[i] = code[:8]
+	if count <= 0 {
+		return nil, fmt.Errorf("backup code count must be positive")
 	}
+
+	codes := make([]string, 0, count)
+	seen := make(map[string]struct{}, count)
+
+	// Bounded retry loop: a collision needs a new random draw, but an
+	// unbounded loop would hang if the generator ever misbehaved.
+	const maxAttemptsPerCode = 16
+	for len(codes) < count {
+		for attempt := 0; attempt < maxAttemptsPerCode && len(codes) < count; attempt++ {
+			b := make([]byte, 5)
+			if _, err := rand.Read(b); err != nil {
+				return nil, fmt.Errorf("failed to generate backup code: %w", err)
+			}
+			code := strings.TrimRight(base32.StdEncoding.EncodeToString(b), "=")
+			if len(code) < 8 {
+				continue
+			}
+			code = code[:8]
+			if _, exists := seen[code]; exists {
+				continue
+			}
+			seen[code] = struct{}{}
+			codes = append(codes, code)
+		}
+		if len(codes) < count {
+			// Every attempt collided — practically impossible, but fail loudly
+			// instead of looping forever or returning duplicates.
+			return nil, fmt.Errorf("failed to generate %d unique backup codes", count)
+		}
+	}
+
 	return codes, nil
 }
 

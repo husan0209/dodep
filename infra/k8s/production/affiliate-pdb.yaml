@@ -1,0 +1,19 @@
+# ============================================================
+# Pod Disruption Budget — Affiliate Service (standalone file)
+# Does not edit infra/k8s/production/pdbs.yaml (owned by parallel work).
+# Selector matches infra/helm/charts/affiliate selectorLabels.
+# ============================================================
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: affiliate-service
+  namespace: platform
+  labels:
+    app.kubernetes.io/name: affiliate
+    app.kubernetes.io/component: affiliate-service
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: affiliate
+      app.kubernetes.io/component: affiliate-service

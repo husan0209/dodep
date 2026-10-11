@@ -85,8 +85,8 @@ fn default_sportradar_api_url() -> String {
     "https://api.sportradar.com".into()
 }
 fn default_odds_live_ttl() -> u64 {
-    5   // 5 seconds for live events
+    5 // 5 seconds for live events
 }
 fn default_odds_prematch_ttl() -> u64 {
-    30  // 30 seconds for pre-match events
+    30 // 30 seconds for pre-match events
 }

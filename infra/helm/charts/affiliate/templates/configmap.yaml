@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "affiliate.fullname" . }}-config
+  labels:
+    {{- include "affiliate.labels" . | nindent 4 }}
+data:
+  app-env: "development"
+  port: "{{ .Values.service.httpTargetPort }}"
+  grpc-port: "{{ .Values.service.grpcTargetPort }}"
+
+  # Redpanda configuration (matches services/go/affiliate/internal/consumer)
+  redpanda-brokers: {{ .Values.affiliate.redpanda.brokers | quote }}
+  redpanda-enabled: {{ .Values.affiliate.redpanda.enabled | quote }}
+  redpanda-consumer-group: {{ .Values.affiliate.redpanda.consumer_group | quote }}
+
+  # Public tracking + commission policy (RevShare from NGR, no RTP lever)
+  cors-origins: "http://localhost:3000"
+  hold-release-interval: "1h"
+  commission-default-rate: {{ .Values.affiliate.commission.default_rate | quote }}
+  commission-hold-period-days: {{ .Values.affiliate.commission.hold_period_days | quote }}
+  commission-min-payout: {{ .Values.affiliate.commission.min_payout_amount | quote }}
+  commission-approval-mode: {{ .Values.affiliate.commission.approval_mode | quote }}
+  commission-payout-schedule: {{ .Values.affiliate.commission.payout_schedule | quote }}
+  tracking-cookie: {{ .Values.affiliate.tracking.click_cookie_name | quote }}

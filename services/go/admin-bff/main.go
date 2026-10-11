@@ -89,26 +89,35 @@ func main() {
 	app.Get("/health", func(c *fiber.Ctx) error { return c.SendString("ok") })
 	app.Get("/ready", func(c *fiber.Ctx) error { return c.SendString("ready") })
 
-	// gRPC clients
+	// gRPC clients. Closing them on exit is best effort, but the error is still
+	// errcheck-visible: a silently leaked connection keeps the process alive.
+	closeOnExit := func(name string, c interface{ Close() error }) func() {
+		return func() {
+			if err := c.Close(); err != nil {
+				log.Warn("failed to close gRPC client", zap.String("client", name), zap.Error(err))
+			}
+		}
+	}
+
 	userClient, err := client.NewUserClient(cfg.UserService.Address, cfg.UserService.Timeout)
 	if err != nil {
 		log.Fatal("Failed to connect to user service", zap.Error(err))
 	}
-	defer userClient.Close()
+	defer closeOnExit("user", userClient)()
 	log.Info("User service client ready")
 
 	paymentClient, err := client.NewPaymentClient(cfg.PaymentService.Address, cfg.PaymentService.Timeout)
 	if err != nil {
 		log.Fatal("Failed to connect to payment service", zap.Error(err))
 	}
-	defer paymentClient.Close()
+	defer closeOnExit("payment", paymentClient)()
 	log.Info("Payment service client ready")
 
 	bettingClient, err := client.NewBettingClient(cfg.BettingEngine.Address, cfg.BettingEngine.Timeout)
 	if err != nil {
 		log.Fatal("Failed to connect to betting engine", zap.Error(err))
 	}
-	defer bettingClient.Close()
+	defer closeOnExit("betting", bettingClient)()
 	log.Info("Betting engine client ready")
 
 	// Services
@@ -146,7 +155,7 @@ func main() {
 	handlers.RegisterDashboardRoutes(admin, db, log, auditSvc)
 	handlers.RegisterUserRoutes(admin, usersSvc, log)
 	handlers.RegisterFinanceRoutes(admin, financeSvc, db, log)
-	handlers.RegisterPlayerRoutes(admin, db, log, auditSvc)
+	handlers.RegisterPlayerRoutes(admin, db, log, auditSvc, usersSvc)
 	handlers.RegisterCRMRoutes(admin, db, log, auditSvc)
 	handlers.RegisterWSRoutes(admin, wsHub, log)
 

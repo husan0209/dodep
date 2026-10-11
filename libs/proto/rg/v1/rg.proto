@@ -1,0 +1,223 @@
+// RG Service - gRPC service definition
+// Responsible Gambling: limits, self-exclusion, time-outs, enforcement gate.
+//
+// Regulatory grounding:
+// - UKGC LCCP SR 3.5 (self-exclusion: min 6 months, multi-operator scheme).
+// - GAMSTOP: national online self-exclusion scheme (free, websites + apps).
+// - Skill: domain-specific/responsible-gambling.skill.md (normative for logic).
+
+syntax = "proto3";
+
+package rg.v1;
+
+option go_package = "github.com/opus-casino/proto/gen/go/rg/v1";
+option java_multiple_files = true;
+option java_package = "com.opuscasino.proto.rg.v1";
+
+import "common/v1/types.proto";
+import "common/v1/pagination.proto";
+import "google/protobuf/timestamp.proto";
+
+// RGService is the enforcement gate for all gambling actions (RULE 4:
+// self-excluded users must not gamble — checked on every bet, game launch
+// and deposit). Withdrawals are NEVER blocked.
+service RGService {
+  // CheckPlayAllowed is called BEFORE every bet, game launch and deposit.
+  rpc CheckPlayAllowed(CheckPlayAllowedRequest) returns (CheckPlayAllowedResponse);
+
+  // SetLimits creates or updates player limits (decrease immediate,
+  // increase after cooling period).
+  rpc SetLimits(SetLimitsRequest) returns (SetLimitsResponse);
+
+  // GetLimits returns effective limits plus pending increases.
+  rpc GetLimits(GetLimitsRequest) returns (GetLimitsResponse);
+
+  // StartSelfExclusion activates self-exclusion (single-operator).
+  rpc StartSelfExclusion(StartSelfExclusionRequest) returns (StartSelfExclusionResponse);
+
+  // RevokeSelfExclusion lifts an EXPIRED temporary exclusion after cooling.
+  // Permanent exclusions can never be revoked via this API.
+  rpc RevokeSelfExclusion(RevokeSelfExclusionRequest) returns (RevokeSelfExclusionResponse);
+
+  // StartTimeout activates a short cooling-off time-out.
+  rpc StartTimeout(StartTimeoutRequest) returns (StartTimeoutResponse);
+
+  // GetStatus returns the aggregate protection posture of a user.
+  rpc GetStatus(GetStatusRequest) returns (GetStatusResponse);
+
+  // RecordSpend reports settled money movement for limit accounting.
+  rpc RecordSpend(RecordSpendRequest) returns (RecordSpendResponse);
+}
+
+// ============ Enforcement ============
+
+enum Channel {
+  CHANNEL_UNSPECIFIED = 0;
+  CHANNEL_BET = 1;          // place bet (sportsbook + casino wager)
+  CHANNEL_GAME_LAUNCH = 2;   // open a casino game session
+  CHANNEL_DEPOSIT = 3;      // deposit attempt
+  CHANNEL_WITHDRAWAL = 4;   // always allowed, checked for audit only
+}
+
+message CheckPlayAllowedRequest {
+  common.v1.UserId user_id = 1;
+  Channel channel = 2;
+  // Amount is required for CHANNEL_BET and CHANNEL_DEPOSIT (decimal string).
+  string amount = 3;
+  string currency = 4; // ISO 4217
+}
+
+message CheckPlayAllowedResponse {
+  bool allowed = 1;
+  string reason_code = 2; // RG_SELF_EXCLUDED | RG_COOL_OFF | RG_DEPOSIT_LIMIT | ...
+  string message = 3;
+  // Remaining headroom for the binding limit, when applicable.
+  string remaining_amount = 4;
+}
+
+// ============ Limits ============
+
+message SetLimitsRequest {
+  common.v1.UserId user_id = 1;
+  // All amounts are decimal strings, null means "no change".
+  optional string deposit_daily = 2;
+  optional string deposit_weekly = 3;
+  optional string deposit_monthly = 4;
+  optional string loss_daily = 5;
+  optional string loss_weekly = 6;
+  optional string loss_monthly = 7;
+  optional string wager_daily = 8;
+  optional string wager_weekly = 9;
+  optional int32 session_minutes = 10;
+  optional int32 reality_check_minutes = 11;
+}
+
+message SetLimitsResponse {
+  RGLimits limits = 1;
+  // Increases that entered the cooling period.
+  repeated PendingChange pending = 2;
+}
+
+message GetLimitsRequest {
+  common.v1.UserId user_id = 1;
+}
+
+message GetLimitsResponse {
+  RGLimits limits = 1;
+  repeated PendingChange pending = 2;
+}
+
+message RGLimits {
+  common.v1.UserId user_id = 1;
+  string deposit_daily = 2;
+  string deposit_weekly = 3;
+  string deposit_monthly = 4;
+  string loss_daily = 5;
+  string loss_weekly = 6;
+  string loss_monthly = 7;
+  string wager_daily = 8;
+  string wager_weekly = 9;
+  int32 session_minutes = 10;
+  int32 reality_check_minutes = 11;
+  google.protobuf.Timestamp updated_at = 12;
+}
+
+message PendingChange {
+  string id = 1;
+  string limit_type = 2;
+  string old_value = 3;
+  string new_value = 4;
+  google.protobuf.Timestamp effective_at = 5;
+}
+
+// ============ Self-exclusion & time-out ============
+
+enum ExclusionPeriod {
+  EXCLUSION_PERIOD_UNSPECIFIED = 0;
+  EXCLUSION_24H = 1;
+  EXCLUSION_7D = 2;
+  EXCLUSION_30D = 3;
+  EXCLUSION_6M = 4;   // GAMSTOP minimum for multi-operator sync
+  EXCLUSION_1Y = 5;
+  EXCLUSION_PERMANENT = 6;
+}
+
+enum TimeoutPeriod {
+  TIMEOUT_PERIOD_UNSPECIFIED = 0;
+  TIMEOUT_24H = 1;
+  TIMEOUT_48H = 2;
+  TIMEOUT_7D = 3;
+  TIMEOUT_30D = 4;
+}
+
+message StartSelfExclusionRequest {
+  common.v1.UserId user_id = 1;
+  ExclusionPeriod period = 2;
+  string reason = 3; // player-supplied, privacy-sensitive, never logged verbatim
+}
+
+message StartSelfExclusionResponse {
+  Exclusion exclusion = 1;
+}
+
+message RevokeSelfExclusionRequest {
+  common.v1.UserId user_id = 1;
+  bool confirm = 2; // explicit positive action is required
+}
+
+message RevokeSelfExclusionResponse {
+  bool revoked = 1;
+}
+
+message StartTimeoutRequest {
+  common.v1.UserId user_id = 1;
+  TimeoutPeriod period = 2;
+}
+
+message StartTimeoutResponse {
+  Timeout timeout = 1;
+}
+
+message Exclusion {
+  string id = 1;
+  common.v1.UserId user_id = 2;
+  string type = 3; // self | operator | regulatory
+  string status = 4; // active | expired | revoked
+  google.protobuf.Timestamp until = 5; // absent = permanent
+  bool permanent = 6;
+  google.protobuf.Timestamp created_at = 7;
+}
+
+message Timeout {
+  string id = 1;
+  common.v1.UserId user_id = 2;
+  google.protobuf.Timestamp until = 3;
+  google.protobuf.Timestamp created_at = 4;
+}
+
+// ============ Status & spend ============
+
+message GetStatusRequest {
+  common.v1.UserId user_id = 1;
+}
+
+message GetStatusResponse {
+  bool gambling_allowed = 1;
+  string blocked_reason = 2;
+  RGLimits limits = 3;
+  Exclusion active_exclusion = 4;
+  Timeout active_timeout = 5;
+  int32 reality_check_minutes = 6;
+}
+
+message RecordSpendRequest {
+  common.v1.UserId user_id = 1;
+  // One of: deposit | wager | payout.
+  string kind = 2;
+  string amount = 3; // decimal string, must be >= 0
+  string currency = 4;
+}
+
+message RecordSpendResponse {
+  bool recorded = 1;
+}

@@ -67,14 +67,16 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   }
 
   /// Handle get current user event
-  Future<void> _onGetCurrentUser(AuthGetCurrentUser event, Emitter<AuthState> emit) async {
+  Future<void> _onGetCurrentUser(
+      AuthGetCurrentUser event, Emitter<AuthState> emit) async {
     // Implementation would call repository to get current user
     // For now, emit unauthenticated as placeholder
     emit(const AuthState.unauthenticated());
   }
 
   /// Handle token refresh event
-  Future<void> _onRefreshToken(AuthRefreshToken event, Emitter<AuthState> emit) async {
+  Future<void> _onRefreshToken(
+      AuthRefreshToken event, Emitter<AuthState> emit) async {
     // Implementation would call repository to refresh tokens
     // For now, do nothing
   }

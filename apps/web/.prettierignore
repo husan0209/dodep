@@ -1,0 +1,11 @@
+# Playwright writes all of these at runtime. They are not source, and
+# prettier's --check was failing on e2e/playwright-report/index.html and
+# e2e/test-results/.last-run.json.
+e2e/.auth/
+e2e/test-results/
+e2e/playwright-report/
+
+node_modules/
+.next/
+out/
+coverage/

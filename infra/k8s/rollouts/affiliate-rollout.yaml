@@ -1,0 +1,133 @@
+# Argo Rollouts — Affiliate Service canary
+# Standalone file — does NOT edit canary-rollouts.yaml (shared AnalysisTemplates).
+# Reuses the existing namespace-level templates verbatim:
+#   success-rate, latency-p99, error-rate   (see canary-rollouts.yaml)
+# Adds ONE affiliate-specific template: affiliate-hold-release-freshness.
+#
+# Rationale: money correctness is the SLO for this service, not only HTTP health.
+# A canary that returns 200s but stops releasing held commissions silently costs
+# partners real income, and none of the generic templates would catch it.
+# Every metric below is a real kube-state-metrics series; no invented names.
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: affiliate
+  namespace: platform
+  labels:
+    app: affiliate
+    version: stable
+spec:
+  replicas: 4
+  progressDeadlineSeconds: 600
+  strategy:
+    canary:
+      canaryService: affiliate-canary
+      stableService: affiliate-canary
+      steps:
+        - setWeight: 5
+        - pause: { duration: 3m }
+
+        - analysis:
+            templates:
+              - templateName: success-rate
+              - templateName: latency-p99
+              - templateName: error-rate
+            args:
+              - name: service-name
+                value: affiliate
+            startingStep: 1
+            duration: 10m
+            interval: 1m
+            successfulRunHistoryLimit: 3
+            unsuccessfulRunHistoryLimit: 1
+
+        - setWeight: 25
+        - pause: { duration: 3m }
+
+        - setWeight: 50
+        - pause: { duration: 3m }
+
+        - setWeight: 100
+
+      trafficRouting:
+        istio:
+          virtualService:
+            name: affiliate-api-routing
+            routes:
+              - primary
+            destinationRule:
+              name: affiliate-service
+
+      revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: affiliate
+      app.kubernetes.io/component: affiliate-service
+
+---
+# AnalysisTemplate: hold-release freshness
+# Fails the rollout when the in-process outbox/hold-release worker stops making
+# progress — the exact failure mode of runbook AFF-RB-01.
+#
+# Honest constraint: the service exposes no /metrics endpoint yet (see
+# infra/helm/charts/affiliate/values.yaml — serviceMonitor.enabled=false), so
+# business-level freshness CANNOT be measured from Prometheus here. These checks
+# cover only pod liveness of that worker. Business SLO alerting for stale accrual
+# belongs in ClickHouse (grafana-dashboard-affiliate) until /metrics lands.
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: affiliate-hold-release-freshness
+  namespace: platform
+spec:
+  args:
+    - name: service-name
+      default: affiliate
+  metrics:
+    # Canary pod is running (any replica present and Ready).
+    - name: canary-ready
+      interval: 1m
+      count: 3
+      successCondition: result[0] >= 1
+      failureLimit: 3
+      provider:
+        prometheus:
+          address: http://prometheus.monitoring.svc.cluster.local:9090
+          query: |
+            sum(kube_pod_status_ready{
+              namespace="platform",
+              pod=~"affiliate-.*",
+              condition="true"
+            })
+
+    # Canary worker is not crash-looping (worker runs in-process, no sidecar).
+    - name: no-crash-loop
+      interval: 1m
+      count: 3
+      successCondition: result[0] <= 0
+      failureLimit: 3
+      provider:
+        prometheus:
+          address: http://prometheus.monitoring.svc.cluster.local:9090
+          query: |
+            sum(increase(kube_pod_container_status_restarts_total{
+              namespace="platform",
+              container="affiliate",
+              pod=~"affiliate-.*"
+            }[30m]))
+
+    # Canary pods are not pending (image pull / scheduling stuck).
+    - name: no-pending-pods
+      interval: 1m
+      count: 3
+      successCondition: result[0] <= 0
+      failureLimit: 3
+      provider:
+        prometheus:
+          address: http://prometheus.monitoring.svc.cluster.local:9090
+          query: |
+            sum(kube_pod_status_phase{
+              namespace="platform",
+              pod=~"affiliate-.*",
+              phase="Pending"
+            }) or vector(0)

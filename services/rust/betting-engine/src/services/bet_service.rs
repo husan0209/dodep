@@ -1,6 +1,7 @@
 use rust_decimal::Decimal;
-use tracing::{info, warn};
-use uuid::Uuid;
+use tracing::info;
+// Needed for `PlaceBetRequest::validate()` (trait method from `#[derive(Validate)]`).
+use validator::Validate;
 
 use crate::domain::bet::*;
 use crate::domain::odds::{calculate_combined_odds, calculate_potential_win};
@@ -22,11 +23,7 @@ impl BetService {
     }
 
     #[tracing::instrument(name = "service.place_bet", skip(self, req), fields(user_id = %user_id))]
-    pub async fn place_bet(
-        &self,
-        user_id: UserId,
-        req: PlaceBetRequest,
-    ) -> Result<Bet, AppError> {
+    pub async fn place_bet(&self, user_id: UserId, req: PlaceBetRequest) -> Result<Bet, AppError> {
         req.validate()?;
 
         if req.selections.is_empty() {
@@ -88,11 +85,7 @@ impl BetService {
     }
 
     #[tracing::instrument(name = "service.get_bet", skip(self))]
-    pub async fn get_bet(
-        &self,
-        user_id: UserId,
-        bet_id: BetId,
-    ) -> Result<Bet, AppError> {
+    pub async fn get_bet(&self, user_id: UserId, bet_id: BetId) -> Result<Bet, AppError> {
         self.bet_repo
             .get_bet_by_id(bet_id, user_id)
             .await?

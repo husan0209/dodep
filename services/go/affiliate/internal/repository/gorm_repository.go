@@ -26,15 +26,15 @@ func NewGormAffiliateRepository(db *gorm.DB, logger *zap.Logger) *GormAffiliateR
 }
 
 type enrollmentRequestModel struct {
-	ID         uuid.UUID `gorm:"type:uuid;primaryKey"`
-	UserID     int64
-	Status     string
-	Reason     string
+	ID          uuid.UUID `gorm:"type:uuid;primaryKey"`
+	UserID      int64
+	Status      string
+	Reason      string
 	ReviewNotes string
-	ReviewedBy string
-	ReviewedAt *time.Time
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
+	ReviewedBy  string
+	ReviewedAt  *time.Time
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
 }
 
 func (enrollmentRequestModel) TableName() string { return "affiliate_enrollment_requests" }
@@ -370,10 +370,10 @@ func (r *GormAffiliateRepository) CreateClick(ctx context.Context, click *domain
 			return fmt.Errorf("create click: %w", err)
 		}
 		return r.appendOutboxTx(tx, "affiliate_click", click.ID.String(), "affiliate.click.tracked", click.AffiliateID.String(), map[string]any{
-			"click_id":      click.ClickID,
-			"affiliate_id":  click.AffiliateID.String(),
-			"country_code":  click.CountryCode,
-			"landing_page":  click.LandingPage,
+			"click_id":     click.ClickID,
+			"affiliate_id": click.AffiliateID.String(),
+			"country_code": click.CountryCode,
+			"landing_page": click.LandingPage,
 		})
 	})
 }
@@ -397,10 +397,10 @@ func (r *GormAffiliateRepository) CreateAttribution(ctx context.Context, attribu
 			return fmt.Errorf("create attribution: %w", err)
 		}
 		return r.appendOutboxTx(tx, "affiliate_attribution", attribution.ID.String(), "affiliate.attribution.created", attribution.AffiliateID.String(), map[string]any{
-			"attribution_id":  attribution.ID.String(),
-			"affiliate_id":    attribution.AffiliateID.String(),
+			"attribution_id":   attribution.ID.String(),
+			"affiliate_id":     attribution.AffiliateID.String(),
 			"referred_user_id": attribution.ReferredUserID,
-			"click_id":        attribution.ClickID,
+			"click_id":         attribution.ClickID,
 		})
 	})
 }
@@ -525,14 +525,14 @@ func (r *GormAffiliateRepository) CreateEarning(ctx context.Context, earning *do
 			return fmt.Errorf("create earning: %w", err)
 		}
 		return r.appendOutboxTx(tx, "affiliate_earning", earning.ID.String(), "affiliate.commission.accrued", earning.AffiliateID.String(), map[string]any{
-			"earning_id":         earning.ID.String(),
-			"affiliate_id":       earning.AffiliateID.String(),
-			"referred_user_id":   earning.ReferredUserID,
-			"commission_amount":  earning.CommissionAmount.String(),
-			"commission_rate":    earning.CommissionRate.String(),
-			"status":             earning.Status,
-			"hold_until":         earning.HoldUntil,
-			"idempotency_key":    earning.IdempotencyKey,
+			"earning_id":        earning.ID.String(),
+			"affiliate_id":      earning.AffiliateID.String(),
+			"referred_user_id":  earning.ReferredUserID,
+			"commission_amount": earning.CommissionAmount.String(),
+			"commission_rate":   earning.CommissionRate.String(),
+			"status":            earning.Status,
+			"hold_until":        earning.HoldUntil,
+			"idempotency_key":   earning.IdempotencyKey,
 		})
 	})
 }
@@ -564,11 +564,11 @@ func (r *GormAffiliateRepository) CreatePayout(ctx context.Context, payout *doma
 			return fmt.Errorf("create payout: %w", err)
 		}
 		return r.appendOutboxTx(tx, "affiliate_payout", payout.ID.String(), "affiliate.payout.requested", payout.AffiliateID.String(), map[string]any{
-			"payout_id":      payout.ID.String(),
-			"affiliate_id":   payout.AffiliateID.String(),
-			"amount":         payout.Amount.String(),
-			"currency":       payout.Currency,
-			"method_id":      payout.MethodID.String(),
+			"payout_id":       payout.ID.String(),
+			"affiliate_id":    payout.AffiliateID.String(),
+			"amount":          payout.Amount.String(),
+			"currency":        payout.Currency,
+			"method_id":       payout.MethodID.String(),
 			"idempotency_key": payout.IdempotencyKey,
 		})
 	})
@@ -633,12 +633,12 @@ func (r *GormAffiliateRepository) UpdatePayout(ctx context.Context, payout *doma
 		}
 
 		return r.appendOutboxTx(tx, "affiliate_payout", payout.ID.String(), topic, payout.AffiliateID.String(), map[string]any{
-			"payout_id":           payout.ID.String(),
-			"affiliate_id":        payout.AffiliateID.String(),
-			"status":              payout.Status,
-			"approved_by":         payout.ApprovedBy,
-			"provider_reference":  payout.ProviderReference,
-			"rejection_reason":    payout.RejectionReason,
+			"payout_id":          payout.ID.String(),
+			"affiliate_id":       payout.AffiliateID.String(),
+			"status":             payout.Status,
+			"approved_by":        payout.ApprovedBy,
+			"provider_reference": payout.ProviderReference,
+			"rejection_reason":   payout.RejectionReason,
 		})
 	})
 }
@@ -650,12 +650,12 @@ func (r *GormAffiliateRepository) CreateFraudFlag(ctx context.Context, flag *dom
 			return fmt.Errorf("create fraud flag: %w", err)
 		}
 		return r.appendOutboxTx(tx, "affiliate_fraud_flag", flag.ID.String(), "affiliate.fraud.flagged", flag.AffiliateID.String(), map[string]any{
-			"fraud_flag_id":     flag.ID.String(),
-			"affiliate_id":      flag.AffiliateID.String(),
-			"referred_user_id":  flag.ReferredUserID,
-			"flag_type":         flag.FlagType,
-			"severity":          flag.Severity,
-			"status":            flag.Status,
+			"fraud_flag_id":    flag.ID.String(),
+			"affiliate_id":     flag.AffiliateID.String(),
+			"referred_user_id": flag.ReferredUserID,
+			"flag_type":        flag.FlagType,
+			"severity":         flag.Severity,
+			"status":           flag.Status,
 		})
 	})
 }
@@ -802,15 +802,15 @@ func (r *GormAffiliateRepository) appendOutboxTx(tx *gorm.DB, aggregateType stri
 
 func enrollmentModelToDomain(model enrollmentRequestModel) *domain.AffiliateEnrollmentRequest {
 	return &domain.AffiliateEnrollmentRequest{
-		ID:         model.ID,
-		UserID:     model.UserID,
-		Status:     domain.EnrollmentStatus(model.Status),
-		Reason:     model.Reason,
+		ID:          model.ID,
+		UserID:      model.UserID,
+		Status:      domain.EnrollmentStatus(model.Status),
+		Reason:      model.Reason,
 		ReviewNotes: model.ReviewNotes,
-		ReviewedBy: model.ReviewedBy,
-		ReviewedAt: model.ReviewedAt,
-		CreatedAt:  model.CreatedAt,
-		UpdatedAt:  model.UpdatedAt,
+		ReviewedBy:  model.ReviewedBy,
+		ReviewedAt:  model.ReviewedAt,
+		CreatedAt:   model.CreatedAt,
+		UpdatedAt:   model.UpdatedAt,
 	}
 }
 
@@ -1108,7 +1108,7 @@ func outboxModelToDomain(model affiliateOutboxModel) domain.OutboxEvent {
 // ============ Admin operations ============
 
 type affiliateAdjustmentModel struct {
-	ID             uuid.UUID       `gorm:"type:uuid;primaryKey"`
+	ID             uuid.UUID `gorm:"type:uuid;primaryKey"`
 	AffiliateID    uuid.UUID
 	AdjustmentType string
 	Amount         decimal.Decimal
@@ -1171,7 +1171,7 @@ func (r *GormAffiliateRepository) CreateAdjustment(ctx context.Context, adj *dom
 		}
 		return r.appendOutboxTx(tx, "affiliate_adjustment", adj.ID.String(), "affiliate.adjustment.created", adj.AffiliateID.String(), map[string]any{
 			"adjustment_id":   adj.ID.String(),
-			"affiliate_id":   adj.AffiliateID.String(),
+			"affiliate_id":    adj.AffiliateID.String(),
 			"adjustment_type": adj.AdjustmentType,
 			"amount":          adj.Amount.String(),
 			"reason":          adj.Reason,

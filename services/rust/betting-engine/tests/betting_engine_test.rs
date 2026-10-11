@@ -18,7 +18,7 @@ use uuid::Uuid;
 
 #[test]
 fn test_bet_state_machine_valid_transitions() {
-    let cases = vec![
+    let cases = [
         (BetStatus::Pending, BetStatus::Active, true),
         (BetStatus::Pending, BetStatus::Rejected, true),
         (BetStatus::Active, BetStatus::Won, true),

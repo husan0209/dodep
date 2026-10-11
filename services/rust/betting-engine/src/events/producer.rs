@@ -1,11 +1,9 @@
-pub mod producer;
-
 use chrono::Utc;
 use rdkafka::config::ClientConfig;
 use rdkafka::producer::{FutureProducer, FutureRecord};
 use rdkafka::util::Timeout;
 use serde::Serialize;
-use tracing::{info, warn, error};
+use tracing::{error, info};
 
 #[derive(Clone)]
 pub struct EventProducer {
@@ -14,7 +12,9 @@ pub struct EventProducer {
 
 #[derive(Debug, Serialize)]
 pub struct BetPlacedEvent {
+    #[serde(skip_serializing_if = "String::is_empty")]
     pub event_id: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
     pub timestamp: String,
     pub user_id: i64,
     pub bet_id: i64,
@@ -52,26 +52,14 @@ impl EventProducer {
         Ok(Self { producer })
     }
 
-    pub async fn publish_bet_placed(
-        &self,
-        user_id: i64,
-        bet_id: i64,
-        bet_type: &str,
-        stake: &str,
-        odds: &str,
-        potential_win: &str,
-        currency: &str,
-    ) {
+    pub async fn publish_bet_placed(&self, placed: BetPlacedEvent) {
+        let user_id = placed.user_id;
+        let bet_id = placed.bet_id;
+
         let event = BetPlacedEvent {
             event_id: uuid::Uuid::new_v4().to_string(),
             timestamp: Utc::now().to_rfc3339(),
-            user_id,
-            bet_id,
-            bet_type: bet_type.to_string(),
-            stake: stake.to_string(),
-            odds: odds.to_string(),
-            potential_win: potential_win.to_string(),
-            currency: currency.to_string(),
+            ..placed
         };
 
         let payload = serde_json::to_vec(&event).unwrap_or_default();
@@ -133,11 +121,7 @@ impl EventProducer {
         }
     }
 
-    pub async fn publish_bet_voided(
-        &self,
-        user_id: i64,
-        bet_id: i64,
-    ) {
+    pub async fn publish_bet_voided(&self, user_id: i64, bet_id: i64) {
         let event = BetSettledEvent {
             event_id: uuid::Uuid::new_v4().to_string(),
             timestamp: Utc::now().to_rfc3339(),
@@ -155,8 +139,14 @@ impl EventProducer {
             .payload(&payload);
 
         match self.producer.send(record, Timeout::Never).await {
-            Ok(_) => info!(topic = "bets.bet.settled", bet_id = bet_id, "Void event published"),
-            Err((e, _)) => error!(topic = "bets.bet.settled", error = %e, "Failed to publish void event"),
+            Ok(_) => info!(
+                topic = "bets.bet.settled",
+                bet_id = bet_id,
+                "Void event published"
+            ),
+            Err((e, _)) => {
+                error!(topic = "bets.bet.settled", error = %e, "Failed to publish void event")
+            }
         }
     }
 }

@@ -39,11 +39,17 @@ impl SettlementService {
             .pool_ref()
             .begin()
             .await
-            .map_err(|e| AppError::Database(e))?;
+            .map_err(AppError::Database)?;
 
         let bet = self
             .bet_repo
-            .update_bet_status(&mut tx, bet_id, BetStatus::Active, target_status, Some(actual_win))
+            .update_bet_status(
+                &mut tx,
+                bet_id,
+                BetStatus::Active,
+                target_status,
+                Some(actual_win),
+            )
             .await
             .map_err(|e| match e {
                 sqlx::Error::RowNotFound => AppError::Conflict {
@@ -52,7 +58,7 @@ impl SettlementService {
                 other => AppError::Database(other),
             })?;
 
-        tx.commit().await.map_err(|e| AppError::Database(e))?;
+        tx.commit().await.map_err(AppError::Database)?;
 
         info!(
             bet_id = %bet_id,
@@ -70,7 +76,7 @@ impl SettlementService {
             .pool_ref()
             .begin()
             .await
-            .map_err(|e| AppError::Database(e))?;
+            .map_err(AppError::Database)?;
 
         let bet = self
             .bet_repo
@@ -83,7 +89,7 @@ impl SettlementService {
                 other => AppError::Database(other),
             })?;
 
-        tx.commit().await.map_err(|e| AppError::Database(e))?;
+        tx.commit().await.map_err(AppError::Database)?;
 
         info!(bet_id = %bet_id, "Bet voided");
 

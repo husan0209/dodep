@@ -1,0 +1,288 @@
+# Grafana Dashboard — Affiliate Service (RevShare from NGR)
+# Standalone ConfigMap (label grafana_dashboard=true), does NOT edit dashboards.yaml.
+# Sources:
+#   - ClickHouse "ClickHouse" (vertamedia-clickhouse-datasource, defaultDatabase opus_casino)
+#     tables: affiliate_daily_aggregates, affiliate_earnings, affiliate_payouts,
+#             affiliate_fraud_signals, affiliate_funnel_hourly, affiliate_clicks_raw
+#     (see services/go/affiliate/clickhouse/affiliate_analytics.sql)
+#   - Prometheus default (VictoriaMetrics): kube-state-metrics + cAdvisor for service health
+# PII: affiliate_id/referred aggregates only; no emails, names, or payment details.
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-affiliate
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "true"
+data:
+  affiliate.json: |
+    {
+      "dashboard": {
+        "title": "Affiliate Program (RevShare from NGR)",
+        "tags": ["affiliate", "revshare", "ngr", "business"],
+        "timezone": "browser",
+        "refresh": "1m",
+        "time": {
+          "from": "now-30d",
+          "to": "now"
+        },
+        "panels": [
+          {
+            "id": 1,
+            "title": "Total NGR (30d)",
+            "type": "stat",
+            "datasource": "ClickHouse",
+            "gridPos": {"x": 0, "y": 0, "w": 6, "h": 4},
+            "targets": [
+              {
+                "refId": "A",
+                "rawSql": "SELECT sum(ngr_amount) AS ngr FROM affiliate_daily_aggregates WHERE report_date >= today() - 30",
+                "format": "table"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {"unit": "currencyUSD", "decimals": 2}
+            }
+          },
+          {
+            "id": 2,
+            "title": "Commission Accrued (30d)",
+            "type": "stat",
+            "datasource": "ClickHouse",
+            "gridPos": {"x": 6, "y": 0, "w": 6, "h": 4},
+            "targets": [
+              {
+                "refId": "A",
+                "rawSql": "SELECT sum(commission_accrued) AS accrued FROM affiliate_daily_aggregates WHERE report_date >= today() - 30",
+                "format": "table"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {"unit": "currencyUSD", "decimals": 2}
+            }
+          },
+          {
+            "id": 3,
+            "title": "Commission Paid (30d)",
+            "type": "stat",
+            "datasource": "ClickHouse",
+            "gridPos": {"x": 12, "y": 0, "w": 6, "h": 4},
+            "targets": [
+              {
+                "refId": "A",
+                "rawSql": "SELECT sum(amount) AS paid FROM affiliate_payouts WHERE status = 'paid' AND $__timeFilter(requested_at)",
+                "format": "table"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {"unit": "currencyUSD", "decimals": 2}
+            }
+          },
+          {
+            "id": 4,
+            "title": "FTD Referred Players (30d)",
+            "type": "stat",
+            "datasource": "ClickHouse",
+            "gridPos": {"x": 18, "y": 0, "w": 6, "h": 4},
+            "targets": [
+              {
+                "refId": "A",
+                "rawSql": "SELECT sum(ftd_count) AS ftd FROM affiliate_daily_aggregates WHERE report_date >= today() - 30",
+                "format": "table"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {"unit": "short", "decimals": 0}
+            }
+          },
+          {
+            "id": 5,
+            "title": "Conversion Funnel (30d totals + rates)",
+            "type": "table",
+            "datasource": "ClickHouse",
+            "gridPos": {"x": 0, "y": 4, "w": 12, "h": 7},
+            "targets": [
+              {
+                "refId": "A",
+                "rawSql": "SELECT sum(clicks) AS clicks, sum(registrations) AS registrations, sum(ftd_count) AS ftds, sum(active_players) AS active_players, round(sum(registrations) / greatest(sum(clicks), 1) * 100, 2) AS click_to_reg_pct, round(sum(ftd_count) / greatest(sum(registrations), 1) * 100, 2) AS reg_to_ftd_pct, round(sum(active_players) / greatest(sum(ftd_count), 1) * 100, 2) AS ftd_to_active_pct FROM affiliate_daily_aggregates WHERE report_date >= today() - 30",
+                "format": "table"
+              }
+            ]
+          },
+          {
+            "id": 6,
+            "title": "Daily Funnel: Clicks / Registrations / FTD",
+            "type": "timeseries",
+            "datasource": "ClickHouse",
+            "gridPos": {"x": 12, "y": 4, "w": 12, "h": 7},
+            "targets": [
+              {
+                "refId": "A",
+                "rawSql": "SELECT toStartOfDay(hour) AS time, sum(clicks) AS clicks, sum(registrations) AS registrations, sum(ftds) AS ftds FROM affiliate_funnel_hourly WHERE $__timeFilter(hour) GROUP BY time ORDER BY time",
+                "format": "time_series"
+              }
+            ]
+          },
+          {
+            "id": 7,
+            "title": "NGR vs Commission Accrued (daily)",
+            "type": "timeseries",
+            "datasource": "ClickHouse",
+            "gridPos": {"x": 0, "y": 11, "w": 12, "h": 7},
+            "targets": [
+              {
+                "refId": "A",
+                "rawSql": "SELECT report_date AS time, sum(ngr_amount) AS ngr, sum(commission_accrued) AS accrued, sum(commission_reversed) AS reversed FROM affiliate_daily_aggregates WHERE $__timeFilter(report_date) GROUP BY time ORDER BY time",
+                "format": "time_series"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {"unit": "currencyUSD"}
+            }
+          },
+          {
+            "id": 8,
+            "title": "Top 20 Affiliates by NGR (30d, anonymized IDs)",
+            "type": "table",
+            "datasource": "ClickHouse",
+            "gridPos": {"x": 12, "y": 11, "w": 12, "h": 7},
+            "targets": [
+              {
+                "refId": "A",
+                "rawSql": "SELECT affiliate_id, sum(ngr_amount) AS ngr, sum(commission_accrued) AS accrued, sum(ftd_count) AS ftds FROM affiliate_daily_aggregates WHERE report_date >= today() - 30 GROUP BY affiliate_id ORDER BY ngr DESC LIMIT 20",
+                "format": "table"
+              }
+            ]
+          },
+          {
+            "id": 9,
+            "title": "Payouts Awaiting Review > 48h",
+            "type": "table",
+            "datasource": "ClickHouse",
+            "gridPos": {"x": 0, "y": 18, "w": 12, "h": 7},
+            "targets": [
+              {
+                "refId": "A",
+                "rawSql": "SELECT payout_id, affiliate_id, amount, currency, status, requested_at, dateDiff('hour', requested_at, now()) AS age_hours FROM affiliate_payouts WHERE status IN ('requested', 'reviewing') AND requested_at < now() - INTERVAL 48 HOUR ORDER BY requested_at LIMIT 50",
+                "format": "table"
+              }
+            ]
+          },
+          {
+            "id": 10,
+            "title": "Fraud Signals Heatmap (by day x type)",
+            "type": "heatmap",
+            "datasource": "ClickHouse",
+            "gridPos": {"x": 12, "y": 18, "w": 12, "h": 7},
+            "targets": [
+              {
+                "refId": "A",
+                "rawSql": "SELECT toStartOfDay(detected_at) AS time, signal_type, count() AS signals FROM affiliate_fraud_signals WHERE $__timeFilter(detected_at) GROUP BY time, signal_type ORDER BY time",
+                "format": "time_series"
+              }
+            ]
+          },
+          {
+            "id": 13,
+            "title": "Accrued vs Released Commission (daily)",
+            "description": "Drives runbook AFF-RB-01. released_amount stops moving while accrued keeps rising = hold-release stalled.",
+            "type": "timeseries",
+            "datasource": "ClickHouse",
+            "gridPos": {"x": 0, "y": 25, "w": 12, "h": 7},
+            "targets": [
+              {
+                "refId": "A",
+                "rawSql": "SELECT report_date AS time, sum(released_amount) AS released, sum(released_earnings) AS earnings FROM affiliate_daily_releases WHERE $__timeFilter(report_date) GROUP BY time ORDER BY time",
+                "format": "time_series"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {"unit": "currencyUSD"}
+            }
+          },
+          {
+            "id": 14,
+            "title": "Manual Adjustments by Admin Actor (90d)",
+            "description": "Append-only audit of admin money edits (005_affiliate_lifecycle.sql). High values warrant review.",
+            "type": "table",
+            "datasource": "ClickHouse",
+            "gridPos": {"x": 12, "y": 25, "w": 12, "h": 7},
+            "targets": [
+              {
+                "refId": "A",
+                "rawSql": "SELECT created_by, count() AS adjustments, sum(amount) AS total_amount FROM affiliate_adjustments_audit WHERE $__timeFilter(created_at) GROUP BY created_by ORDER BY total_amount DESC LIMIT 50",
+                "format": "table"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {"unit": "currencyUSD"}
+            }
+          },
+          {
+            "id": 15,
+            "title": "Payout Transitions (non-terminal, 30d)",
+            "description": "approved/reviewing/failed states. Ageing here is runbook AFF-RB-02.",
+            "type": "table",
+            "datasource": "ClickHouse",
+            "gridPos": {"x": 0, "y": 32, "w": 12, "h": 7},
+            "targets": [
+              {
+                "refId": "A",
+                "rawSql": "SELECT status, count() AS payouts, max(dateDiff('hour', transitioned_at, now())) AS max_age_hours FROM affiliate_payout_transitions WHERE $__timeFilter(transitioned_at) GROUP BY status ORDER BY max_age_hours DESC",
+                "format": "table"
+              }
+            ]
+          },
+          {
+            "id": 16,
+            "title": "Hold-Release Stale > 48h",
+            "description": "Empty = healthy. Non-empty rows mean a partner has earnings stuck in hold (AFF-RB-01).",
+            "type": "table",
+            "datasource": "ClickHouse",
+            "gridPos": {"x": 12, "y": 32, "w": 12, "h": 7},
+            "targets": [
+              {
+                "refId": "A",
+                "rawSql": "SELECT affiliate_id, max(released_at) AS last_release, dateDiff('hour', max(released_at), now()) AS stale_hours FROM affiliate_daily_releases WHERE report_date >= today() - 30 GROUP BY affiliate_id HAVING stale_hours > 48 ORDER BY stale_hours DESC LIMIT 50",
+                "format": "table"
+              }
+            ]
+          },
+          {
+            "id": 11,
+            "title": "Affiliate Pods Ready",
+            "type": "stat",
+            "gridPos": {"x": 0, "y": 39, "w": 6, "h": 4},
+            "targets": [
+              {
+                "refId": "A",
+                "expr": "sum(kube_pod_status_ready{condition=\"true\",namespace=\"platform\"} * on(pod) group_left() kube_pod_labels{namespace=\"platform\",label_app_kubernetes_io_name=\"affiliate\"})"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {"unit": "short", "decimals": 0}
+            }
+          },
+          {
+            "id": 12,
+            "title": "Affiliate CPU / Memory",
+            "type": "timeseries",
+            "gridPos": {"x": 6, "y": 39, "w": 18, "h": 4},
+            "targets": [
+              {
+                "refId": "A",
+                "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"platform\",pod=~\"affiliate-.*\"}[5m]))",
+                "legendFormat": "cpu cores"
+              },
+              {
+                "refId": "B",
+                "expr": "sum(container_memory_working_set_bytes{namespace=\"platform\",pod=~\"affiliate-.*\"})",
+                "legendFormat": "memory bytes"
+              }
+            ]
+          }
+        ]
+      }
+    }

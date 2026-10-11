@@ -8,7 +8,7 @@ pub mod service;
 pub mod telemetry;
 
 pub use config::Config;
-pub use domain::{Wallet, Transaction, Balance, WalletType, TransactionType, FundLock};
+pub use domain::{Balance, FundLock, Transaction, TransactionType, Wallet, WalletType};
 pub use service::WalletService;
 
 pub mod proto {

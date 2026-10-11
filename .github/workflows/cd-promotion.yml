@@ -4,10 +4,6 @@
 name: CD - Environment Promotion
 
 on:
-  workflow_run:
-    workflows: ["CD - Production Release"]
-    types:
-      - completed
   workflow_dispatch:
     inputs:
       source-environment:

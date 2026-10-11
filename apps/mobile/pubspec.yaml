@@ -31,7 +31,7 @@ dependencies:
   equatable: ^2.0.5
 
   # Data
-  json_annotation: ^4.8.1
+  json_annotation: ^4.9.0
   hive_flutter: ^1.1.0
   flutter_secure_storage: ^9.0.0
 

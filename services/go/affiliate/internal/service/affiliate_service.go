@@ -6,14 +6,16 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/opus-casino/affiliate/internal/domain"
+	"github.com/opus-casino/affiliate/internal/fraud"
 	"github.com/opus-casino/affiliate/internal/repository"
 	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 )
 
 type AffiliateService struct {
-	repo   repository.AffiliateRepository
-	logger *zap.Logger
+	repo     repository.AffiliateRepository
+	fraudCfg fraud.Config
+	logger   *zap.Logger
 }
 
 func NewAffiliateService(repo repository.AffiliateRepository, logger *zap.Logger) *AffiliateService {
@@ -22,9 +24,15 @@ func NewAffiliateService(repo repository.AffiliateRepository, logger *zap.Logger
 	}
 
 	return &AffiliateService{
-		repo:   repo,
-		logger: logger,
+		repo:     repo,
+		logger:   logger,
+		fraudCfg: fraud.DefaultConfig(),
 	}
+}
+
+// SetFraudConfig overrides the automatic anti-fraud thresholds.
+func (s *AffiliateService) SetFraudConfig(cfg fraud.Config) {
+	s.fraudCfg = cfg
 }
 
 type EnrollAffiliateInput struct {
@@ -44,22 +52,22 @@ type ApproveAffiliateInput struct {
 }
 
 type CreateAffiliateLinkInput struct {
-	AffiliateID   uuid.UUID
-	CampaignName  string
-	LandingPage   string
-	UTMSource     string
-	UTMMedium     string
-	UTMCampaign   string
+	AffiliateID  uuid.UUID
+	CampaignName string
+	LandingPage  string
+	UTMSource    string
+	UTMMedium    string
+	UTMCampaign  string
 }
 
 type TrackAffiliateClickInput struct {
-	AffiliateCode      string
-	Campaign           string
-	LandingPage        string
-	IPHash             string
-	UserAgentHash      string
-	DeviceFingerprint  string
-	CountryCode        string
+	AffiliateCode     string
+	Campaign          string
+	LandingPage       string
+	IPHash            string
+	UserAgentHash     string
+	DeviceFingerprint string
+	CountryCode       string
 }
 
 type BindReferredUserInput struct {
@@ -112,12 +120,12 @@ type FlagAffiliateFraudInput struct {
 }
 
 type CreatePayoutMethodInput struct {
-	AffiliateID uuid.UUID
-	MethodType  domain.PayoutMethodType
-	DisplayName string
+	AffiliateID   uuid.UUID
+	MethodType    domain.PayoutMethodType
+	DisplayName   string
 	DetailsMasked string
-	IsDefault   bool
-	IsVerified  bool
+	IsDefault     bool
+	IsVerified    bool
 }
 
 type UpdatePayoutMethodInput struct {
@@ -331,6 +339,9 @@ func (s *AffiliateService) BindReferredUser(ctx context.Context, in BindReferred
 		return nil, err
 	}
 
+	// Automatic anti-fraud screening: flag-first, never blocks the binding.
+	s.ScreenAttribution(ctx, attribution)
+
 	return attribution, nil
 }
 
@@ -448,14 +459,14 @@ func (s *AffiliateService) RequestPayout(ctx context.Context, in RequestPayoutIn
 	}
 
 	payout := &domain.AffiliatePayout{
-		ID:          uuid.New(),
-		AffiliateID: in.AffiliateID,
-		MethodID:    in.MethodID,
-		Amount:      in.Amount,
-		Currency:    profile.Currency,
-		Status:      domain.PayoutStatusRequested,
+		ID:             uuid.New(),
+		AffiliateID:    in.AffiliateID,
+		MethodID:       in.MethodID,
+		Amount:         in.Amount,
+		Currency:       profile.Currency,
+		Status:         domain.PayoutStatusRequested,
 		IdempotencyKey: in.IdempotencyKey,
-		RequestedAt: time.Now().UTC(),
+		RequestedAt:    time.Now().UTC(),
 	}
 	if err := s.repo.CreatePayout(ctx, payout); err != nil {
 		return nil, err

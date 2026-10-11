@@ -1,3 +1,3 @@
 pub mod producer;
 
-use producer::EventProducer;
+pub use producer::EventProducer;

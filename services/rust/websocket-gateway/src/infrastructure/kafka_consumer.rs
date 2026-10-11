@@ -1,8 +1,7 @@
-use std::sync::Arc;
 use std::time::Duration;
 
 use rdkafka::consumer::{Consumer, StreamConsumer};
-use rdkafka::ClientConfig;
+use rdkafka::{ClientConfig, Message};
 use tokio::sync::broadcast;
 
 use crate::domain::channel::{kafka_to_topic, Topic, KAFKA_TOPICS};

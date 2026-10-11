@@ -12,8 +12,8 @@ use tower_http::{
     trace::TraceLayer,
 };
 
-use crate::state::AppState;
 use crate::middleware::auth;
+use crate::state::AppState;
 
 pub fn build(state: AppState) -> Router {
     let health = Router::new()
@@ -23,8 +23,7 @@ pub fn build(state: AppState) -> Router {
     let bets = Router::new()
         .route(
             "/api/v1/users/:user_id/bets",
-            post(handlers::bet_handler::place_bet)
-                .get(handlers::bet_handler::get_history),
+            post(handlers::bet_handler::place_bet).get(handlers::bet_handler::get_history),
         )
         .route(
             "/api/v1/users/:user_id/bets/:bet_id",
@@ -75,12 +74,10 @@ pub fn build(state: AppState) -> Router {
 
     Router::new()
         .merge(health)
-        .merge(
-            bets.layer(axum::middleware::from_fn_with_state(
-                state.clone(),
-                auth::require_auth,
-            )),
-        )
+        .merge(bets.layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            auth::require_auth,
+        )))
         .layer(
             ServiceBuilder::new()
                 .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))

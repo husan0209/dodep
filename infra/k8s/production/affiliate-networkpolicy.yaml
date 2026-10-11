@@ -1,0 +1,85 @@
+# ============================================================
+# NetworkPolicy — Affiliate Service (standalone file)
+# Does not edit infra/k8s/production/network-policies.yaml.
+# Ports per CONVENTIONS.md: 8090 (HTTP) / 50061 (gRPC).
+# ============================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: affiliate-service
+  namespace: platform
+  labels:
+    app.kubernetes.io/name: affiliate
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: affiliate
+      app.kubernetes.io/component: affiliate-service
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Istio ingress gateway + in-cluster callers (web/admin via mesh)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: istio-system
+        - namespaceSelector:
+            matchLabels:
+              name: platform
+      ports:
+        - protocol: TCP
+          port: 8090
+        - protocol: TCP
+          port: 50061
+    # Monitoring (scrape + OTLP)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+      ports:
+        - protocol: TCP
+          port: 8090
+        - protocol: TCP
+          port: 50061
+    - ports:
+        - protocol: TCP
+          port: 53
+        - protocol: UDP
+          port: 53
+  egress:
+    # Data layer: PostgreSQL / DragonflyDB / Redpanda
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: data
+      ports:
+        - protocol: TCP
+          port: 5432
+        - protocol: TCP
+          port: 6379
+        - protocol: TCP
+          port: 9092
+    # Observability
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+      ports:
+        - protocol: TCP
+          port: 4317
+        - protocol: TCP
+          port: 4318
+        - protocol: TCP
+          port: 9090
+    # DNS
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: TCP
+          port: 53
+        - protocol: UDP
+          port: 53

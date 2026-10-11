@@ -65,4 +65,10 @@ impl AppState {
     pub fn event_producer(&self) -> Option<&EventProducer> {
         self.inner.event_producer.as_ref()
     }
+
+    /// The shared `BetRepository`, so additional transports can build their own
+    /// service instances without opening a second connection pool.
+    pub fn bet_repository(&self) -> BetRepository {
+        BetRepository::new(self.inner.db_pool.clone())
+    }
 }

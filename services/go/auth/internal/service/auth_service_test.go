@@ -20,30 +20,32 @@ import (
 )
 
 type mockAuthRepository struct {
-	getUserByEmail    func(context.Context, string) (*domain.User, error)
-	getUserByIdentifier func(context.Context, string) (*domain.User, error)
-	getUserByID       func(context.Context, string) (*domain.User, error)
-	getUserByGoogleSub func(context.Context, string) (*domain.User, error)
-	createUser        func(context.Context, *domain.User) error
+	getUserByEmail       func(context.Context, string) (*domain.User, error)
+	getUserByIdentifier  func(context.Context, string) (*domain.User, error)
+	getUserByID          func(context.Context, string) (*domain.User, error)
+	getUserByGoogleSub   func(context.Context, string) (*domain.User, error)
+	createUser           func(context.Context, *domain.User) error
 	createUserFromGoogle func(context.Context, string, string, string) (*domain.User, error)
-	linkGoogleSub     func(context.Context, string, string, bool) error
-	updateUser        func(context.Context, *domain.User) error
-	updateLastLogin   func(context.Context, string) error
-	updatePassword    func(context.Context, string, string) error
-	createSession     func(context.Context, *domain.Session) error
-	getSession        func(context.Context, string) (*domain.Session, error)
-	deleteSession     func(context.Context, string, string) error
-	getUserSessions   func(context.Context, string) ([]string, error)
-	deleteAllSessions func(context.Context, string) error
-	storeRefreshToken func(context.Context, string, string, string, time.Duration) error
-	getRefreshToken   func(context.Context, string) (string, string, error)
-	deleteRefresh     func(context.Context, string) error
-	trackAttempt      func(context.Context, string, string) (int, bool, error)
-	isLocked          func(context.Context, string) (bool, error)
-	clearAttempts     func(context.Context, string, string) error
-	storeTempToken    func(context.Context, string, string, time.Duration) error
-	getTempToken      func(context.Context, string) (string, error)
-	deleteTempToken   func(context.Context, string) error
+	linkGoogleSub        func(context.Context, string, string, bool) error
+	updateUser           func(context.Context, *domain.User) error
+	updateLastLogin      func(context.Context, string) error
+	updatePassword       func(context.Context, string, string) error
+	createSession        func(context.Context, *domain.Session) error
+	getSession           func(context.Context, string) (*domain.Session, error)
+	deleteSession        func(context.Context, string, string) error
+	getUserSessions      func(context.Context, string) ([]string, error)
+	deleteAllSessions    func(context.Context, string) error
+	storeRefreshToken    func(context.Context, string, string, string, time.Duration) error
+	getRefreshToken      func(context.Context, string) (string, string, error)
+	deleteRefresh        func(context.Context, string) error
+	rotateRefresh        func(context.Context, string, string, time.Duration) (string, string, error)
+	revokeFamily         func(context.Context, string, string) error
+	trackAttempt         func(context.Context, string, string) (int, bool, error)
+	isLocked             func(context.Context, string) (bool, error)
+	clearAttempts        func(context.Context, string, string) error
+	storeTempToken       func(context.Context, string, string, time.Duration) error
+	getTempToken         func(context.Context, string) (string, error)
+	deleteTempToken      func(context.Context, string) error
 }
 
 func (m *mockAuthRepository) GetUserByEmail(ctx context.Context, email string) (*domain.User, error) {
@@ -168,6 +170,37 @@ func (m *mockAuthRepository) GetRefreshToken(ctx context.Context, token string) 
 func (m *mockAuthRepository) DeleteRefreshToken(ctx context.Context, token string) error {
 	if m.deleteRefresh != nil {
 		return m.deleteRefresh(ctx, token)
+	}
+	return nil
+}
+
+// RotateRefreshToken mirrors the real rotation: the current token is consumed
+// and the next one is stored for the same user/session.
+func (m *mockAuthRepository) RotateRefreshToken(
+	ctx context.Context,
+	currentToken, newToken string,
+	ttl time.Duration,
+) (string, string, error) {
+	if m.rotateRefresh != nil {
+		return m.rotateRefresh(ctx, currentToken, newToken, ttl)
+	}
+
+	userID, sessionID, err := m.GetRefreshToken(ctx, currentToken)
+	if err != nil {
+		return "", "", err
+	}
+	if userID == "" || sessionID == "" {
+		return "", "", domain.ErrInvalidRefreshToken
+	}
+	if err := m.StoreRefreshToken(ctx, newToken, userID, sessionID, ttl); err != nil {
+		return "", "", err
+	}
+	return userID, sessionID, nil
+}
+
+func (m *mockAuthRepository) RevokeRefreshTokenFamily(ctx context.Context, userID, sessionID string) error {
+	if m.revokeFamily != nil {
+		return m.revokeFamily(ctx, userID, sessionID)
 	}
 	return nil
 }

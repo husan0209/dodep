@@ -1,5 +1,5 @@
 //! Domain models for Wallet Core
-//! 
+//!
 //! Standards: wallet-financial-ops.skill.md
 //! - Every financial operation creates debit+credit ledger entries
 //! - Idempotency checked FIRST
@@ -8,13 +8,17 @@
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
-use sqlx::Type;
 use uuid::Uuid;
 
-use super::{WalletType, TransactionType, TransactionStatus, LedgerEntryType, AccountType};
+use super::{AccountType, LedgerEntryType, TransactionStatus, TransactionType, WalletType};
 
 /// Wallet aggregate root
-#[derive(Debug, Clone, Serialize, Deserialize)]
+///
+/// `FromRow` is derived so repositories can use runtime `sqlx::query_as`
+/// instead of the `query_as!` macros: the macros are verified against a live
+/// database at compile time, which makes `cargo build` fail without a
+/// `DATABASE_URL` / committed `.sqlx` cache.
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Wallet {
     pub id: Uuid,
     pub user_id: Uuid,
@@ -47,25 +51,28 @@ impl Wallet {
             updated_at: now,
         }
     }
-    
+
     /// Get total balance (available + locked + bonus)
     pub fn total_balance(&self) -> Decimal {
         self.balance_available + self.balance_locked + self.balance_bonus
     }
-    
+
     /// Check if wallet has sufficient available balance
     pub fn has_available_balance(&self, amount: Decimal) -> bool {
         self.balance_available >= amount
     }
-    
+
     /// Check if wallet has sufficient balance (available + bonus)
     pub fn has_sufficient_balance(&self, amount: Decimal) -> bool {
         self.balance_available + self.balance_bonus >= amount
     }
-    
+
     /// Get account ID for ledger entries
     pub fn ledger_account_id(&self) -> String {
-        format!("user_wallet:{}:{:?}:{}", self.user_id, self.wallet_type, self.currency)
+        format!(
+            "user_wallet:{}:{:?}:{}",
+            self.user_id, self.wallet_type, self.currency
+        )
     }
 }
 
@@ -79,16 +86,20 @@ pub struct Balance {
 
 impl Balance {
     pub fn new(available: Decimal, locked: Decimal, bonus: Decimal) -> Self {
-        Self { available, locked, bonus }
+        Self {
+            available,
+            locked,
+            bonus,
+        }
     }
-    
+
     pub fn total(&self) -> Decimal {
         self.available + self.locked + self.bonus
     }
 }
 
 /// Transaction entity
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Transaction {
     pub id: Uuid,
     pub user_id: Uuid,
@@ -108,32 +119,36 @@ pub struct Transaction {
     pub completed_at: Option<DateTime<Utc>>,
 }
 
+/// Fields needed to open a new transaction.
+#[derive(Debug, Clone)]
+pub struct NewTransaction {
+    pub user_id: Uuid,
+    pub wallet_id: Uuid,
+    pub wallet_type: WalletType,
+    pub transaction_type: TransactionType,
+    pub amount: Decimal,
+    pub currency: String,
+    pub reference_id: Option<Uuid>,
+    pub reference_type: Option<String>,
+    pub idempotency_key: Option<String>,
+}
+
 impl Transaction {
     /// Create a new pending transaction
-    pub fn new(
-        user_id: Uuid,
-        wallet_id: Uuid,
-        wallet_type: WalletType,
-        transaction_type: TransactionType,
-        amount: Decimal,
-        currency: String,
-        reference_id: Option<Uuid>,
-        reference_type: Option<String>,
-        idempotency_key: Option<String>,
-    ) -> Self {
+    pub fn new(params: NewTransaction) -> Self {
         let now = Utc::now();
         Self {
             id: Uuid::new_v4(),
-            user_id,
-            wallet_id,
-            wallet_type,
-            transaction_type,
-            amount,
-            currency,
+            user_id: params.user_id,
+            wallet_id: params.wallet_id,
+            wallet_type: params.wallet_type,
+            transaction_type: params.transaction_type,
+            amount: params.amount,
+            currency: params.currency,
             status: TransactionStatus::Pending,
-            reference_id,
-            reference_type,
-            idempotency_key,
+            reference_id: params.reference_id,
+            reference_type: params.reference_type,
+            idempotency_key: params.idempotency_key,
             description: None,
             metadata: None,
             created_at: now,
@@ -141,20 +156,20 @@ impl Transaction {
             completed_at: None,
         }
     }
-    
+
     /// Mark transaction as completed
     pub fn complete(&mut self) {
         self.status = TransactionStatus::Completed;
         self.completed_at = Some(Utc::now());
         self.updated_at = Utc::now();
     }
-    
+
     /// Mark transaction as failed
     pub fn fail(&mut self) {
         self.status = TransactionStatus::Failed;
         self.updated_at = Utc::now();
     }
-    
+
     /// Mark transaction as cancelled
     pub fn cancel(&mut self) {
         self.status = TransactionStatus::Cancelled;
@@ -163,7 +178,7 @@ impl Transaction {
 }
 
 /// Fund lock for pending operations
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct FundLock {
     pub id: Uuid,
     pub wallet_id: Uuid,
@@ -196,7 +211,7 @@ impl FundLock {
             released_at: None,
         }
     }
-    
+
     pub fn release(&mut self) {
         self.is_active = false;
         self.released_at = Some(Utc::now());
@@ -204,21 +219,23 @@ impl FundLock {
 }
 
 /// Ledger entry for double-entry bookkeeping
-/// 
+///
 /// CRITICAL: Every financial operation creates TWO entries:
+///
 /// - One DEBIT (money leaves account)
 /// - One CREDIT (money enters account)
+///
 /// SUM(all debits) = SUM(all credits) — ALWAYS
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct LedgerEntry {
     pub id: Uuid,
     pub transaction_id: Uuid,
     pub account_type: AccountType,
-    pub account_id: String,  // e.g., "user_wallet:123:main:USD"
+    pub account_id: String, // e.g., "user_wallet:123:main:USD"
     pub entry_type: LedgerEntryType,
     pub amount: Decimal,
     pub currency: String,
-    pub balance_after: Option<Decimal>,  // Snapshot of account balance
+    pub balance_after: Option<Decimal>, // Snapshot of account balance
     pub reference_type: Option<String>,
     pub reference_id: Option<Uuid>,
     pub idempotency_key: Option<String>,
@@ -250,7 +267,7 @@ impl LedgerEntry {
             created_at: Utc::now(),
         }
     }
-    
+
     /// Create a credit entry (money enters account)
     pub fn credit(
         transaction_id: Uuid,
@@ -275,62 +292,56 @@ impl LedgerEntry {
             created_at: Utc::now(),
         }
     }
-    
+
     /// Create a debit entry with reference
-    pub fn debit_with_ref(
-        transaction_id: Uuid,
-        account_type: AccountType,
-        account_id: String,
-        amount: Decimal,
-        currency: String,
-        balance_after: Option<Decimal>,
-        reference_type: String,
-        reference_id: Uuid,
-        idempotency_key: Option<String>,
-    ) -> Self {
+    pub fn debit_with_ref(spec: LedgerEntryWithRef) -> Self {
         Self {
             id: Uuid::new_v4(),
-            transaction_id,
-            account_type,
-            account_id,
+            transaction_id: spec.transaction_id,
+            account_type: spec.account_type,
+            account_id: spec.account_id,
             entry_type: LedgerEntryType::Debit,
-            amount,
-            currency,
-            balance_after,
-            reference_type: Some(reference_type),
-            reference_id: Some(reference_id),
-            idempotency_key,
+            amount: spec.amount,
+            currency: spec.currency,
+            balance_after: spec.balance_after,
+            reference_type: Some(spec.reference_type),
+            reference_id: Some(spec.reference_id),
+            idempotency_key: spec.idempotency_key,
             created_at: Utc::now(),
         }
     }
-    
+
     /// Create a credit entry with reference
-    pub fn credit_with_ref(
-        transaction_id: Uuid,
-        account_type: AccountType,
-        account_id: String,
-        amount: Decimal,
-        currency: String,
-        balance_after: Option<Decimal>,
-        reference_type: String,
-        reference_id: Uuid,
-        idempotency_key: Option<String>,
-    ) -> Self {
+    pub fn credit_with_ref(spec: LedgerEntryWithRef) -> Self {
         Self {
             id: Uuid::new_v4(),
-            transaction_id,
-            account_type,
-            account_id,
+            transaction_id: spec.transaction_id,
+            account_type: spec.account_type,
+            account_id: spec.account_id,
             entry_type: LedgerEntryType::Credit,
-            amount,
-            currency,
-            balance_after,
-            reference_type: Some(reference_type),
-            reference_id: Some(reference_id),
-            idempotency_key,
+            amount: spec.amount,
+            currency: spec.currency,
+            balance_after: spec.balance_after,
+            reference_type: Some(spec.reference_type),
+            reference_id: Some(spec.reference_id),
+            idempotency_key: spec.idempotency_key,
             created_at: Utc::now(),
         }
     }
+}
+
+/// Fields needed to write a referenced ledger entry.
+#[derive(Debug, Clone)]
+pub struct LedgerEntryWithRef {
+    pub transaction_id: Uuid,
+    pub account_type: AccountType,
+    pub account_id: String,
+    pub amount: Decimal,
+    pub currency: String,
+    pub balance_after: Option<Decimal>,
+    pub reference_type: String,
+    pub reference_id: Uuid,
+    pub idempotency_key: Option<String>,
 }
 
 /// Ledger entry pair for double-entry bookkeeping
@@ -343,14 +354,20 @@ pub struct LedgerPair {
 impl LedgerPair {
     pub fn new(debit: LedgerEntry, credit: LedgerEntry) -> Self {
         // Validate: amounts must be equal
-        assert_eq!(debit.amount, credit.amount, "Debit and credit amounts must be equal");
-        assert_eq!(debit.currency, credit.currency, "Debit and credit currencies must be equal");
+        assert_eq!(
+            debit.amount, credit.amount,
+            "Debit and credit amounts must be equal"
+        );
+        assert_eq!(
+            debit.currency, credit.currency,
+            "Debit and credit currencies must be equal"
+        );
         Self { debit, credit }
     }
 }
 
 /// Outbox event for reliable event publishing
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct OutboxEvent {
     pub id: i64,
     pub topic: String,
@@ -380,7 +397,7 @@ impl OutboxEvent {
 }
 
 /// Reconciliation result
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct ReconciliationResult {
     pub wallet_id: Uuid,
     pub user_id: Uuid,
@@ -394,6 +411,6 @@ pub struct ReconciliationResult {
 impl ReconciliationResult {
     /// Check if discrepancy is significant (> $0.01)
     pub fn is_significant(&self) -> bool {
-        self.discrepancy > Decimal::new(1, 2)  // 0.01
+        self.discrepancy > Decimal::new(1, 2) // 0.01
     }
 }

@@ -15,15 +15,16 @@
                              │
      ┌───────────────────────┼───────────────────────┐
      ▼                       ▼                       ▼
-1. rust-build           2. go-build             3. python-build
-   (Rust сервисы:          (Go сервисы:            (ML/Fraud/Analytics:
-   betting, wallet,        auth, payment,          ruff, mypy,
-   gateway)                casino, kyc)            pytest)
-     │                       │                       │
+1. Architecture guards  2. CI - Go               3. CI - Rust
+   (G1–G4: деньги,          (Lint, Test -race,      (fmt, clippy,
+   логи, секреты,           gosec, govulncheck      nextest,
+   @ts-ignore)              для 7 Go-сервисов)      cargo-audit,
+     │                       │                       cargo-deny)
      ▼                       ▼                       ▼
-4. frontend-build       5. security-scan        6. Architecture guards
-   (Next.js web +          (Trivy, Semgrep,        (Grep-проверки денег,
-   Admin panel)            Gitleaks секреты)       безопасности, правил)
+4. CI - Python            5. CI - Frontend        6. Security Scan
+   (ruff, black, mypy,      / Admin Panel           (Trivy, Semgrep,
+   pytest, safety,          (ESLint, tsc,           CodeQL, secret
+   bandit)                  build, vitest)          scan, checkov)
      │                       │                       │
      └───────────────────────┼───────────────────────┘
                              ▼
@@ -43,12 +44,26 @@
 
 | Имя чека в GitHub | Workflow-источник | Что проверяет |
 |---|---|---|
-| `rust-build` | `.github/workflows/ci.yaml` | Сборка, clippy и cargo test для Rust-микросервисов (`betting-engine`, `wallet-core`, `websocket-gateway`) |
-| `go-build` | `.github/workflows/ci.yaml` | Сборка, go vet, race detector и тесты для Go (`auth`, `payment`, `casino`, `notification`, `kyc`) |
-| `python-build` | `.github/workflows/ci.yaml` | Lint (ruff), проверка типов (mypy) и pytest для Python (`fraud-ml`, `analytics`) |
-| `frontend-build` | `.github/workflows/ci.yaml` | Сборка, ESLint и тесты для Next.js Web и Admin Panel |
-| `security-scan` | `.github/workflows/ci.yaml` | Сканирование уязвимостей Trivy + Semgrep SAST |
-| `Architecture guards` | `.github/workflows/architecture-guards.yml` | Архитектурные правила гемблинга (Serializable в кошельке, запрет float для денег, запрет секретов) |
+| `Architecture guards` | `.github/workflows/architecture-guards.yml` | Архитектурные правила гемблинга (запрет float для денег, запрет `fmt.Println`, запрет приватных ключей, запрет `@ts-ignore`) |
+| `Lint` | `.github/workflows/ci-go.yml` | `golangci-lint` для `auth`, `user`, `payment`, `bonus`, `casino`, `notification`, `kyc` |
+| `Test` | `.github/workflows/ci-go.yml` | `go test -race` + покрытие для всех семи Go-сервисов |
+| `Security Scan` | `.github/workflows/ci-go.yml` | `gosec` и `govulncheck` для всех семи Go-сервисов |
+| `Lint` | `.github/workflows/ci-rust.yml` | `cargo fmt` и `cargo clippy -D warnings` для `betting-engine`, `wallet-core`, `websocket-gateway` |
+| `Test` | `.github/workflows/ci-rust.yml` | `cargo nextest` для тех же трёх Rust-сервисов |
+| `Security Scan` | `.github/workflows/ci-rust.yml` | `cargo audit --deny warnings` и `cargo deny` |
+| `Lint` / `Test` / `Security Scan` | `.github/workflows/ci-python.yml` | ruff, black, mypy, pytest, safety, bandit для `fraud-ml` и `analytics` |
+| `Lint` / `Type Check` / `Test` | `.github/workflows/ci-frontend.yml` | ESLint, `tsc --noEmit`, vitest для Next.js Web Platform |
+| `lint-and-build` | `.github/workflows/ci-admin-panel.yml` | ESLint, `tsc --noEmit` и production-сборка Admin Panel |
+| `Security Summary` | `.github/workflows/security-scan.yml` | Итог Trivy / Semgrep / CodeQL / secret scan / checkov |
+
+> **Почему нет `ci.yaml` и `deploy.yml`.** Оба файла были удалены как
+> дублирующие: каждый проверяемый стек уже покрыт выделенным workflow
+> (`ci-rust`, `ci-go`, `ci-python`, `ci-frontend`, `ci-admin-panel`,
+> `ci-nextjs-web`, `security-scan`, `security-audit`, `cd-*`), причём
+> строже — с `cargo deny`, `black`, `mypy`, `vitest`, `playwright`,
+> `dependency-review` и `checkov`. `ci.yaml` дополнительно был нерабочим:
+> он собирал Go 1.21 при `go 1.24+` в `go.mod` и не генерировал protobuf-стабы,
+> поэтому ни один Go-сервис в нём не мог пройти типизацию.
 
 ---
 
@@ -74,13 +89,7 @@
 7. **Require status checks to pass** (Обязательные проверки):
    - Включите галочку [x]
    - Включите [x] **Require branches to be up to date before merging**
-   - Нажмите **Add checks** и через поиск добавьте 6 чеков:
-     1. `rust-build`
-     2. `go-build`
-     3. `python-build`
-     4. `frontend-build`
-     5. `security-scan`
-     6. `Architecture guards`
+   - Нажмите **Add checks** и добавьте чеки из таблицы раздела 2
 8. Прокрутите в самый низ и нажмите **Create** (или **Save changes**).
 
 ---
@@ -88,7 +97,6 @@
 ## 4. Что контролирует Architecture Guards (`architecture-guards.yml`)
 
 1. **G1: Запрет `float32`/`float64`/`f32`/`f64` для денег**: балансы и ставки обрабатываются строго в целых единицах (cents / satoshi) или Decimal.
-2. **G2: Запрет хаков `@ts-ignore` / `unsafe` без объяснений**.
-3. **G3: Запрет отладочного вывода `println!` / `fmt.Println` в продакшен-сервисах** (только структурированный логгер).
-4. **G4: Контроль изоляции транзакций кошелька** (`Serializable` / Row Lock).
-5. **G5: Запрет секретов и приватных ключей в репозитории**.
+2. **G2: Запрет неструктурированного логирования** `fmt.Println` / `println!` в Go- и Rust-сервисах — только структурированный логгер (`zap`, `tracing`).
+3. **G3: Запрет приватных ключей** в поставляемом коде. Документация (`*.md`) исключена: Kubernetes/SSH-гайды обязаны показывать формат ключа и печатают усечённый плейсхолдер вида `b3BlbnNza...`.
+4. **G4: Запрет `@ts-ignore`** во фронтенде — используется строгая типизация.
