@@ -298,7 +298,7 @@ Buf module:              buf.build/opus-casino/api
 > - GORM — основной ORM для CRUD операций (7 из 8 сервисов уже используют)
 > - pgx/v5 — для raw SQL, complex queries, и performance-critical операций
 > - Оба допустимы. НЕ переписывай GORM на pgx без причины.
-> - Правила работы с GORM: см. `.qwen/skills/go/go-database.skill.md`
+> - Правила работы с GORM: см. `.agents/skills/dodep/go/go-database.skill.md`
 
 ### Rust
 | Категория | Использовать | НЕ использовать |

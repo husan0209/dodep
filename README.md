@@ -94,8 +94,8 @@ opus-casino/
 ├── .github/                     # GitHub workflows
 │   ├── workflows/               # CI/CD пайплайны
 │   └── actions/                 # Reusable actions
-└── .qwen/                       # AI Agent skills
-    └── skills/                  # 60 skill файлов
+└── .agents/skills/              # AI Agent skills
+    └── dodep/                   # Профили и 61 проектный навык
 ```
 
 ---
@@ -293,7 +293,7 @@ make security-scan
 
 - **Документация:** [docs/](docs/)
 - **Infrastructure:** [infra/](infra/)
-- **AI Agent Skills:** [.qwen/skills/](.qwen/skills/)
+- **AI Agent Skills:** [.agents/skills/](.agents/skills/)
 
 ---
 

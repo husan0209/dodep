@@ -78,7 +78,7 @@ jobs:
         run: |
           echo "Проверка G3: отсутствие захардкоженных приватных ключей..."
           # Scope: project code only. The marker strings also appear in
-          # bundled agent-skill docs (.claude/, .qwen/, …) as redacted
+          # bundled agent-skill docs (.agents/skills/) as redacted
           # Kubernetes examples — those are vendored, not project secrets.
           # Prune with a plain `grep -v -E` on the path prefix.
           FOUND=0

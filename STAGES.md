@@ -2493,4 +2493,4 @@ CD:
 - [AGENTS.md](./AGENTS.md) — Профили AI-агентов
 - [QWEN.md](./QWEN.md) — Контекст проекта
 - [ТЗ.md](./ТЗ.md) — Полное техническое задание
-- [.qwen/skills/](./.qwen/skills/) — Skills файлы
+- [.agents/skills/dodep/](./.agents/skills/dodep/) — проектные Skills и профили

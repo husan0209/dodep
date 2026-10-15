@@ -4,6 +4,8 @@ node_modules/
 .rust-deps/
 vendor/
 __pycache__/
+.mypy_cache/
+.ruff_cache/
 *.pyc
 *.pyo
 *.pyd

@@ -9,11 +9,11 @@
 **Нарушение = код не принимается.**
 
 ### Шаг 1: Определи свою роль перед тем как начать работать
-Прочитай `.qwen/skills/_agents.md` и найди подходящий профиль.
+Прочитай `.agents/skills/dodep/_agents.md` и найди подходящий профиль.
 
 ### Шаг 2: Загрузи skills
 Загрузи ТОЛЬКО файлы, перечисленные в твоём профиле.
-**НЕ загружай все 60 файлов** — они не поместятся в контекст.
+**НЕ загружай все 61 файл** — они не поместятся в контекст.
 
 ### Шаг 3: Начни работу
 Следуй правилам из загруженных skills и CONVENTIONS.md.
@@ -44,16 +44,16 @@
 ### Для AI-агента (Claude, Qwen, Gemini, Kiro, etc.):
 ```
 Я работаю как RUST_CORE_ENGINEER.
-Загрузи skills из профиля RUST_CORE_ENGINEER (файл .qwen/skills/_agents.md).
+Загрузи skills из профиля RUST_CORE_ENGINEER (файл `.agents/skills/dodep/_agents.md`).
 Задача: реализовать endpoint PlaceBet в Betting Engine.
 ```
 
 ### Для Cursor (.cursorrules):
 ```
 Read and follow instructions from:
-- .qwen/skills/architecture/architecture-overview.skill.md
-- .qwen/skills/rust/rust-general.skill.md
-- .qwen/skills/domain-specific/betting-engine-logic.skill.md
+- .agents/skills/dodep/architecture/architecture-overview.skill.md
+- .agents/skills/dodep/rust/rust-general.skill.md
+- .agents/skills/dodep/domain-specific/betting-engine-logic.skill.md
 (список из профиля)
 ```
 
@@ -71,8 +71,8 @@ Read and follow instructions from:
 ## Структура файлов
 
 ```
-.qwen/skills/
-├── _index.md                    ← Полный каталог всех 60 skills
+.agents/skills/dodep/
+├── _index.md                    ← Полный каталог 61 проектного навыка
 ├── _agents.md                   ← Профили ролей (12 профилей)
 ├── architecture/                ← Архитектурные паттерны (5)
 ├── rust/                        ← Rust skills (9)

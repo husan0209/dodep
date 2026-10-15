@@ -22,27 +22,27 @@
 ```
 ОБЯЗАТЕЛЬНЫЕ (всегда, 7 файлов — из _agents.md profile FRONTEND_WEB_ENGINEER):
   1. CONVENTIONS.md                                          ← закон проекта
-  2. .qwen/skills/architecture/architecture-overview.skill.md  ← общая архитектура
-  3. .qwen/skills/frontend/nextjs-general.skill.md             ← Next.js 14 App Router, RSC, Server Actions
-  4. .qwen/skills/frontend/nextjs-components.skill.md          ← паттерны компонентов
-  5. .qwen/skills/frontend/nextjs-state-management.skill.md    ← Zustand + React Query (client/server state)
-  6. .qwen/skills/frontend/nextjs-api-integration.skill.md     ← fetch, mutations, WebSocket client
-  7. .qwen/skills/frontend/typescript-shared.skill.md          ← TS типы, gen/typescript/
-  8. .qwen/skills/security/security-general.skill.md           ← всегда при работе с данными
+  2. .agents/skills/dodep/architecture/architecture-overview.skill.md  ← общая архитектура
+  3. .agents/skills/dodep/frontend/nextjs-general.skill.md             ← Next.js 14 App Router, RSC, Server Actions
+  4. .agents/skills/dodep/frontend/nextjs-components.skill.md          ← паттерны компонентов
+  5. .agents/skills/dodep/frontend/nextjs-state-management.skill.md    ← Zustand + React Query (client/server state)
+  6. .agents/skills/dodep/frontend/nextjs-api-integration.skill.md     ← fetch, mutations, WebSocket client
+  7. .agents/skills/dodep/frontend/typescript-shared.skill.md          ← TS типы, gen/typescript/
+  8. .agents/skills/dodep/security/security-general.skill.md           ← всегда при работе с данными
   9. весь FRONTEND_SPEC.md (6 частей)
 
 ДОПОЛНИТЕЛЬНЫЕ (по задаче):
-  - Sports betting UI:    .qwen/skills/domain-specific/betting-engine-logic.skill.md
-  - Casino lobby / iframe: .qwen/skills/domain-specific/casino-integration.skill.md
-  - Wallet UI:            .qwen/skills/domain-specific/wallet-financial-ops.skill.md
-  - Bonus system UI:      .qwen/skills/domain-specific/bonus-system-logic.skill.md
-  - KYC documents UI:     .qwen/skills/domain-specific/kyc-aml-compliance.skill.md
-  - RG / Self-exclusion:  .qwen/skills/domain-specific/responsible-gambling.skill.md
-  - Auth / 2FA flow:      .qwen/skills/security/authentication-patterns.skill.md
-  - Шифрование (BetSlip): .qwen/skills/security/encryption-patterns.skill.md
-  - Form validation:      .qwen/skills/security/input-validation.skill.md
-  - Frontend design:      .qwen/skills/frontend/frontend-design.skill.md (Tailwind паттерны)
-  - API contract:         .qwen/skills/architecture/api-design-guidelines.skill.md
+  - Sports betting UI:    .agents/skills/dodep/domain-specific/betting-engine-logic.skill.md
+  - Casino lobby / iframe: .agents/skills/dodep/domain-specific/casino-integration.skill.md
+  - Wallet UI:            .agents/skills/dodep/domain-specific/wallet-financial-ops.skill.md
+  - Bonus system UI:      .agents/skills/dodep/domain-specific/bonus-system-logic.skill.md
+  - KYC documents UI:     .agents/skills/dodep/domain-specific/kyc-aml-compliance.skill.md
+  - RG / Self-exclusion:  .agents/skills/dodep/domain-specific/responsible-gambling.skill.md
+  - Auth / 2FA flow:      .agents/skills/dodep/security/authentication-patterns.skill.md
+  - Шифрование (BetSlip): .agents/skills/dodep/security/encryption-patterns.skill.md
+  - Form validation:      .agents/skills/dodep/security/input-validation.skill.md
+  - Frontend design:      .agents/skills/dodep/frontend/frontend-design.skill.md (Tailwind паттерны)
+  - API contract:         .agents/skills/dodep/architecture/api-design-guidelines.skill.md
 ```
 
 ПРАВИЛА (из AGENTS.md):

@@ -205,7 +205,7 @@ make clean
 | `.env.example` | Шаблон переменных окружения |
 | `ТЗ.md` | Полное техническое задание (3111 строк) |
 | `stek.md` | Детальное описание стека технологий |
-| `skills.md` | Конфигурация AI-агентов (12 профилей) |
+| `.agents/skills/dodep/_agents.md` | Конфигурация AI-агентов (12 профилей) |
 
 ---
 
@@ -240,7 +240,7 @@ make clean
 
 - **Полное ТЗ:** `ТЗ.md` (3111 строк)
 - **Стек технологий:** `stek.md`
-- **AI Agent Skills:** `skills.md` + `.qwen/skills/`
+- **AI Agent Skills:** `.agents/skills/dodep/`
 - **README:** `README.md`
 
 ---
