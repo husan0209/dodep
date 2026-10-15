@@ -197,6 +197,147 @@ service BettingEngine {
 
 ---
 
+## Sports Feed (read-only)
+
+> **STATUS: `501 Not Implemented`.**
+> The betting-owned `events` / `markets` / `outcomes` tables do not exist
+> yet (the only sports tables in `libs/migrations` are the admin-owned
+> `sports_events` / `sports_markets` from `013_admin_bff.sql`: UUID keys,
+> no outcome odds, cross-service reads forbidden). Every endpoint below
+> therefore returns `501` with a machine-readable WebSocket fallback
+> contract instead of an empty route, so mobile can leave its error-state
+> behind and subscribe to live odds today.
+
+These routes are **public** (no auth): the sports catalog contains no
+user data and is browsed pre-login, exactly like the web sportsbook.
+Placing bets stays behind auth.
+
+### List Sports Events
+
+**GET** `/api/v1/sports/events?sport=football&live=true&limit=20&cursor=...`
+
+Query params:
+
+| Param  | Type   | Default | Description                              |
+|--------|--------|---------|------------------------------------------|
+| sport  | string | null    | Sport slug, e.g. `football`, `tennis`    |
+| live   | bool   | null    | `true` → live only, `false` → prematch only |
+| limit  | int    | 20      | Page size, clamped to 1–100              |
+| cursor | string | null    | Opaque next-page token from prior response |
+
+### Get Sports Event
+
+**GET** `/api/v1/sports/events/{id}`
+
+`{id}` is an opaque string (future feed tables may use BIGINT or UUID).
+Returns the event with its markets.
+
+### Get Event Odds
+
+**GET** `/api/v1/sports/events/{id}/odds`
+
+Live / pre-match odds resync (see also FRONTEND_SPEC canonical API).
+Target cache TTL: **5s live / 30s prematch** (DragonflyDB key
+`odds:{event_id}:{market_id}:{outcome_id}`), p99 target **< 50ms**.
+
+### 501 Response (current behavior)
+
+```json
+{
+  "error": {
+    "code": "SPORTS_FEED_UNAVAILABLE",
+    "message": "Odds for event evt-9 are not available via REST yet",
+    "details": {
+      "resource": "event_odds",
+      "event_id": "evt-9",
+      "retryable": false,
+      "docs": "docs/api/betting-engine.md#sports-feed",
+      "ws_alternative": {
+        "transport": "websocket",
+        "redpanda_topic": "events.odds_updated",
+        "topic_key": "event_id",
+        "fields": ["event_id", "market_id", "outcome_id", "odds", "status", "updated_at"],
+        "odds_format": "decimal string, e.g. \"2.50\"",
+        "cache_key_pattern": "odds:{event_id}:{market_id}:{outcome_id}",
+        "ttl_live_secs": 5,
+        "ttl_prematch_secs": 30
+      }
+    }
+  }
+}
+```
+
+### Future `200 OK` contract (for mobile, when feed tables land)
+
+Odds and money are **decimal strings, never JSON numbers** (no `f64`).
+
+```json
+// GET /api/v1/sports/events?sport=football&live=true
+{
+  "data": [
+    {
+      "event_id": "evt-9",
+      "sport": "football",
+      "league": "Premier League",
+      "home_team": "Arsenal",
+      "away_team": "Chelsea",
+      "status": "live",
+      "is_live": true,
+      "start_time": "2026-10-15T18:00:00Z",
+      "market_count": 42
+    }
+  ],
+  "page_size": 20,
+  "cursor": "evt-9"
+}
+```
+
+```json
+// GET /api/v1/sports/events/evt-9/odds
+{
+  "event_id": "evt-9",
+  "is_live": true,
+  "ttl_secs": 5,
+  "markets": [
+    {
+      "market_id": "m1",
+      "name": "Match Result",
+      "status": "open",
+      "outcomes": [
+        { "outcome_id": "o1", "name": "Home", "odds": "2.10", "status": "active" },
+        { "outcome_id": "o2", "name": "Draw", "odds": "3.40", "status": "active" },
+        { "outcome_id": "o3", "name": "Away", "odds": "3.20", "status": "active" }
+      ],
+      "margin": "0.0828"
+    }
+  ]
+}
+```
+
+### WebSocket alternative (live today)
+
+Subscribe via **websocket-gateway** (`:8082`) instead of polling REST:
+
+| Item | Value |
+|------|-------|
+| Subscribe message | `{ "action": "subscribe", "channel": "odds:event:{event_id}" }` |
+| Redpanda topic | `events.odds_updated` (key: `event_id`, at-least-once, idempotent consumer) |
+| Message fields | `event_id`, `market_id`, `outcome_id`, `odds` (decimal string), `status` (`active`/`suspended`/`settled`), `updated_at` (RFC 3339) |
+| Suspended market | `status: "suspended"` — mobile must block bet placement on that market |
+| Cache (DragonflyDB) | `odds:{event_id}:{market_id}:{outcome_id}`, TTL 5s live / 30s prematch |
+| Reconnect | exponential backoff, resync via `GET /sports/events/{id}/odds` once it returns 200 |
+
+REST vs WS guidance for mobile:
+
+| Need | Use |
+|------|-----|
+| Initial catalog / SEO / pre-login browse | REST `GET /sports/events*` (200 once feed tables land) |
+| Live odds ticks (< 50ms) | WS subscription (always) |
+| Resync after reconnect | WS replay, then REST odds endpoint when available |
+| Feed outage (> 60s no ticks) | show stale-odds banner, block placement on affected markets |
+
+---
+
 ## Performance Targets
 
 | Metric        | Target                    |

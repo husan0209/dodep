@@ -216,23 +216,61 @@ func setupAdminRoutes(router fiber.Router, svc *service.AffiliateService) {
 
 		var req struct {
 			ProviderReference string `json:"provider_reference"`
+			// KYCApproved is the finance operator's confirmation that the
+			// affiliate passed KYC at approval time. Required when the
+			// affiliate profile mandates KYC (fail-closed in service).
+			KYCApproved bool `json:"kyc_approved"`
 		}
 		// An empty body is legitimate here - the approval only needs the id -
-		// so only a genuinely malformed payload is rejected.
-		if err := c.BodyParser(&req); err != nil {
-			return c.Status(400).JSON(fiber.Map{"error": "invalid request body"})
+		// so parsing is skipped when there is no body; only a genuinely
+		// malformed payload is rejected.
+		if len(c.Body()) > 0 {
+			if err := c.BodyParser(&req); err != nil {
+				return c.Status(400).JSON(fiber.Map{"error": "invalid request body"})
+			}
 		}
 
 		payout, err := svc.ApproveAffiliatePayout(c.Context(), service.ApproveAffiliatePayoutInput{
 			PayoutID:          payoutID,
 			ApprovedBy:        adminUserID,
 			ProviderReference: req.ProviderReference,
+			KYCApproved:       req.KYCApproved,
 		})
 		if err != nil {
 			return handleDomainError(c, err)
 		}
 
 		return c.JSON(payout)
+	})
+
+	// Mark payout as paid (terminal PSP confirmation).
+	// Allowed transitions: approved/processing -> paid. The repository moves
+	// funds available -> paid inside the affiliate ledger and emits
+	// affiliate.payout.paid via the outbox in the same transaction.
+	// TODO(affiliate-mark-paid): wire service.MarkPayoutPaid (internal/service
+	// is outside this change's file scope) and replace the 501 below with:
+	//   svc.MarkPayoutPaid(ctx, service.MarkPayoutPaidInput{PayoutID, PaidBy: adminUserID, ProviderReference})
+	// Until then fail closed — never fake a terminal money transition.
+	affiliates.Post("/payouts/:id/mark-paid", func(c *fiber.Ctx) error {
+		payoutID, err := uuid.Parse(c.Params("id"))
+		if err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": "invalid payout id"})
+		}
+
+		var req struct {
+			ProviderReference string `json:"provider_reference"`
+		}
+		if len(c.Body()) > 0 {
+			if err := c.BodyParser(&req); err != nil {
+				return c.Status(400).JSON(fiber.Map{"error": "invalid request body"})
+			}
+		}
+
+		return c.Status(501).JSON(fiber.Map{
+			"code":      "MARK_PAID_NOT_IMPLEMENTED",
+			"error":     "mark-paid is not yet wired to the payout service; payout state unchanged",
+			"payout_id": payoutID.String(),
+		})
 	})
 
 	// Reject payout

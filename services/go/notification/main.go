@@ -17,12 +17,13 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 
+	"github.com/opus-casino/notification/internal/client"
 	"github.com/opus-casino/notification/internal/config"
+	"github.com/opus-casino/notification/internal/consumer"
 	"github.com/opus-casino/notification/internal/handlers"
-	pb "github.com/opus-casino/proto/gen/go/notification/v1"
 	"github.com/opus-casino/notification/internal/repository"
 	"github.com/opus-casino/notification/internal/service"
-	"github.com/opus-casino/notification/internal/consumer"
+	pb "github.com/opus-casino/proto/gen/go/notification/v1"
 )
 
 func main() {
@@ -53,6 +54,13 @@ func main() {
 
 	// Initialize service
 	notificationService := service.NewNotificationService(notifRepo, zapLogger)
+
+	// Production channel wiring: every constructor reads credentials ONLY
+	// from the environment (CONVENTIONS NEVER-5). When a key is absent the
+	// constructor reports not-configured and the log-only fallback stays —
+	// delivery degrades to structured logs, never to a crash or a
+	// hardcoded secret. Interfaces from wave1 are used as-is via Set*.
+	wireChannelSenders(notificationService, zapLogger)
 
 	// Initialize gRPC server
 	grpcServer := grpc.NewServer()
@@ -113,6 +121,39 @@ func main() {
 
 	zapLogger.Info("Shutting down Notification Service...")
 	grpcServer.GracefulStop()
+}
+
+// wireChannelSenders attaches env-configured providers to the service.
+// Each lookup is independent: a missing key only keeps that channel's
+// log fallback (warned once at boot), never blocks the others.
+func wireChannelSenders(notificationService *service.NotificationService, zapLogger *zap.Logger) {
+	if sender, ok := client.NewSendGridSenderFromEnv(zapLogger); ok {
+		notificationService.SetEmailSender(sender)
+		zapLogger.Info("Notification: SendGrid email sender configured")
+	} else {
+		zapLogger.Warn("Notification: SENDGRID_API_KEY/EMAIL_API_KEY unset — email uses log fallback")
+	}
+
+	if sender, ok := client.NewTwilioSenderFromEnv(zapLogger); ok {
+		notificationService.SetSMSSender(sender)
+		zapLogger.Info("Notification: Twilio SMS sender configured")
+	} else {
+		zapLogger.Warn("Notification: TWILIO_ACCOUNT_SID/TWILIO_AUTH_TOKEN unset — SMS uses log fallback")
+	}
+
+	if sender, ok := client.NewFirebaseSenderFromEnv(zapLogger); ok {
+		notificationService.SetPushSender(sender)
+		zapLogger.Info("Notification: Firebase FCM push sender configured")
+	} else {
+		zapLogger.Warn("Notification: no Firebase service account — push uses log fallback")
+	}
+
+	if pub, ok := client.NewGatewayPublisherFromEnv(zapLogger); ok {
+		notificationService.SetInAppPublisher(pub)
+		zapLogger.Info("Notification: WebSocket gateway publisher configured")
+	} else {
+		zapLogger.Warn("Notification: WS_GATEWAY_URL unset — in-app uses log fallback")
+	}
 }
 
 func healthHandler(c *fiber.Ctx) error {

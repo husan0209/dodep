@@ -10,10 +10,16 @@ import (
 )
 
 // JWTClaims mirrors the auth service claim structure for shared-secret validation.
+// Admin surfaces additionally read role/permission claims; tokens issued
+// without them simply carry none and fail admin checks (fail-closed).
 type JWTClaims struct {
-	UserID    string `json:"user_id"`
-	SessionID string `json:"session_id"`
-	DeviceID  string `json:"device_id,omitempty"`
+	UserID      string   `json:"user_id"`
+	SessionID   string   `json:"session_id"`
+	DeviceID    string   `json:"device_id,omitempty"`
+	Role        string   `json:"role,omitempty"`
+	Roles       []string `json:"roles,omitempty"`
+	Permissions []string `json:"permissions,omitempty"`
+	IsAdmin     bool     `json:"is_admin,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -50,7 +56,7 @@ func AuthMiddleware(jwtSecretKey string) fiber.Handler {
 		}
 
 		claims, ok := token.Claims.(*JWTClaims)
-		if !ok || !token.Valid {
+		if !ok || !token.Valid || claims.UserID == "" {
 			return c.Status(401).JSON(fiber.Map{
 				"error": "invalid token claims",
 			})
@@ -59,14 +65,53 @@ func AuthMiddleware(jwtSecretKey string) fiber.Handler {
 		// Store user identity — NOT from body (CONVENTIONS NEVER-7)
 		c.Locals("user_id", claims.UserID)
 		c.Locals("session_id", claims.SessionID)
+		c.Locals("roles", claims.Roles)
+		c.Locals("permissions", claims.Permissions)
 
 		return c.Next()
 	}
 }
 
+// affiliateAdminPermissions are the permission claims accepted on admin routes.
+var affiliateAdminPermissions = map[string]bool{
+	"affiliate.approve":        true,
+	"affiliate.payout.approve": true,
+	"affiliate.adjust":         true,
+}
+
+// hasAffiliateAdminPrivilege reports whether token claims grant affiliate admin
+// rights: a superuser flag, an admin role, or any affiliate admin permission.
+func hasAffiliateAdminPrivilege(claims *JWTClaims) bool {
+	if claims == nil {
+		return false
+	}
+	if claims.IsAdmin {
+		return true
+	}
+	roles := append([]string{claims.Role}, claims.Roles...)
+	for _, r := range roles {
+		switch strings.ToLower(strings.TrimSpace(r)) {
+		case "admin", "superadmin":
+			return true
+		}
+	}
+	for _, p := range claims.Permissions {
+		np := strings.ToLower(strings.TrimSpace(p))
+		if np == "*" || np == "all.*" || np == "affiliate.*" {
+			return true
+		}
+		if affiliateAdminPermissions[np] {
+			return true
+		}
+	}
+	return false
+}
+
 // AdminMiddleware checks that the requesting user has admin privileges.
-// For MVP, it validates the JWT and allows any authenticated user on admin routes.
-// In production, this should check a role claim in the token.
+// It validates the JWT and then requires an admin role claim: is_admin, an
+// admin/superadmin role, or one of the affiliate permissions
+// (affiliate.approve, affiliate.payout.approve, affiliate.adjust).
+// Any other authenticated user gets 403 — fail-closed, never fail-open.
 func AdminMiddleware(jwtSecretKey string) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		authHeader := c.Get("Authorization")
@@ -94,25 +139,33 @@ func AdminMiddleware(jwtSecretKey string) fiber.Handler {
 		}
 
 		claims, ok := token.Claims.(*JWTClaims)
-		if !ok || !token.Valid {
+		if !ok || !token.Valid || claims.UserID == "" {
 			return c.Status(401).JSON(fiber.Map{"error": "invalid admin token claims"})
+		}
+
+		if !hasAffiliateAdminPrivilege(claims) {
+			return c.Status(403).JSON(fiber.Map{"error": "forbidden: affiliate admin privileges required"})
 		}
 
 		c.Locals("admin_user_id", claims.UserID)
 		c.Locals("session_id", claims.SessionID)
+		c.Locals("admin_roles", claims.Roles)
+		c.Locals("admin_permissions", claims.Permissions)
 
 		return c.Next()
 	}
 }
 
-// getUserID extracts user_id set by AuthMiddleware.
+// getUserID extracts user_id set by AuthMiddleware ("" when absent).
 func getUserID(c *fiber.Ctx) string {
-	return c.Locals("user_id").(string)
+	v, _ := c.Locals("user_id").(string)
+	return v
 }
 
-// getAdminUserID extracts admin_user_id set by AdminMiddleware.
+// getAdminUserID extracts admin_user_id set by AdminMiddleware ("" when absent).
 func getAdminUserID(c *fiber.Ctx) string {
-	return c.Locals("admin_user_id").(string)
+	v, _ := c.Locals("admin_user_id").(string)
+	return v
 }
 
 // IdempotencyKeyHeader is the HTTP header carrying the idempotency key.

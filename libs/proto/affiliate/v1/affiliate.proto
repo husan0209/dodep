@@ -26,6 +26,13 @@ service AffiliateService {
   rpc RequestAffiliatePayout(RequestAffiliatePayoutRequest) returns (RequestAffiliatePayoutResponse);
   rpc ApproveAffiliatePayout(ApproveAffiliatePayoutRequest) returns (ApproveAffiliatePayoutResponse);
   rpc RejectAffiliatePayout(RejectAffiliatePayoutRequest) returns (RejectAffiliatePayoutResponse);
+  // ReverseCommission reverses one accrued/pending/available earning
+  // (e.g. chargeback or confirmed fraud). Paid earnings are terminal.
+  rpc ReverseCommission(ReverseCommissionRequest) returns (ReverseCommissionResponse);
+  // MarkAffiliatePayoutPaid finalizes an approved payout after the PSP leg
+  // settles. Approval (finance decision) and paid (settlement fact) are
+  // separate steps on purpose.
+  rpc MarkAffiliatePayoutPaid(MarkAffiliatePayoutPaidRequest) returns (MarkAffiliatePayoutPaidResponse);
   rpc FlagAffiliateFraud(FlagAffiliateFraudRequest) returns (FlagAffiliateFraudResponse);
 }
 
@@ -302,6 +309,37 @@ message RejectAffiliatePayoutRequest {
 }
 
 message RejectAffiliatePayoutResponse {
+  AffiliatePayout payout = 1;
+}
+
+// ReverseCommissionRequest reverses a held or available commission line.
+// Paid earnings are terminal and cannot be reversed — use a manual debit
+// adjustment instead.
+message ReverseCommissionRequest {
+  // Earning UUID to reverse.
+  string earning_id = 1;
+  // Mandatory audit reason for the reversal.
+  string reason = 2;
+}
+
+// ReverseCommissionResponse returns the earning in REVERSED status.
+message ReverseCommissionResponse {
+  // Earning after the reversal.
+  AffiliateEarning earning = 1;
+}
+
+// MarkAffiliatePayoutPaidRequest finalizes an approved payout after the PSP
+// leg completes. Only approved/processing payouts may transition to paid.
+message MarkAffiliatePayoutPaidRequest {
+  // Payout UUID to finalize.
+  string payout_id = 1;
+  // PSP settlement reference, stored for reconciliation (optional).
+  string provider_reference = 2;
+}
+
+// MarkAffiliatePayoutPaidResponse returns the payout in PAID status.
+message MarkAffiliatePayoutPaidResponse {
+  // Payout after finalization.
   AffiliatePayout payout = 1;
 }
 

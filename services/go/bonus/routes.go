@@ -19,9 +19,9 @@ import (
 func setupRoutesOnGroup(api fiber.Router, svc *service.BonusService, writeLimiter *ratelimit.Limiter) {
 
 	api.Get("/", func(c *fiber.Ctx) error {
-		userID, err := parseTokenUserID(c)
-		if err != nil {
-			return err
+		userID, ok := userIDFromToken(c)
+		if !ok {
+			return c.Status(401).JSON(fiber.Map{"error": "unauthorized"})
 		}
 		limit, _ := strconv.Atoi(c.Query("limit", "20"))
 		offset, _ := strconv.Atoi(c.Query("offset", "0"))
@@ -33,9 +33,9 @@ func setupRoutesOnGroup(api fiber.Router, svc *service.BonusService, writeLimite
 	})
 
 	api.Get("/active", func(c *fiber.Ctx) error {
-		userID, err := parseTokenUserID(c)
-		if err != nil {
-			return err
+		userID, ok := userIDFromToken(c)
+		if !ok {
+			return c.Status(401).JSON(fiber.Map{"error": "unauthorized"})
 		}
 		bonus, err := svc.GetActiveBonus(c.Context(), userID)
 		if err != nil {
@@ -48,9 +48,9 @@ func setupRoutesOnGroup(api fiber.Router, svc *service.BonusService, writeLimite
 	})
 
 	api.Get("/:id", func(c *fiber.Ctx) error {
-		userID, err := parseTokenUserID(c)
-		if err != nil {
-			return err
+		userID, ok := userIDFromToken(c)
+		if !ok {
+			return c.Status(401).JSON(fiber.Map{"error": "unauthorized"})
 		}
 		bonusID, err := uuid.Parse(c.Params("id"))
 		if err != nil {
@@ -64,9 +64,9 @@ func setupRoutesOnGroup(api fiber.Router, svc *service.BonusService, writeLimite
 	})
 
 	api.Get("/:id/wagering", func(c *fiber.Ctx) error {
-		userID, err := parseTokenUserID(c)
-		if err != nil {
-			return err
+		userID, ok := userIDFromToken(c)
+		if !ok {
+			return c.Status(401).JSON(fiber.Map{"error": "unauthorized"})
 		}
 		bonusID, err := uuid.Parse(c.Params("id"))
 		if err != nil {
@@ -92,9 +92,9 @@ func setupRoutesOnGroup(api fiber.Router, svc *service.BonusService, writeLimite
 	})
 
 	api.Post("/:id/activate", IdempotencyMiddleware(), writeGuard(writeLimiter), func(c *fiber.Ctx) error {
-		userID, err := parseTokenUserID(c)
-		if err != nil {
-			return err
+		userID, ok := userIDFromToken(c)
+		if !ok {
+			return c.Status(401).JSON(fiber.Map{"error": "unauthorized"})
 		}
 		bonusID, err := uuid.Parse(c.Params("id"))
 		if err != nil {
@@ -108,9 +108,9 @@ func setupRoutesOnGroup(api fiber.Router, svc *service.BonusService, writeLimite
 	})
 
 	api.Post("/:id/cancel", IdempotencyMiddleware(), writeGuard(writeLimiter), func(c *fiber.Ctx) error {
-		userID, err := parseTokenUserID(c)
-		if err != nil {
-			return err
+		userID, ok := userIDFromToken(c)
+		if !ok {
+			return c.Status(401).JSON(fiber.Map{"error": "unauthorized"})
 		}
 		bonusID, err := uuid.Parse(c.Params("id"))
 		if err != nil {
@@ -133,17 +133,23 @@ func writeGuard(l *ratelimit.Limiter) fiber.Handler {
 	return l.Middleware(ratelimit.ByUserOrIP)
 }
 
-// parseTokenUserID reads user_id from JWT middleware locals (NEVER from body).
-func parseTokenUserID(c *fiber.Ctx) (int64, error) {
+// userIDFromToken reads user_id from JWT middleware locals (NEVER from body).
+// It returns (id, true) on success and (0, false) when the request is
+// unauthenticated — the caller renders the 401 response itself.
+//
+// NEVER return c.JSON() as an error here: Fiber returns nil after a
+// successful JSON write, so `if err != nil` callers would mistake the 401
+// response for success and continue with userID 0 (auth bypass).
+func userIDFromToken(c *fiber.Ctx) (int64, bool) {
 	raw := getUserID(c)
 	if raw == "" {
-		return 0, c.Status(401).JSON(fiber.Map{"error": "unauthorized"})
+		return 0, false
 	}
 	id, err := strconv.ParseInt(raw, 10, 64)
 	if err != nil || id <= 0 {
-		return 0, c.Status(401).JSON(fiber.Map{"error": "invalid user identity in token"})
+		return 0, false
 	}
-	return id, nil
+	return id, true
 }
 
 func writeBonusError(c *fiber.Ctx, err error) error {

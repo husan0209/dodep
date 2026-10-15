@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -28,6 +29,127 @@ type KYCService struct {
 	webhookSecret string
 	log           *zap.Logger
 	now           func() time.Time
+	// events is the optional Redpanda publisher for kyc.verified/kyc.rejected.
+	// Nil by default (no-op); wired via SetEventPublisher. Publishing is
+	// best-effort and never fails a review decision.
+	events EventPublisher
+	// overrides fronts kyc_limit_overrides. In-memory by default (per-pod,
+	// dev/test); production swaps a repo-backed store via SetOverrideStore.
+	overrides LimitOverrideStore
+}
+
+// EventPublisher publishes review-outcome events (kyc.verified/kyc.rejected).
+// The Redpanda producer implements this; tests use an in-memory fake.
+type EventPublisher interface {
+	PublishKYCEvent(ctx context.Context, topic string, event domain.KYCStatusEvent) error
+}
+
+// SetEventPublisher attaches the review-outcome publisher. Nil detaches.
+func (s *KYCService) SetEventPublisher(p EventPublisher) {
+	s.events = p
+}
+
+// publishKYCEvent emits best-effort: failures are logged, never returned.
+func (s *KYCService) publishKYCEvent(ctx context.Context, topic string, userID int64, level domain.KYCLevel, status domain.VerificationStatus, reason string) {
+	if s.events == nil {
+		return
+	}
+	event := domain.NewKYCStatusEvent(userID, level, status, reason, s.now())
+	if err := s.events.PublishKYCEvent(ctx, topic, event); err != nil {
+		s.log.Warn("kyc: outcome event publish failed (best-effort)",
+			zap.String("topic", topic), zap.Int64("user_id", userID), zap.Error(err))
+	}
+}
+
+// LimitOverrideStore persists custom VIP terms (kyc_limit_overrides).
+// The GORM repository gains a backed implementation when the table is cut
+// over (see migrations/001_kyc.up.sql); until then memory serves dev/test.
+type LimitOverrideStore interface {
+	GetOverride(ctx context.Context, userID int64) (*domain.LimitOverride, error)
+	UpsertOverride(ctx context.Context, o *domain.LimitOverride) error
+}
+
+// memoryOverrideStore is the per-pod default LimitOverrideStore.
+type memoryOverrideStore struct {
+	mu sync.Mutex
+	m  map[int64]*domain.LimitOverride
+}
+
+func newMemoryOverrideStore() *memoryOverrideStore {
+	return &memoryOverrideStore{m: map[int64]*domain.LimitOverride{}}
+}
+
+func (s *memoryOverrideStore) GetOverride(_ context.Context, userID int64) (*domain.LimitOverride, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if o, ok := s.m[userID]; ok {
+		cp := *o
+		return &cp, nil
+	}
+	return nil, nil
+}
+
+func (s *memoryOverrideStore) UpsertOverride(_ context.Context, o *domain.LimitOverride) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	cp := *o
+	cp.UpdatedAt = time.Now()
+	s.m[o.UserID] = &cp
+	return nil
+}
+
+// SetOverrideStore swaps the limit-override backend (e.g. repo-backed).
+// Nil is ignored (keeps the current store).
+func (s *KYCService) SetOverrideStore(st LimitOverrideStore) {
+	if st != nil {
+		s.overrides = st
+	}
+}
+
+// UpsertLimitOverride stores custom VIP terms. Admin-only: callerRole must be
+// "admin" (mirrors the JWT is_admin claim enforced in middleware.go).
+// Every upsert is audit-logged and invalidates the status cache.
+func (s *KYCService) UpsertLimitOverride(ctx context.Context, callerRole string, o *domain.LimitOverride) error {
+	if !strings.EqualFold(strings.TrimSpace(callerRole), "admin") {
+		return domain.ErrForbidden
+	}
+	if err := o.Validate(); err != nil {
+		return err
+	}
+	if err := s.overrides.UpsertOverride(ctx, o); err != nil {
+		return fmt.Errorf("kyc: save limit override: %w", err)
+	}
+	_ = s.repo.AppendAudit(ctx, &domain.AuditEntry{
+		UserID: o.UserID, Actor: "admin:" + strings.TrimSpace(o.UpdatedBy),
+		Action: domain.AuditLimitOverride, NewStatus: "custom",
+	})
+	s.cacheInvalidate(ctx, o.UserID)
+	s.log.Info("kyc: limit override upserted",
+		zap.Int64("user_id", o.UserID), zap.String("by", o.UpdatedBy))
+	return nil
+}
+
+// EffectiveLimits returns the limits in force for a user: base tier from the
+// record level merged with any custom override (override wins per field).
+func (s *KYCService) EffectiveLimits(ctx context.Context, userID int64) (domain.Limits, error) {
+	if userID <= 0 {
+		return domain.Limits{}, domain.ErrInvalidUserID
+	}
+	level := domain.LevelNone
+	if rec, err := s.repo.GetRecord(ctx, userID); err != nil {
+		return domain.Limits{}, fmt.Errorf("kyc: get record for limits: %w", err)
+	} else if rec != nil {
+		level = rec.Level
+	}
+	var o *domain.LimitOverride
+	if s.overrides != nil {
+		var err error
+		o, err = s.overrides.GetOverride(ctx, userID)
+		if err != nil {
+			return domain.Limits{}, fmt.Errorf("kyc: get limit override: %w", err)
+		}
+	}
+	return domain.EffectiveLimits(level, o), nil
 }
 
 // Config wires optional collaborators.
@@ -53,6 +175,7 @@ func NewKYCService(repo repository.KYCRepository, c cache.StatusCache, screener 
 	return &KYCService{
 		repo: repo, cache: c, screener: screener, crypt: crypt,
 		webhookSecret: cfg.WebhookSecret, log: log, now: time.Now,
+		overrides: newMemoryOverrideStore(),
 	}
 }
 
@@ -293,6 +416,13 @@ func (s *KYCService) VerifyDocument(ctx context.Context, in VerifyInput) (*domai
 	}); err != nil {
 		return nil, err
 	}
+	// Outcome event: only a promotion that actually landed on verified is
+	// published (screening holds stay silent until compliance resolves).
+	if rec, err := s.repo.GetRecord(ctx, doc.UserID); err != nil {
+		s.log.Warn("kyc: record reload for event failed", zap.Error(err), zap.Int64("user_id", doc.UserID))
+	} else if rec != nil && rec.Status == domain.StatusVerified {
+		s.publishKYCEvent(ctx, domain.TopicKYCVerified, doc.UserID, rec.Level, rec.Status, "")
+	}
 	s.decryptInPlace(doc)
 	return doc, nil
 }
@@ -339,6 +469,14 @@ func (s *KYCService) RejectDocument(ctx context.Context, in RejectInput) (*domai
 	if err := s.recomputeAfterReview(ctx, doc.UserID, "admin:"+in.RejectedBy, ReviewSubject{}); err != nil {
 		return nil, err
 	}
+	// Outcome event: every rejection is published (notification + analytics).
+	level := domain.LevelNone
+	if rec, err := s.repo.GetRecord(ctx, doc.UserID); err != nil {
+		s.log.Warn("kyc: record reload for event failed", zap.Error(err), zap.Int64("user_id", doc.UserID))
+	} else if rec != nil {
+		level = rec.Level
+	}
+	s.publishKYCEvent(ctx, domain.TopicKYCRejected, doc.UserID, level, domain.StatusRejected, in.Reason)
 	s.decryptInPlace(doc)
 	return doc, nil
 }

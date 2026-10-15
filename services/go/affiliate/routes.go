@@ -2,10 +2,10 @@ package main
 
 import (
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"math"
 	"strconv"
-	"strings"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -21,8 +21,8 @@ func setupRoutes(router fiber.Router, svc *service.AffiliateService) {
 	router.Post("/enroll", func(c *fiber.Ctx) error {
 		userID := getUserID(c)
 		uid, err := strconv.ParseInt(userID, 10, 64)
-		if err != nil {
-			return c.Status(400).JSON(fiber.Map{"error": "invalid user_id in token"})
+		if err != nil || uid <= 0 {
+			return c.Status(401).JSON(fiber.Map{"error": "invalid user_id in token"})
 		}
 
 		var req struct {
@@ -46,8 +46,8 @@ func setupRoutes(router fiber.Router, svc *service.AffiliateService) {
 	router.Get("/profile", func(c *fiber.Ctx) error {
 		userID := getUserID(c)
 		uid, err := strconv.ParseInt(userID, 10, 64)
-		if err != nil {
-			return c.Status(400).JSON(fiber.Map{"error": "invalid user_id in token"})
+		if err != nil || uid <= 0 {
+			return c.Status(401).JSON(fiber.Map{"error": "invalid user_id in token"})
 		}
 
 		profile, err := svc.GetProfileByUserID(c.Context(), uid)
@@ -215,10 +215,29 @@ func setupRoutes(router fiber.Router, svc *service.AffiliateService) {
 			DisplayName   string `json:"display_name"`
 			DetailsMasked string `json:"details_masked"`
 			IsDefault     bool   `json:"is_default"`
-			IsVerified    bool   `json:"is_verified"`
+			// NOTE: no is_verified field — partners must never self-verify a
+			// payout method. Verification is admin-only; the current value is
+			// preserved below.
 		}
 		if err := c.BodyParser(&req); err != nil {
 			return c.Status(400).JSON(fiber.Map{"error": "invalid request body"})
+		}
+
+		methods, err := svc.ListPayoutMethods(c.Context(), affiliateID)
+		if err != nil {
+			return handleDomainError(c, err)
+		}
+		verified := false
+		found := false
+		for _, m := range methods {
+			if m.ID == methodID {
+				verified = m.IsVerified
+				found = true
+				break
+			}
+		}
+		if !found {
+			return c.Status(404).JSON(fiber.Map{"error": "payout method not found"})
 		}
 
 		method, err := svc.UpdatePayoutMethod(c.Context(), service.UpdatePayoutMethodInput{
@@ -228,7 +247,7 @@ func setupRoutes(router fiber.Router, svc *service.AffiliateService) {
 			DisplayName:   req.DisplayName,
 			DetailsMasked: req.DetailsMasked,
 			IsDefault:     req.IsDefault,
-			IsVerified:    req.IsVerified,
+			IsVerified:    verified,
 		})
 		if err != nil {
 			return handleDomainError(c, err)
@@ -237,16 +256,24 @@ func setupRoutes(router fiber.Router, svc *service.AffiliateService) {
 		return c.JSON(method)
 	})
 
-	router.Post("/payouts/request", func(c *fiber.Ctx) error {
+	router.Post("/payouts/request", IdempotencyMiddleware(), func(c *fiber.Ctx) error {
 		affiliateID, err := getAffiliateIDFromToken(c, svc)
 		if err != nil {
 			return err
 		}
 
+		// The idempotency key comes from the X-Idempotency-Key header
+		// (validated by IdempotencyMiddleware), NEVER from the body: a
+		// body-supplied key is client-mutable per request and defeats
+		// replay protection.
+		idempotencyKey, _ := c.Locals("idempotency_key").(string)
+		if idempotencyKey == "" {
+			return c.Status(400).JSON(fiber.Map{"error": "missing X-Idempotency-Key header for mutating request"})
+		}
+
 		var req struct {
-			MethodID       string `json:"method_id"`
-			Amount         string `json:"amount"`
-			IdempotencyKey string `json:"idempotency_key"`
+			MethodID string `json:"method_id"`
+			Amount   string `json:"amount"`
 		}
 		if err := c.BodyParser(&req); err != nil {
 			return c.Status(400).JSON(fiber.Map{"error": "invalid request body"})
@@ -261,13 +288,31 @@ func setupRoutes(router fiber.Router, svc *service.AffiliateService) {
 			return c.Status(400).JSON(fiber.Map{"error": "invalid amount"})
 		}
 
-		kycApproved := strings.EqualFold(c.Get("X-KYC-Approved", "false"), "true")
+		// KYC is verified server-side, never via a client header: the old
+		// X-KYC-Approved header was spoofable by any caller.
+		// TODO(affiliate-kyc): wire kyc.v1 KYCService/GetStatus via
+		// internal/client and pass the verified result as KYCApproved.
+		// Until then fail closed: profiles that mandate KYC cannot be paid.
+		profile, err := svc.GetProfileByID(c.Context(), affiliateID)
+		if err != nil {
+			return c.Status(500).JSON(fiber.Map{"error": "internal server error"})
+		}
+		if profile == nil {
+			return c.Status(404).JSON(fiber.Map{"error": "affiliate profile not found"})
+		}
+		if profile.KYCRequired {
+			return c.Status(503).JSON(fiber.Map{
+				"code":  "KYC_UNAVAILABLE",
+				"error": "kyc verification unavailable; payout blocked until kyc status can be confirmed",
+			})
+		}
+
 		payout, err := svc.RequestPayout(c.Context(), service.RequestPayoutInput{
 			AffiliateID:    affiliateID,
 			MethodID:       methodID,
 			Amount:         amount,
-			IdempotencyKey: req.IdempotencyKey,
-			KYCApproved:    kycApproved,
+			IdempotencyKey: idempotencyKey,
+			KYCApproved:    false,
 			HasOpenFraud:   false,
 		})
 		if err != nil {
@@ -341,8 +386,8 @@ func trackClickHandler(svc *service.AffiliateService) fiber.Handler {
 func getAffiliateIDFromToken(c *fiber.Ctx, svc *service.AffiliateService) (uuid.UUID, error) {
 	userID := getUserID(c)
 	uid, err := strconv.ParseInt(userID, 10, 64)
-	if err != nil {
-		return uuid.Nil, fiber.NewError(400, "invalid user_id in token")
+	if err != nil || uid <= 0 {
+		return uuid.Nil, fiber.NewError(401, "invalid user_id in token")
 	}
 
 	profile, err := svc.GetProfileByUserID(c.Context(), uid)
@@ -384,23 +429,41 @@ func paginatedResponse(data any, total int64, page int, pageSize int) fiber.Map 
 	}
 }
 
-// handleDomainError maps domain errors to HTTP status codes.
+// handleDomainError maps domain and service errors to HTTP status codes.
+// Matching uses errors.Is/As so wrapped errors (fmt.Errorf "...: %w") still
+// map correctly instead of falling through to 500.
 func handleDomainError(c *fiber.Ctx, err error) error {
-	switch err {
-	case domain.ErrEnrollmentAlreadyPending:
+	var validationErr *service.ValidationError
+	if errors.As(err, &validationErr) {
+		return c.Status(400).JSON(fiber.Map{"error": validationErr.Error()})
+	}
+
+	switch {
+	case errors.Is(err, domain.ErrEnrollmentAlreadyPending):
 		return c.Status(409).JSON(fiber.Map{"error": err.Error()})
-	case domain.ErrAffiliateNotFound, domain.ErrEnrollmentNotFound,
-		domain.ErrAffiliateLinkNotFound, domain.ErrPayoutMethodNotFound,
-		domain.ErrPayoutNotFound:
+	case errors.Is(err, domain.ErrAffiliateNotFound),
+		errors.Is(err, domain.ErrEnrollmentNotFound),
+		errors.Is(err, domain.ErrAffiliateLinkNotFound),
+		errors.Is(err, domain.ErrPayoutMethodNotFound),
+		errors.Is(err, domain.ErrPayoutNotFound),
+		errors.Is(err, service.ErrEarningNotFound):
 		return c.Status(404).JSON(fiber.Map{"error": err.Error()})
-	case domain.ErrAffiliateAlreadyExists, domain.ErrAttributionAlreadyBound:
+	case errors.Is(err, domain.ErrAffiliateAlreadyExists),
+		errors.Is(err, domain.ErrAttributionAlreadyBound),
+		errors.Is(err, service.ErrEarningNotReversible):
 		return c.Status(409).JSON(fiber.Map{"error": err.Error()})
-	case domain.ErrSelfReferral, domain.ErrInvalidPayoutAmount,
-		domain.ErrMinPayoutNotReached, domain.ErrInvalidPayoutStatus,
-		domain.ErrInvalidCommissionAmount:
+	case errors.Is(err, domain.ErrSelfReferral),
+		errors.Is(err, domain.ErrInvalidPayoutAmount),
+		errors.Is(err, domain.ErrMinPayoutNotReached),
+		errors.Is(err, domain.ErrInvalidPayoutStatus),
+		errors.Is(err, domain.ErrInvalidCommissionAmount),
+		errors.Is(err, service.ErrIdempotencyKeyRequired),
+		errors.Is(err, service.ErrPayoutMethodUnverified),
+		errors.Is(err, service.ErrInvalidAdjustment):
 		return c.Status(400).JSON(fiber.Map{"error": err.Error()})
-	case domain.ErrAffiliateKYCRequired, domain.ErrAffiliateFraudBlocked,
-		domain.ErrAffiliateInactive:
+	case errors.Is(err, domain.ErrAffiliateKYCRequired),
+		errors.Is(err, domain.ErrAffiliateFraudBlocked),
+		errors.Is(err, domain.ErrAffiliateInactive):
 		return c.Status(403).JSON(fiber.Map{"error": err.Error()})
 	default:
 		return c.Status(500).JSON(fiber.Map{"error": "internal server error"})

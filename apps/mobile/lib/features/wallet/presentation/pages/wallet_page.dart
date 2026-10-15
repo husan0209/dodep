@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../../../core/di/injection.dart';
 import '../../../../core/network/api_client.dart';
+import '../../utils/biometric_gate.dart';
 
 /// Matches a non-negative decimal string with up to 8 fractional digits
 /// (NUMERIC(18,8) on the backend) and at least one non-zero digit.
@@ -351,6 +352,21 @@ class _MoneyFormTabState extends State<_MoneyFormTab> {
   Future<void> _submit() async {
     if (!(_formKey.currentState?.validate() ?? false)) {
       return;
+    }
+    if (!_isDeposit) {
+      final unlocked =
+          await WithdrawBiometricGate().unlockBeforeWithdraw();
+      if (!mounted) {
+        return;
+      }
+      if (!unlocked) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Withdrawal cancelled: identity check failed.'),
+          ),
+        );
+        return;
+      }
     }
     setState(() {
       _submitting = true;

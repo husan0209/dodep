@@ -72,8 +72,27 @@ pub fn build(state: AppState) -> Router {
             ])
     };
 
+    // Read-only sports feed (public catalog: no user data, browsed
+    // pre-login). Returns 501 with a WS fallback contract until the
+    // betting-owned events/markets tables exist. See
+    // docs/api/betting-engine.md#sports-feed.
+    let sports = Router::new()
+        .route(
+            "/api/v1/sports/events",
+            get(handlers::sports_feed_handler::list_sports_events),
+        )
+        .route(
+            "/api/v1/sports/events/:event_id",
+            get(handlers::sports_feed_handler::get_sports_event),
+        )
+        .route(
+            "/api/v1/sports/events/:event_id/odds",
+            get(handlers::sports_feed_handler::get_event_odds),
+        );
+
     Router::new()
         .merge(health)
+        .merge(sports)
         .merge(bets.layer(axum::middleware::from_fn_with_state(
             state.clone(),
             auth::require_auth,

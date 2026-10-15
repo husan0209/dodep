@@ -30,21 +30,24 @@ type NotificationService struct {
 }
 
 // NewNotificationService creates a new notification service.
-// Channel senders default to env-based stub implementations (log only, no
-// secrets in code); override with SetEmailSender/SetSMSSender/SetPushSender/
-// SetInAppPublisher in production wiring or tests. Signature is unchanged.
+// Channel senders are selected from the environment: real provider clients
+// (SendGrid/Twilio/Firebase) when credentials are present, Log* stubs
+// otherwise. Override any sender via SetEmailSender/SetSMSSender/
+// SetPushSender/SetInAppPublisher in production wiring or tests. Signature is
+// unchanged.
 func NewNotificationService(repo *repository.NotificationRepository, log *zap.Logger) *NotificationService {
 	if log == nil {
 		log = zap.NewNop()
 	}
 	cfg := DefaultChannelConfigFromEnv()
+	email, sms, push := NewChannelSendersFromEnv(cfg, log, nil)
 	return &NotificationService{
-		repo:  repo,
-		log:   log,
-		email: NewLogEmailSender(cfg, log),
-		sms:   NewLogSMSSender(cfg, log),
-		push:  NewLogPushSender(cfg, log),
-		inApp: NewLogInAppPublisher(log),
+		repo:   repo,
+		log:    log,
+		email:  email,
+		sms:    sms,
+		push:   push,
+		inApp:  NewLogInAppPublisher(log),
 	}
 }
 
@@ -449,8 +452,9 @@ func (s *NotificationService) UpdateNotificationSettings(ctx context.Context, re
 //
 // Real PSP credentials (SendGrid API keys, Twilio SID/token, Firebase service
 // account) NEVER live in code — they come from environment variables only
-// (see DefaultChannelConfigFromEnv). Until production wiring lands, the
-// Log* stubs below preserve the send path with structured logs.
+// (see DefaultChannelConfigFromEnv). NewChannelSendersFromEnv wires the real
+// providers (see providers.go) when credentials are present; the Log* stubs
+// below remain the fallback for development and for unit tests.
 
 // ChannelConfig carries channel provider settings loaded from the environment.
 type ChannelConfig struct {
