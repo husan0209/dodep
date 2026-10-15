@@ -39,12 +39,19 @@ export const TRANSACTION_STATUSES: Record<string, StatusConfig> = {
 };
 
 export const WITHDRAWAL_STATUSES: Record<string, StatusConfig> = {
-  pending: { label: "Pending", color: "orange" },
+  pending_review: { label: "Pending Review", color: "orange" },
+  held: { label: "Held", color: "volcano" },
   approved: { label: "Approved", color: "processing" },
-  processing: { label: "Processing", color: "processing" },
-  completed: { label: "Completed", color: "green" },
   rejected: { label: "Rejected", color: "red" },
+  processing: { label: "Processing", color: "processing" },
+  sending: { label: "Sending", color: "processing" },
+  sent: { label: "Sent", color: "cyan" },
+  finished: { label: "Finished", color: "green" },
+  failed: { label: "Failed", color: "red" },
   cancelled: { label: "Cancelled", color: "default" },
+  // Backward-compatible aliases (legacy clients sent "pending")
+  pending: { label: "Pending Review", color: "orange" },
+  completed: { label: "Completed", color: "green" },
 };
 
 export const ALERT_SEVERITIES: Record<string, StatusConfig> = {

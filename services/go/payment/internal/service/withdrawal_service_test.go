@@ -14,14 +14,16 @@ import (
 
 // MockWithdrawalRepository is a mock implementation of WithdrawalRepository
 type MockWithdrawalRepository struct {
-	CreateFunc              func(ctx context.Context, withdrawal *domain.Withdrawal) error
-	GetByIDFunc             func(ctx context.Context, id int64) (*domain.Withdrawal, error)
-	GetByWithdrawalIDFunc   func(ctx context.Context, withdrawalID string) (*domain.Withdrawal, error)
-	GetByIDempotencyKeyFunc func(ctx context.Context, key string) (*domain.Withdrawal, error)
-	GetByUUIDFunc           func(ctx context.Context, uuid string) (*domain.Withdrawal, error)
-	UpdateStatusFunc        func(ctx context.Context, id int64, fromStatus, toStatus domain.WithdrawalStatus) error
-	ListByUserIDFunc        func(ctx context.Context, userID int64, filter repository.ListFilter) (*repository.ListResult[domain.Withdrawal], error)
-	CountByUserIDStatusFunc func(ctx context.Context, userID int64, statuses []domain.WithdrawalStatus) (int64, error)
+	CreateFunc                   func(ctx context.Context, withdrawal *domain.Withdrawal) error
+	GetByIDFunc                  func(ctx context.Context, id int64) (*domain.Withdrawal, error)
+	GetByWithdrawalIDFunc        func(ctx context.Context, withdrawalID string) (*domain.Withdrawal, error)
+	GetByIDempotencyKeyFunc      func(ctx context.Context, key string) (*domain.Withdrawal, error)
+	GetByUUIDFunc                func(ctx context.Context, uuid string) (*domain.Withdrawal, error)
+	UpdateStatusFunc             func(ctx context.Context, id int64, fromStatus, toStatus domain.WithdrawalStatus) error
+	UpdatePayoutIDFunc           func(ctx context.Context, id int64, payoutID string) error
+	ClaimDecidedWithdrawalsFunc  func(ctx context.Context, limit int) ([]*domain.Withdrawal, error)
+	ListByUserIDFunc             func(ctx context.Context, userID int64, filter repository.ListFilter) (*repository.ListResult[domain.Withdrawal], error)
+	CountByUserIDStatusFunc      func(ctx context.Context, userID int64, statuses []domain.WithdrawalStatus) (int64, error)
 }
 
 func (m *MockWithdrawalRepository) Create(ctx context.Context, withdrawal *domain.Withdrawal) error {
@@ -64,6 +66,20 @@ func (m *MockWithdrawalRepository) UpdateStatus(ctx context.Context, id int64, f
 		return m.UpdateStatusFunc(ctx, id, fromStatus, toStatus)
 	}
 	return nil
+}
+
+func (m *MockWithdrawalRepository) UpdatePayoutID(ctx context.Context, id int64, payoutID string) error {
+	if m.UpdatePayoutIDFunc != nil {
+		return m.UpdatePayoutIDFunc(ctx, id, payoutID)
+	}
+	return nil
+}
+
+func (m *MockWithdrawalRepository) ClaimDecidedWithdrawals(ctx context.Context, limit int) ([]*domain.Withdrawal, error) {
+	if m.ClaimDecidedWithdrawalsFunc != nil {
+		return m.ClaimDecidedWithdrawalsFunc(ctx, limit)
+	}
+	return nil, nil
 }
 
 func (m *MockWithdrawalRepository) ListByUserID(ctx context.Context, userID int64, filter repository.ListFilter) (*repository.ListResult[domain.Withdrawal], error) {

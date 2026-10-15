@@ -120,10 +120,20 @@ func main() {
 	defer closeOnExit("betting", bettingClient)()
 	log.Info("Betting engine client ready")
 
+	walletClient, err := client.NewWalletClient(cfg.WalletService.Address, cfg.WalletService.Timeout)
+	if err != nil {
+		log.Fatal("Failed to connect to wallet service", zap.Error(err))
+	}
+	defer closeOnExit("wallet", walletClient)()
+	log.Info("Wallet service client ready")
+
 	// Services
 	auditSvc := service.NewAuditService(db, log)
 	usersSvc := service.NewUsersService(userClient, auditSvc)
 	financeSvc := service.NewFinanceService(paymentClient, auditSvc)
+	// Admin auth service — used server-side for TOTP re-authentication on
+	// sensitive actions (balance adjustments) and admin profile lookups.
+	adminAuthSvc := service.NewAdminAuthService(db, cfg.JWTSecretKey)
 
 	// WebSocket / SSE hub — starts background goroutines for metric push.
 	redpandaBrokers := cfg.RedpandaBrokers
@@ -155,7 +165,7 @@ func main() {
 	handlers.RegisterDashboardRoutes(admin, db, log, auditSvc)
 	handlers.RegisterUserRoutes(admin, usersSvc, log)
 	handlers.RegisterFinanceRoutes(admin, financeSvc, db, log)
-	handlers.RegisterPlayerRoutes(admin, db, log, auditSvc, usersSvc)
+	handlers.RegisterPlayerRoutes(admin, db, log, auditSvc, usersSvc, rdb, adminAuthSvc, walletClient)
 	handlers.RegisterCRMRoutes(admin, db, log, auditSvc)
 	handlers.RegisterWSRoutes(admin, wsHub, log)
 
@@ -163,10 +173,11 @@ func main() {
 	handlers.RegisterPaymentRoutes(admin, db, log)
 	handlers.RegisterSupportRoutes(admin, db, log)
 	handlers.RegisterDepositRoutes(admin, db)
-	// Apply withdrawal-specific rate limiting
-	admin.Post("/withdrawals/:id/approve", middleware.RateLimitWithdrawalApprove(rdb))
-	admin.Post("/players/:id/adjust-balance", middleware.RateLimitBalanceAdjust(rdb))
-	handlers.RegisterWithdrawalRoutes(admin, db)
+	// Withdrawal review: rate limiting is applied per-route inside the
+	// registration (approve has a stricter budget than the rest of the queue),
+	// so it must NOT be pre-registered here — a later route registration for
+	// the same method+path would override it.
+	handlers.RegisterWithdrawalRoutes(admin, db, log, auditSvc, rdb)
 	handlers.RegisterBonusRoutes(admin, db)
 	handlers.RegisterRiskRoutes(admin, db, log, auditSvc)
 	handlers.RegisterSportsRoutes(admin, db, log, bettingClient, auditSvc)

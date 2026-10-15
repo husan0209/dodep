@@ -73,6 +73,17 @@ type WithdrawalRepository interface {
 	// UpdateStatus updates withdrawal status with optimistic locking
 	UpdateStatus(ctx context.Context, id int64, fromStatus, toStatus domain.WithdrawalStatus) error
 
+	// UpdatePayoutID records the NOWPayments payout id created for a review
+	// decision. Empty payout ids clear the column (pre-payout state).
+	UpdatePayoutID(ctx context.Context, id int64, payoutID string) error
+
+	// ClaimDecidedWithdrawals atomically marks decided review rows as being
+	// processed (payout_queued_at = NOW(), FOR UPDATE SKIP LOCKED) and
+	// returns them. Only rows a finance operator approved without a payout
+	// yet, or rejected with a wallet lock to return, are claimed — every
+	// decided row is claimed exactly once by exactly one dispatcher.
+	ClaimDecidedWithdrawals(ctx context.Context, limit int) ([]*domain.Withdrawal, error)
+
 	// ListByUserID lists withdrawals for a user with pagination
 	ListByUserID(ctx context.Context, userID int64, filter ListFilter) (*ListResult[domain.Withdrawal], error)
 

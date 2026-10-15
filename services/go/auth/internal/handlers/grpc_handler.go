@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"errors"
 
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
@@ -169,7 +170,20 @@ func (h *AuthGRPCHandler) ValidateToken(ctx context.Context, req *pb.ValidateTok
 
 // GetSession returns session information
 func (h *AuthGRPCHandler) GetSession(ctx context.Context, req *pb.GetSessionRequest) (*pb.GetSessionResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "not implemented")
+	if req.SessionId == "" {
+		return nil, status.Error(codes.InvalidArgument, "session_id is required")
+	}
+
+	session, err := h.service.GetSession(ctx, req.SessionId)
+	if err != nil {
+		if errors.Is(err, domain.ErrSessionNotFound) {
+			return nil, status.Error(codes.NotFound, "session not found")
+		}
+		h.log.Error("GetSession failed", zap.Error(err))
+		return nil, status.Error(codes.Internal, "failed to get session")
+	}
+
+	return &pb.GetSessionResponse{Session: toProtoSession(session)}, nil
 }
 
 // Enable2FA enables two-factor authentication
@@ -337,7 +351,9 @@ func toProtoSession(session *domain.Session) *pb.Session {
 		SessionId:    session.ID,
 		UserId:       &commonv1.UserId{Value: session.UserID},
 		DeviceId:     session.DeviceID,
+		DeviceType:   session.DeviceType,
 		IpAddress:    session.IPAddress,
+		UserAgent:    session.UserAgent,
 		Country:      session.Country,
 		CreatedAt:    timestamppb.New(session.CreatedAt),
 		ExpiresAt:    timestamppb.New(session.ExpiresAt),

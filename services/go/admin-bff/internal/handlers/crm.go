@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"time"
@@ -11,6 +13,29 @@ import (
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
+
+// crmCampaignSendTopic is the outbox topic carrying CRM campaign send jobs.
+// The delivery fan-out (notification service) subscribes to it.
+const crmCampaignSendTopic = "crm.campaign.send"
+
+// errCampaignAlreadyLaunched marks a lost launch race inside the
+// transactional launch handler (a concurrent launch flipped the status
+// between the pre-check and the guarded UPDATE).
+var errCampaignAlreadyLaunched = errors.New("campaign already launched")
+
+// outboxEvent is a row in the shared transactional outbox table
+// (migration 009_outbox.sql). Writing the job in the same transaction as the
+// campaign status flip guarantees the send is never lost and never duplicated.
+type outboxEvent struct {
+	ID      int64          `gorm:"column:id;primary_key;autoIncrement"`
+	Topic   string         `gorm:"column:topic;type:varchar(100);not null"`
+	Key     string         `gorm:"column:key;type:varchar(255);not null"`
+	Payload []byte         `gorm:"column:payload;type:bytea;not null"`
+	Headers map[string]any `gorm:"column:headers;type:jsonb"`
+	Retries int            `gorm:"column:retries;not null;default:0"`
+}
+
+func (outboxEvent) TableName() string { return "outbox" }
 
 // CRMSegment represents a saved player segment definition.
 type CRMSegment struct {
@@ -208,15 +233,17 @@ func RegisterCRMRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger, auditS
 		camp.CreatedBy = fmt.Sprintf("%v", c.Locals("admin_id"))
 		camp.CreatedAt = time.Now()
 
-		// Estimate reach count: count players NOT in suppression for this channel.
+		// Estimate reach count: count players with at least one deposit who
+		// are NOT suppressed for this channel. Deposits live in the shared
+		// `payments` table keyed by user_id (migration 014).
 		if camp.SegmentID != nil {
 			var reach int64
-			db.Table("deposits").Select("COUNT(DISTINCT player_id)").Scan(&reach)
+			db.Table("payments").Distinct("user_id").Count(&reach)
 			var suppressed int64
 			db.Model(&models.CommunicationSuppression{}).
 				Where("channel IS NULL OR channel = ?", camp.Channel).
 				Where("expires_at IS NULL OR expires_at > ?", time.Now()).
-				Select("COUNT(DISTINCT player_id)").Scan(&suppressed)
+				Distinct("player_id").Count(&suppressed)
 			camp.ReachCount = int(reach - suppressed)
 		}
 
@@ -226,12 +253,77 @@ func RegisterCRMRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger, auditS
 	})
 
 	crm.Post("/campaigns/:id/launch", func(c *fiber.Ctx) error {
+		id := c.Params("id")
 		now := time.Now()
-		db.Model(&CRMCampaign{}).Where("id = ?", c.Params("id")).Updates(map[string]any{
-			"status": "sending", "sent_at": &now,
+
+		// Load first: launching a decided campaign again would re-send it.
+		var camp CRMCampaign
+		if err := db.Where("id = ?", id).First(&camp).Error; err != nil {
+			if err == gorm.ErrRecordNotFound {
+				return c.Status(404).JSON(fiber.Map{"error": "campaign not found"})
+			}
+			return c.Status(500).JSON(fiber.Map{"error": "database error"})
+		}
+		if camp.Status != "draft" && camp.Status != "scheduled" {
+			return c.Status(409).JSON(fiber.Map{
+				"error":  "CAMPAIGN_NOT_LAUNCHABLE",
+				"detail": "campaign is already " + camp.Status,
+			})
+		}
+
+		// The send job is handed off through the transactional outbox
+		// (migration 009): the campaign flip and the job row commit together,
+		// so a crash between "sending" and "enqueued" cannot lose the send.
+		// Consumers pick up topic `crm.campaign.send` and drive the delivery
+		// channels (notification service fan-out).
+		payload, err := json.Marshal(map[string]any{
+			"campaign_id": camp.ID,
+			"segment_id":  camp.SegmentID,
+			"channel":     camp.Channel,
+			"template_id": camp.TemplateID,
+			"requested_by": adminIDString(c),
+			"requested_at": now.UTC().Format(time.RFC3339),
 		})
-		// TODO: enqueue actual send job via job queue / Redpanda.
-		logAudit(auditSvc, c, "crm.campaign.launch", "crm_campaign", c.Params("id"), nil)
+		if err != nil {
+			return c.Status(500).JSON(fiber.Map{"error": "marshal campaign payload"})
+		}
+
+		job := outboxEvent{
+			Topic:   crmCampaignSendTopic,
+			Key:     camp.ID,
+			Payload: payload,
+			Headers: map[string]any{
+				"source":     "admin-bff",
+				"event_type": "crm_campaign_send",
+			},
+		}
+
+		txErr := db.Transaction(func(tx *gorm.DB) error {
+			res := tx.Model(&CRMCampaign{}).
+				Where("id = ? AND status IN ?", id, []string{"draft", "scheduled"}).
+				Updates(map[string]any{"status": "sending", "sent_at": &now})
+			if res.Error != nil {
+				return res.Error
+			}
+			if res.RowsAffected == 0 {
+				return errCampaignAlreadyLaunched
+			}
+			return tx.Create(&job).Error
+		})
+		if txErr != nil {
+			if errors.Is(txErr, errCampaignAlreadyLaunched) {
+				return c.Status(409).JSON(fiber.Map{
+					"error":  "CAMPAIGN_NOT_LAUNCHABLE",
+					"detail": "campaign was already launched",
+				})
+			}
+			log.Error("crm campaign launch failed", zap.String("campaign_id", id), zap.Error(txErr))
+			return c.Status(500).JSON(fiber.Map{"error": "failed to launch campaign"})
+		}
+
+		logAudit(auditSvc, c, "crm.campaign.launch", "crm_campaign", id, fiber.Map{
+			"channel": camp.Channel, "reach_count": camp.ReachCount,
+		})
 		return c.JSON(fiber.Map{"success": true, "status": "sending"})
 	})
 

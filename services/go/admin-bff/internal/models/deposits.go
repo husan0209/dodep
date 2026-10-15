@@ -6,26 +6,38 @@ import (
 	"time"
 )
 
+// Deposit mirrors the shared `payments` table owned by the payment service
+// (migration 014). Admin finance reads deposits from here for local
+// aggregations (summary, charts, reports); the live list endpoint is served
+// from the payment service gRPC API, which is authoritative for PSP state.
+//
+// FiatAmount is the human-readable credit amount; CryptoCurrency/Address
+// describe the deposit route for crypto rails.
 type Deposit struct {
-	ID            string     `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
-	PlayerID      int64      `gorm:"not null;index" json:"player_id"`
-	PlayerEmail   string     `gorm:"type:varchar(255);not null" json:"player_email"`
-	Amount        string     `gorm:"type:numeric(18,2);not null" json:"amount"`
-	Currency      string     `gorm:"type:char(3);not null;default:'USD'" json:"currency"`
-	Method        string     `gorm:"type:varchar(50);not null" json:"method"`
-	Gateway       string     `gorm:"type:varchar(100);not null" json:"gateway"`
-	GatewayTxID   *string    `gorm:"type:varchar(255)" json:"gateway_tx_id,omitempty"`
-	Status        string     `gorm:"type:deposit_status;not null;default:'pending'" json:"status"`
-	RiskScore     int        `gorm:"not null;default:0" json:"risk_score"`
-	CreatedAt     time.Time  `gorm:"not null;default:now()" json:"created_at"`
-	ProcessedAt   *time.Time `json:"processed_at,omitempty"`
-	CreditedAt    *time.Time `json:"credited_at,omitempty"`
-	FailedAt      *time.Time `json:"failed_at,omitempty"`
-	FailureReason *string    `gorm:"type:varchar(500)" json:"failure_reason,omitempty"`
-	Notes         *string    `gorm:"type:text" json:"notes,omitempty"`
-	UpdatedAt     time.Time  `gorm:"not null;default:now()" json:"updated_at"`
+	ID             int64   `gorm:"column:id;primary_key" json:"id"`
+	UUID           string  `gorm:"column:uuid;type:uuid;default:gen_random_uuid()" json:"uuid"`
+	UserID         int64   `gorm:"column:user_id;not null;index" json:"user_id"`
+	PaymentID      string  `gorm:"column:payment_id;not null" json:"payment_id"`
+	IdempotencyKey string  `gorm:"column:idempotency_key;not null" json:"idempotency_key"`
+	RequestedAmount string `gorm:"column:requested_amount;type:numeric(18,8);not null" json:"requested_amount"`
+	ActualAmount   *string `gorm:"column:actual_amount;type:numeric(18,8)" json:"actual_amount,omitempty"`
+	FiatAmount     string  `gorm:"column:fiat_amount;type:numeric(18,2);not null" json:"fiat_amount"`
+	FiatCurrency   string  `gorm:"column:fiat_currency;type:char(3);not null;default:'USD'" json:"fiat_currency"`
+	CryptoCurrency string  `gorm:"column:crypto_currency;type:varchar(20);not null" json:"crypto_currency"`
+	PayAddress     string  `gorm:"column:pay_address;type:varchar(255);not null" json:"pay_address"`
+	PayAmount      *string `gorm:"column:pay_amount;type:numeric(18,8)" json:"pay_amount,omitempty"`
+	Status         string  `gorm:"column:status;not null;default:'pending'" json:"status"`
+	CreatedAt      time.Time  `gorm:"column:created_at;not null;default:now()" json:"created_at"`
+	UpdatedAt      time.Time  `gorm:"column:updated_at;not null;default:now()" json:"updated_at"`
+	CompletedAt    *time.Time `gorm:"column:completed_at" json:"completed_at,omitempty"`
+	ExpiresAt      *time.Time `gorm:"column:expires_at" json:"expires_at,omitempty"`
 }
 
+// TableName pins the model to the shared payment deposits table.
+func (Deposit) TableName() string { return "payments" }
+
+// DepositTimeline is the per-deposit lifecycle projection used by the
+// payments admin timeline view.
 type DepositTimeline struct {
 	Created    time.Time  `json:"created"`
 	Sent       *time.Time `json:"sent,omitempty"`

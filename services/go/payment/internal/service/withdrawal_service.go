@@ -29,9 +29,14 @@ type WithdrawalService struct {
 	producer         *event.Producer
 	tracer           trace.Tracer
 	ipnCallbackURL   string
+	review           *ReviewPolicy
 }
 
-// NewWithdrawalService creates a new withdrawal service
+// NewWithdrawalService creates a new withdrawal service.
+//
+// Options extend the defaults; WithReviewPolicy enables the manual-review
+// threshold (see ReviewPolicyFromEnv). Without it the service keeps the
+// instant-payout behavior.
 func NewWithdrawalService(
 	withdrawalRepo repository.WithdrawalRepository,
 	idempotencyRepo repository.IdempotencyRepository,
@@ -43,8 +48,9 @@ func NewWithdrawalService(
 	producer *event.Producer,
 	tracer trace.Tracer,
 	ipnCallbackURL string,
+	opts ...WithdrawalOption,
 ) *WithdrawalService {
-	return &WithdrawalService{
+	svc := &WithdrawalService{
 		withdrawalRepo:   withdrawalRepo,
 		idempotencyRepo:  idempotencyRepo,
 		exchangeRateRepo: exchangeRateRepo,
@@ -55,7 +61,12 @@ func NewWithdrawalService(
 		producer:         producer,
 		tracer:           tracer,
 		ipnCallbackURL:   ipnCallbackURL,
+		review:           DefaultReviewPolicy(),
 	}
+	for _, opt := range opts {
+		opt(svc)
+	}
+	return svc
 }
 
 // InitiateWithdrawalRequest represents a withdrawal request
@@ -132,6 +143,65 @@ func (s *WithdrawalService) InitiateWithdrawal(ctx context.Context, req Initiate
 	if err != nil {
 		observability.RecordError(walletErrorType(err), observability.OperationWithdrawal)
 		return nil, fmt.Errorf("lock funds: %w", err)
+	}
+
+	// Manual-review gate: at or above the configured fiat threshold the payout
+	// is NOT created here. The row is parked as pending_review with the funds
+	// locked in the wallet; a finance operator approves (the review dispatcher
+	// executes the payout) or rejects (the dispatcher returns the funds).
+	if s.review.RequiresManualReview(fiatAmount) {
+		withdrawal := &domain.Withdrawal{
+			UUID:           uuid.New(),
+			UserID:         req.UserID,
+			IdempotencyKey: req.IdempotencyKey,
+			Amount:         req.Amount,
+			FiatAmount:     fiatAmount,
+			FiatCurrency:   "USD",
+			CryptoCurrency: string(req.Currency),
+			Address:        req.Address,
+			Status:         domain.WithdrawalStatusPendingReview,
+			LockID:         lockResult.LockID,
+			IPAddress:      req.IPAddress,
+			UserAgent:      req.UserAgent,
+		}
+
+		if err := s.withdrawalRepo.Create(ctx, withdrawal); err != nil {
+			// Compensating transaction: unlock funds. The payout never
+			// started, so the player must not keep a locked balance.
+			if unlockErr := s.wallet.UnlockFunds(ctx, lockResult.LockID, req.IdempotencyKey+"_unlock"); unlockErr != nil {
+				log.Error().
+					Err(unlockErr).
+					Str("lock_id", lockResult.LockID).
+					Msg("Failed to unlock funds after review-queue withdrawal create failure")
+				observability.RecordError("compensation_failed", observability.OperationWithdrawal)
+			}
+			observability.RecordError("persistence_failed", observability.OperationWithdrawal)
+			return nil, fmt.Errorf("create withdrawal: %w", err)
+		}
+
+		// Track daily limit — a queued withdrawal still consumes the
+		// player's daily budget, otherwise the queue could be used to
+		// stage unlimited amounts above the limit.
+		if _, err := s.dailyLimitsRepo.Increment(ctx, req.UserID, "withdrawal", fiatAmount); err != nil {
+			log.Warn().Err(err).Msg("Failed to track daily withdrawal limit")
+			observability.RecordError("daily_limit_not_tracked", observability.OperationWithdrawal)
+		}
+
+		observability.RecordWithdrawal(
+			observability.WithdrawalStatusPendingReview,
+			string(req.Currency),
+			kycLevel,
+			fiatAmount,
+		)
+
+		log.Info().
+			Int64("user_id", req.UserID).
+			Str("withdrawal_uuid", withdrawal.UUID.String()).
+			Str("fiat_amount", fiatAmount.String()).
+			Str("review_threshold_usd", s.review.ThresholdString()).
+			Msg("Withdrawal queued for manual review")
+
+		return s.toResponse(withdrawal), nil
 	}
 
 	// Create payout in NOWPayments

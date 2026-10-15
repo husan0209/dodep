@@ -759,6 +759,22 @@ func (s *AuthService) GetCurrentUser(ctx context.Context, userID string) (*domai
 	return user, nil
 }
 
+// GetSession returns a session by ID. Administrative introspection uses this
+// to resolve a session to its user, device and activity metadata. An unknown,
+// expired or revoked session resolves to domain.ErrSessionNotFound — the
+// repository reports (nil, nil) for a Redis cache miss.
+func (s *AuthService) GetSession(ctx context.Context, sessionID string) (*domain.Session, error) {
+	session, err := s.repo.GetSession(ctx, sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to get session", domain.ErrInternal)
+	}
+	if session == nil {
+		return nil, domain.ErrSessionNotFound
+	}
+
+	return session, nil
+}
+
 // Enable2FA enables two-factor authentication for a user
 func (s *AuthService) Enable2FA(ctx context.Context, userID string) (secret, qrURI, backupCodes string, err error) {
 	user, err := s.repo.GetUserByID(ctx, userID)

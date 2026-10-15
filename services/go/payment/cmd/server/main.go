@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -140,7 +141,7 @@ func run() error {
 
 	// 9. Start HTTP server
 	g.Go(func() error {
-		return startHTTPServer(ctx, cfg, handlers)
+		return startHTTPServer(ctx, cfg, handlers, rdb)
 	})
 
 	// 10. Start gRPC server
@@ -148,12 +149,20 @@ func run() error {
 		return startGRPCServer(ctx, cfg, services)
 	})
 
-	// 11. Start metrics server
+	// 11. Start review dispatcher (manual-review decision executor)
+	if services.ReviewEnabled {
+		g.Go(func() error {
+			startReviewDispatcher(ctx, services)
+			return nil
+		})
+	}
+
+	// 12. Start metrics server
 	g.Go(func() error {
 		return startMetricsServer(ctx, cfg)
 	})
 
-	// 12. Wait for shutdown signal
+	// 13. Wait for shutdown signal
 	g.Go(func() error {
 		return waitForShutdown(ctx, cancel)
 	})
@@ -298,11 +307,13 @@ func buildClients(cfg *config.Config, logger *zap.Logger, tracer trace.Tracer) (
 }
 
 type Services struct {
-	Payment    *service.PaymentService
-	Withdrawal *service.WithdrawalService
-	Webhook    *service.WebhookService
-	KYCLimits  *service.KYCLimitsService
-	Exchange   *service.ExchangeRateService
+	Payment         *service.PaymentService
+	Withdrawal      *service.WithdrawalService
+	Webhook         *service.WebhookService
+	KYCLimits       *service.KYCLimitsService
+	Exchange        *service.ExchangeRateService
+	ReviewDispatcher *service.ReviewDispatcher
+	ReviewEnabled   bool
 }
 
 func buildServices(
@@ -312,6 +323,24 @@ func buildServices(
 	producer *event.Producer,
 	tracer trace.Tracer,
 ) *Services {
+	reviewPolicy := service.ReviewPolicyFromEnv()
+	if reviewPolicy.Enabled() {
+		log.Info().
+			Str("threshold_usd", reviewPolicy.ThresholdString()).
+			Msg("Withdrawal manual review enabled")
+	} else {
+		log.Info().Msg("Withdrawal manual review disabled (instant payouts)")
+	}
+
+	dispatcher := service.NewReviewDispatcher(
+		repos.Withdrawal,
+		clients.Wallet,
+		clients.NOWPayments,
+		log.Logger,
+		reviewDispatchBatchSize(),
+		cfg.NOWPayments.IPNCallbackURL,
+	)
+
 	return &Services{
 		Payment: service.NewPaymentService(
 			repos.Payment,
@@ -336,6 +365,7 @@ func buildServices(
 			producer,
 			tracer,
 			cfg.NOWPayments.IPNCallbackURL,
+			service.WithReviewPolicy(reviewPolicy),
 		),
 		Webhook: service.NewWebhookService(
 			repos.Payment,
@@ -347,12 +377,66 @@ func buildServices(
 			producer,
 			tracer,
 		),
-		KYCLimits: service.NewKYCLimitsService(repos.DailyLimits, nil),
-		Exchange:  service.NewExchangeRateService(repos.ExchangeRate, clients.NOWPayments.(*client.NOWPaymentsClient), nil, service.DefaultExchangeRateConfig()),
+		KYCLimits:       service.NewKYCLimitsService(repos.DailyLimits, nil),
+		Exchange:        service.NewExchangeRateService(repos.ExchangeRate, clients.NOWPayments.(*client.NOWPaymentsClient), nil, service.DefaultExchangeRateConfig()),
+		ReviewDispatcher: dispatcher,
+		ReviewEnabled:    reviewPolicy.Enabled(),
 	}
 }
 
-func startHTTPServer(ctx context.Context, cfg *config.Config, handlers *handler.Handlers) error {
+// reviewDispatchInterval bounds how often the review dispatcher polls the
+// withdrawals table for decided rows.
+func reviewDispatchInterval() time.Duration {
+	raw := os.Getenv("WITHDRAWAL_REVIEW_DISPATCH_INTERVAL_SEC")
+	if raw == "" {
+		return 5 * time.Second
+	}
+	sec, err := strconv.Atoi(raw)
+	if err != nil || sec < 1 {
+		return 5 * time.Second
+	}
+	return time.Duration(sec) * time.Second
+}
+
+func reviewDispatchBatchSize() int {
+	raw := os.Getenv("WITHDRAWAL_REVIEW_DISPATCH_BATCH")
+	if raw == "" {
+		return 20
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n < 1 {
+		return 20
+	}
+	return n
+}
+
+// startReviewDispatcher polls decided review rows and executes them (payout
+// for approved, fund return for rejected). A single failing pass is logged and
+// retried on the next tick; errors are never returned, so a transient DB
+// failure cannot take the service down with it.
+func startReviewDispatcher(ctx context.Context, services *Services) {
+	if !services.ReviewEnabled {
+		return
+	}
+
+	ticker := time.NewTicker(reviewDispatchInterval())
+	defer ticker.Stop()
+
+	log.Info().Dur("interval", reviewDispatchInterval()).Msg("Review dispatcher started")
+	for {
+		select {
+		case <-ctx.Done():
+			log.Info().Msg("Review dispatcher stopped")
+			return
+		case <-ticker.C:
+			if err := services.ReviewDispatcher.RunOnce(ctx); err != nil {
+				log.Error().Err(err).Msg("Review dispatcher pass failed")
+			}
+		}
+	}
+}
+
+func startHTTPServer(ctx context.Context, cfg *config.Config, handlers *handler.Handlers, rdb *redis.Client) error {
 	app := fiber.New(fiber.Config{
 		ReadTimeout:  time.Duration(cfg.Server.ReadTimeoutSec) * time.Second,
 		WriteTimeout: time.Duration(cfg.Server.WriteTimeoutSec) * time.Second,
@@ -376,7 +460,7 @@ func startHTTPServer(ctx context.Context, cfg *config.Config, handlers *handler.
 	// Middleware
 	payments.Use(handler.AuthMiddleware())
 	payments.Use(handler.LoggingMiddleware())
-	payments.Use(handler.RateLimitMiddleware())
+	payments.Use(handler.RateLimitMiddleware(rdb))
 
 	// Payment routes
 	payments.Post("/deposit", handlers.Payment.InitiateDeposit)

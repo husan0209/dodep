@@ -476,3 +476,63 @@ func TestGoogleOAuth_Callback_Success(t *testing.T) {
 	require.NotNil(t, result.Tokens)
 	require.NotEmpty(t, result.Tokens.AccessToken)
 }
+
+func TestGetSession(t *testing.T) {
+	activeSession := &domain.Session{
+		ID:           "sess-1",
+		UserID:       "user-1",
+		DeviceID:     "device-1",
+		DeviceType:   "web",
+		IPAddress:    "203.0.113.7",
+		UserAgent:    "Mozilla/5.0",
+		Country:      "RU",
+		CreatedAt:    time.Now().Add(-time.Hour),
+		ExpiresAt:    time.Now().Add(6 * time.Hour),
+		LastActivity: time.Now(),
+		IsActive:     true,
+	}
+
+	t.Run("returns the session when redis has it", func(t *testing.T) {
+		var gotID string
+		repo := &mockAuthRepository{
+			getSession: func(_ context.Context, sessionID string) (*domain.Session, error) {
+				gotID = sessionID
+				return activeSession, nil
+			},
+		}
+		svc := newTestService(repo)
+
+		session, err := svc.GetSession(context.Background(), "sess-1")
+		require.NoError(t, err)
+		require.Same(t, activeSession, session)
+		require.Equal(t, "sess-1", gotID)
+	})
+
+	t.Run("maps a cache miss to ErrSessionNotFound", func(t *testing.T) {
+		// The repository reports (nil, nil) on redis.Nil: expired, revoked or
+		// never-existing sessions are indistinguishable — and all three mean
+		// "not usable" to callers.
+		repo := &mockAuthRepository{
+			getSession: func(_ context.Context, _ string) (*domain.Session, error) {
+				return nil, nil
+			},
+		}
+		svc := newTestService(repo)
+
+		session, err := svc.GetSession(context.Background(), "missing")
+		require.Nil(t, session)
+		require.ErrorIs(t, err, domain.ErrSessionNotFound)
+	})
+
+	t.Run("wraps repository failures", func(t *testing.T) {
+		repo := &mockAuthRepository{
+			getSession: func(_ context.Context, _ string) (*domain.Session, error) {
+				return nil, fmt.Errorf("redis down")
+			},
+		}
+		svc := newTestService(repo)
+
+		_, err := svc.GetSession(context.Background(), "sess-1")
+		require.ErrorIs(t, err, domain.ErrInternal)
+	})
+}

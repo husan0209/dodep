@@ -28,19 +28,14 @@ func RegisterFinanceRoutes(router fiber.Router, svc *service.FinanceService, db 
 		return c.JSON(fiber.Map{"data": items, "pagination": page})
 	})
 
-	finance.Get("/withdrawals", func(c *fiber.Ctx) error {
-		status := parseTransactionStatus(c.Query("status", ""))
-		pageSize := int32(c.QueryInt("page_size", 50))
-		pageToken := c.Query("page_token", "")
-		items, page, err := svc.ListWithdrawals(c.Context(), status, pageSize, pageToken)
-		if err != nil {
-			log.Error("list withdrawals failed", zap.Error(err))
-			return c.Status(500).JSON(fiber.Map{"error": "failed to list withdrawals"})
-		}
-		return c.JSON(fiber.Map{"data": items, "pagination": page})
-	})
+	// The withdrawals review queue is registered by RegisterWithdrawalRoutes
+	// under /admin/finance/withdrawals (and the legacy /admin/withdrawals
+	// namespace) — do NOT also register GET /withdrawals here: the later
+	// registration wins, which makes this endpoint's behavior depend on
+	// route ordering in main.go.
 
-	// Financial summary for dashboard — computed from local deposits/withdrawals tables
+	// Financial summary for dashboard — computed from the shared payments and
+	// withdrawals tables (migrations 014/022).
 	finance.Get("/summary", func(c *fiber.Ctx) error {
 		dateFrom := c.Query("date_from", "")
 		dateTo := c.Query("date_to", "")
@@ -67,12 +62,12 @@ func RegisterFinanceRoutes(router fiber.Router, svc *service.FinanceService, db 
 		var totalDeposits, totalWithdrawals, pendingWithdrawalsAmount float64
 		var pendingWithdrawalsCount int64
 		for _, d := range deposits {
-			totalDeposits += parseMoney(d.Amount)
+			totalDeposits += parseMoney(d.FiatAmount)
 		}
 		for _, w := range withdrawals {
-			amt := parseMoney(w.Amount)
+			amt := parseMoney(w.FiatAmount)
 			totalWithdrawals += amt
-			if w.Status == "pending" || w.Status == "processing" {
+			if w.Status == "pending_review" || w.Status == "held" {
 				pendingWithdrawalsCount++
 				pendingWithdrawalsAmount += amt
 			}

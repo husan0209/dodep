@@ -24,6 +24,7 @@ type Config struct {
 	UserService    ServiceConfig
 	PaymentService ServiceConfig
 	BettingEngine  ServiceConfig
+	WalletService  ServiceConfig
 }
 
 type ServiceConfig struct {
@@ -64,6 +65,10 @@ func Load() *Config {
 		BettingEngine: ServiceConfig{
 			Address: getEnv("BETTING_ENGINE_ADDR", "localhost:50054"),
 			Timeout: parseDuration(getEnv("BETTING_ENGINE_TIMEOUT", "10s")),
+		},
+		WalletService: ServiceConfig{
+			Address: getEnv("WALLET_SERVICE_ADDR", "localhost:50053"),
+			Timeout: parseDuration(getEnv("WALLET_SERVICE_TIMEOUT", "10s")),
 		},
 	}
 }

@@ -121,6 +121,65 @@ func (r *withdrawalRepo) UpdateStatus(ctx context.Context, id int64, fromStatus,
 	return nil
 }
 
+// UpdatePayoutID records (or clears) the NOWPayments payout id.
+func (r *withdrawalRepo) UpdatePayoutID(ctx context.Context, id int64, payoutID string) error {
+	result := r.db.WithContext(ctx).
+		Model(&domain.Withdrawal{}).
+		Where("id = ?", id).
+		Update("withdrawal_id", payoutID)
+	if result.Error != nil {
+		return fmt.Errorf("update withdrawal payout id: %w", result.Error)
+	}
+	return nil
+}
+
+// ClaimDecidedWithdrawals claims decided review rows exactly once.
+//
+// The claim is a conditional UPDATE ... RETURNING: the guard
+// (payout_queued_at IS NULL) plus FOR UPDATE SKIP LOCKED means concurrent
+// dispatchers take disjoint row sets, and a claimed row is never re-claimed
+// even if processing later fails. Money movement is only ever attempted once
+// per decision — an ambiguous failure keeps the claim and is surfaced in the
+// logs for operator follow-up, never silently retried.
+func (r *withdrawalRepo) ClaimDecidedWithdrawals(ctx context.Context, limit int) ([]*domain.Withdrawal, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 200 {
+		limit = 200
+	}
+
+	var withdrawals []domain.Withdrawal
+	err := r.db.WithContext(ctx).
+		Raw(`
+			UPDATE withdrawals
+			SET payout_queued_at = NOW(), updated_at = NOW()
+			WHERE id IN (
+				SELECT id FROM withdrawals
+				WHERE payout_queued_at IS NULL
+				  AND decided_by IS NOT NULL
+				  AND (
+				        (status = 'approved' AND COALESCE(withdrawal_id, '') = '')
+				     OR (status = 'rejected' AND COALESCE(lock_id, '') <> '')
+				      )
+				ORDER BY decided_at NULLS LAST, id ASC
+				LIMIT ?
+				FOR UPDATE SKIP LOCKED
+			)
+			RETURNING *
+		`, limit).
+		Scan(&withdrawals).Error
+	if err != nil {
+		return nil, fmt.Errorf("claim decided withdrawals: %w", err)
+	}
+
+	result := make([]*domain.Withdrawal, 0, len(withdrawals))
+	for i := range withdrawals {
+		result = append(result, &withdrawals[i])
+	}
+	return result, nil
+}
+
 // ListByUserID lists withdrawals for a user with pagination
 func (r *withdrawalRepo) ListByUserID(ctx context.Context, userID int64, filter ListFilter) (*ListResult[domain.Withdrawal], error) {
 	if filter.Limit <= 0 {

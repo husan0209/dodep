@@ -1,60 +1,53 @@
 package models
 
 import (
-	"database/sql/driver"
-	"encoding/json"
 	"time"
 )
 
-type WithdrawalChecklist struct {
-	KycVerified      bool `json:"kyc_verified"`
-	BonusWagered     bool `json:"bonus_wagered"`
-	MethodMatch      bool `json:"method_match"`
-	NoChargeback     bool `json:"no_chargeback"`
-	RiskScoreOK      bool `json:"risk_score_ok"`
-	AmountWithinLimits bool `json:"amount_within_limits"`
-	NoAMLFlags       bool `json:"no_aml_flags"`
-}
-
-func (wc WithdrawalChecklist) Value() (driver.Value, error) {
-	return json.Marshal(wc)
-}
-
-func (wc *WithdrawalChecklist) Scan(value interface{}) error {
-	if value == nil {
-		return nil
-	}
-	b, ok := value.([]byte)
-	if !ok {
-		return nil
-	}
-	return json.Unmarshal(b, wc)
-}
-
+// Withdrawal mirrors the shared `withdrawals` table owned by the payment
+// service (migration 014) and extended with the manual-review columns
+// (migration 022): status is TEXT with values
+// pending_review | approved | rejected | processing | sending | sent |
+// finished | failed | cancelled.
+//
+// The admin panel does NOT own this table's lifecycle: withdrawals arrive via
+// the payment service (funds locked in the wallet at request time) and finance
+// operators decide the review queue — approve moves the row toward payout,
+// reject returns the funds. Both services share the same database, so the
+// decision columns are written here and read by payment.
 type Withdrawal struct {
-	ID               string              `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
-	PlayerID         int64               `gorm:"not null;index" json:"player_id"`
-	PlayerEmail      string              `gorm:"type:varchar(255);not null" json:"player_email"`
-	Amount           string              `gorm:"type:numeric(18,2);not null" json:"amount"`
-	Currency         string              `gorm:"type:char(3);not null;default:'USD'" json:"currency"`
-	Method           string              `gorm:"type:varchar(50);not null" json:"method"`
-	WalletOrAccount  *string             `gorm:"type:varchar(255)" json:"wallet_or_account,omitempty"`
-	Gateway          *string             `gorm:"type:varchar(100)" json:"gateway,omitempty"`
-	Status           string              `gorm:"type:withdrawal_status;not null;default:'pending'" json:"status"`
-	RiskScore        int                 `gorm:"not null;default:0" json:"risk_score"`
-	KycStatus        string              `gorm:"type:varchar(20);not null;default:'pending'" json:"kyc_status"`
-	WagerStatus      string              `gorm:"type:varchar(20);not null;default:'pending'" json:"wager_status"`
-	AmlStatus        string              `gorm:"type:varchar(20);not null;default:'pending'" json:"aml_status"`
-	Checklist        WithdrawalChecklist `gorm:"type:jsonb;default:'{\"kyc_verified\":false,\"bonus_wagered\":false,\"method_match\":false,\"no_chargeback\":false,\"risk_score_ok\":false,\"amount_within_limits\":false,\"no_aml_flags\":false}'::jsonb" json:"checklist"`
-	WaitHours        int                 `gorm:"not null;default:0" json:"wait_hours"`
-	ApprovedBy       *string             `gorm:"type:varchar(36)" json:"approved_by,omitempty"`
-	ApprovedByName   *string             `gorm:"type:varchar(255)" json:"approved_by_name,omitempty"`
-	ApprovedAt       *time.Time          `json:"approved_at,omitempty"`
-	RejectedBy       *string             `gorm:"type:varchar(36)" json:"rejected_by,omitempty"`
-	RejectedByName   *string             `gorm:"type:varchar(255)" json:"rejected_by_name,omitempty"`
-	RejectedAt       *time.Time          `json:"rejected_at,omitempty"`
-	RejectReason     *string             `gorm:"type:varchar(255)" json:"reject_reason,omitempty"`
-	HoldReason       *string             `gorm:"type:text" json:"hold_reason,omitempty"`
-	CreatedAt        time.Time           `gorm:"not null;default:now()" json:"created_at"`
-	UpdatedAt        time.Time           `gorm:"not null;default:now()" json:"updated_at"`
+	ID             int64  `gorm:"column:id;primary_key" json:"id"`
+	UUID           string `gorm:"column:uuid;type:uuid;default:gen_random_uuid()" json:"uuid"`
+	UserID         int64  `gorm:"column:user_id;not null;index" json:"user_id"`
+	WithdrawalID   string `gorm:"column:withdrawal_id" json:"withdrawal_id,omitempty"`
+	IdempotencyKey string `gorm:"column:idempotency_key;not null" json:"idempotency_key"`
+	Amount         string `gorm:"column:amount;type:numeric(18,8);not null" json:"amount"`
+	FiatAmount     string `gorm:"column:fiat_amount;type:numeric(18,2);not null" json:"fiat_amount"`
+	FiatCurrency   string `gorm:"column:fiat_currency;type:char(3);not null;default:'USD'" json:"fiat_currency"`
+	CryptoCurrency string `gorm:"column:crypto_currency;type:varchar(20);not null" json:"crypto_currency"`
+	Address        string `gorm:"column:address;type:varchar(255);not null" json:"address"`
+	Status         string `gorm:"column:status;not null;default:'processing'" json:"status"`
+
+	// Review decision columns (migration 022). decided_by holds the admin id
+	// (or "auto" for the automated approval path), decided_at the decision
+	// timestamp and decision_reason the mandatory rejection rationale.
+	LockID         string     `gorm:"column:lock_id" json:"lock_id,omitempty"`
+	DecidedBy      string     `gorm:"column:decided_by" json:"decided_by,omitempty"`
+	DecidedAt      *time.Time `gorm:"column:decided_at" json:"decided_at,omitempty"`
+	DecisionReason string     `gorm:"column:decision_reason" json:"decision_reason,omitempty"`
+
+	CreatedAt   time.Time  `gorm:"column:created_at;not null;default:now()" json:"created_at"`
+	UpdatedAt   time.Time  `gorm:"column:updated_at;not null;default:now()" json:"updated_at"`
+	CompletedAt *time.Time `gorm:"column:completed_at" json:"completed_at,omitempty"`
+
+	// ReviewedBy is the admin-panel alias for DecidedBy ("Reviewed By"
+	// column in the withdrawals UI). Not persisted.
+	ReviewedBy string `gorm:"-" json:"reviewed_by,omitempty"`
 }
+
+// TableName pins the model to the shared payment withdrawals table.
+func (Withdrawal) TableName() string { return "withdrawals" }
+
+// IsPendingReview reports whether the withdrawal is awaiting an operator
+// decision — the only state in which approve/reject/hold are allowed.
+func (w *Withdrawal) IsPendingReview() bool { return w.Status == "pending_review" }

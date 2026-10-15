@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"strconv"
@@ -8,16 +9,20 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/opus-casino/admin-bff/internal/models"
-	"github.com/opus-casino/admin-bff/internal/service"
+	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 
+	"github.com/opus-casino/admin-bff/internal/client"
+	"github.com/opus-casino/admin-bff/internal/middleware"
+	"github.com/opus-casino/admin-bff/internal/models"
+	"github.com/opus-casino/admin-bff/internal/service"
+
 	commonv1 "github.com/opus-casino/proto/gen/go/common/v1"
 	userv1 "github.com/opus-casino/proto/gen/go/user/v1"
 )
-
 // PlayerNote is stored in the admin_notes table (simple append-only log).
 type PlayerNote struct {
 	ID        string    `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
@@ -47,7 +52,9 @@ func (PlayerMergeRecord) TableName() string { return "player_merge_records" }
 // RegisterPlayerRoutes mounts all player mutator and merge endpoints.
 // usersSvc is used for downstream User Service gRPC calls (limits, blocks).
 // It may be nil in tests; endpoints degrade to audit-only with 502 on failure.
-func RegisterPlayerRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger, auditSvc *service.AuditService, usersSvc *service.UsersService) {
+// rdb backs the balance-adjustment rate limit (20 req/hour per admin), and
+// authSvc/walletClient drive the TOTP-checked wallet adjustment flow.
+func RegisterPlayerRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger, auditSvc *service.AuditService, usersSvc *service.UsersService, rdb *redis.Client, authSvc *service.AdminAuthService, walletClient *client.WalletClient) {
 	// Auto-migrate the local tables managed by this handler.
 	if err := db.AutoMigrate(&PlayerNote{}, &PlayerMergeRecord{}); err != nil {
 		log.Error("player auto-migration failed", zap.Error(err))
@@ -170,30 +177,12 @@ func RegisterPlayerRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger, aud
 	})
 
 	// ── Adjust Balance (requires TOTP confirmation in the request body) ─────────
-	players.Post("/:id/adjust-balance", func(c *fiber.Ctx) error {
-		var req struct {
-			Amount   string `json:"amount"`
-			Currency string `json:"currency"`
-			Type     string `json:"type"` // credit|debit
-			Reason   string `json:"reason"`
-			TOTPCode string `json:"totp_code"`
-		}
-		if err := c.BodyParser(&req); err != nil {
-			return c.Status(400).JSON(fiber.Map{"error": "invalid body"})
-		}
-		if req.Reason == "" || req.Amount == "" || req.Type == "" {
-			return c.Status(400).JSON(fiber.Map{"error": "amount, type, and reason required"})
-		}
-		if req.TOTPCode == "" {
-			return c.Status(403).JSON(fiber.Map{"error": "TOTP_REQUIRED", "message": "totp_code is required for balance adjustments"})
-		}
-		// TODO: validate req.TOTPCode against current admin TOTP secret.
-		// TODO: call Wallet Service gRPC CreditDebit.
-		logAudit(auditSvc, c, "player.balance.adjust", "player", c.Params("id"), fiber.Map{
-			"amount": req.Amount, "currency": req.Currency, "type": req.Type, "reason": req.Reason,
-		})
-		return c.JSON(fiber.Map{"success": true})
-	})
+	// Rate limiting is bound at registration: re-registering the same
+	// method+path later would silently drop the middleware stack.
+	players.Post("/:id/adjust-balance",
+		middleware.RateLimitBalanceAdjust(rdb),
+		adjustBalance(db, log, auditSvc, authSvc, walletClient),
+	)
 
 	// ── Tags ──────────────────────────────────────────────────────────────────
 	players.Post("/:id/tags", func(c *fiber.Ctx) error {
@@ -505,17 +494,26 @@ func listPlayers(db *gorm.DB, log *zap.Logger) fiber.Handler {
 func getPlayerOverview(db *gorm.DB, log *zap.Logger) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		pid := c.Params("id")
+		// user_id is BIGINT in the shared tables; parse it once so the
+		// parameter is sent as a number rather than relying on an implicit
+		// text→bigint cast.
+		uid, err := strconv.ParseInt(pid, 10, 64)
+		if err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": "invalid player id"})
+		}
 
 		var totalDep float64
 		var totalWd float64
 		var depCount, wdCount int64
 
-		db.Table("deposits").Where("player_id = ?", pid).
-			Select("COALESCE(SUM(amount::numeric),0)").Scan(&totalDep)
-		db.Table("deposits").Where("player_id = ?", pid).Count(&depCount)
-		db.Table("withdrawals").Where("player_id = ?", pid).
-			Select("COALESCE(SUM(amount::numeric),0)").Scan(&totalWd)
-		db.Table("withdrawals").Where("player_id = ?", pid).Count(&wdCount)
+		// Shared payment tables: deposits live in `payments`, withdrawals in
+		// `withdrawals` — both keyed by user_id (migrations 014/022).
+		db.Table("payments").Where("user_id = ?", uid).
+			Select("COALESCE(SUM(fiat_amount::numeric),0)").Scan(&totalDep)
+		db.Table("payments").Where("user_id = ?", uid).Count(&depCount)
+		db.Table("withdrawals").Where("user_id = ?", uid).
+			Select("COALESCE(SUM(fiat_amount::numeric),0)").Scan(&totalWd)
+		db.Table("withdrawals").Where("user_id = ?", uid).Count(&wdCount)
 
 		var alertCount int64
 		db.Table("risk_alerts").Where("user_id = ?", pid).Count(&alertCount)
@@ -541,9 +539,130 @@ func getPlayerOverview(db *gorm.DB, log *zap.Logger) fiber.Handler {
 				"withdrawal_count": wdCount,
 				"risk_alerts":      alertCount,
 				"screening_status": screeningStatus,
-				"notes":            notes,
-				"suppressions":     suppressions,
+			"notes":            notes,
+			"suppressions":     suppressions,
 			},
 		})
+	}
+}
+
+// adjustBalance is the manual credit/debit flow for the player main wallet.
+//
+// Every request is re-authenticated with the acting admin's TOTP code (money
+// movement must not ride on a login that may be hours old), applied through
+// the wallet service gRPC API with a unique idempotency key (a retried
+// request cannot double-credit), and fully audited with the resulting balance.
+// Wallet failures return 502 and audit nothing as succeeded — a balance that
+// did not move must never appear as adjusted.
+func adjustBalance(db *gorm.DB, log *zap.Logger, auditSvc *service.AuditService, authSvc *service.AdminAuthService, walletClient *client.WalletClient) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		var req struct {
+			Amount   string `json:"amount"`
+			Currency string `json:"currency"`
+			Type     string `json:"type"` // credit|debit
+			Reason   string `json:"reason"`
+			TOTPCode string `json:"totp_code"`
+		}
+		if err := c.BodyParser(&req); err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": "invalid body"})
+		}
+		if req.Reason == "" || req.Amount == "" || req.Type == "" {
+			return c.Status(400).JSON(fiber.Map{"error": "amount, type, and reason required"})
+		}
+		if req.Type != "credit" && req.Type != "debit" {
+			return c.Status(400).JSON(fiber.Map{"error": "type must be credit or debit"})
+		}
+
+		// NEVER-6: money is parsed as decimal, never float.
+		amount, err := decimal.NewFromString(strings.TrimSpace(req.Amount))
+		if err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": "amount must be a decimal string"})
+		}
+		if !amount.IsPositive() {
+			return c.Status(400).JSON(fiber.Map{"error": "amount must be positive"})
+		}
+		if amount.Exponent() < -2 {
+			return c.Status(400).JSON(fiber.Map{"error": "amount supports at most 2 decimal places"})
+		}
+
+		currency := strings.ToUpper(strings.TrimSpace(req.Currency))
+		if currency == "" {
+			currency = "USD"
+		}
+		if len(currency) != 3 {
+			return c.Status(400).JSON(fiber.Map{"error": "currency must be a 3-letter ISO code"})
+		}
+
+		playerID, err := strconv.ParseInt(c.Params("id"), 10, 64)
+		if err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": "invalid player id"})
+		}
+
+		// TOTP re-authentication of the acting admin.
+		if req.TOTPCode == "" {
+			return c.Status(403).JSON(fiber.Map{
+				"error": "TOTP_REQUIRED", "message": "totp_code is required for balance adjustments",
+			})
+		}
+		adminID := adminIDInt64(c)
+		if adminID == nil {
+			return c.Status(401).JSON(fiber.Map{"error": "admin identity missing"})
+		}
+		if err := authSvc.ValidateTOTP(c.Context(), *adminID, req.TOTPCode); err != nil {
+			if errors.Is(err, service.ErrTOTPNotConfigured) {
+				log.Warn("balance adjustment attempted without TOTP configured", zap.Int64("admin_id", *adminID))
+				return c.Status(403).JSON(fiber.Map{"error": "TOTP_NOT_CONFIGURED", "message": "enable TOTP before adjusting balances"})
+			}
+			if errors.Is(err, service.ErrTOTPRequired) {
+				return c.Status(403).JSON(fiber.Map{"error": "TOTP_REQUIRED", "message": "totp_code is required"})
+			}
+			if errors.Is(err, service.ErrInvalidTOTP) {
+				return c.Status(401).JSON(fiber.Map{"error": "INVALID_TOTP", "message": "totp code is invalid or expired"})
+			}
+			log.Error("totp validation failed", zap.Error(err), zap.Int64("admin_id", *adminID))
+			return c.Status(500).JSON(fiber.Map{"error": "totp validation failed"})
+		}
+
+		if walletClient == nil {
+			log.Error("wallet client not configured; balance adjustment rejected")
+			return c.Status(503).JSON(fiber.Map{"error": "wallet service unavailable"})
+		}
+
+		// Unique per operator action: retries reuse the same key, so the
+		// wallet service deduplicates them instead of applying twice.
+		idempotencyKey := uuid.NewString()
+		description := fmt.Sprintf("admin %s by admin#%d: %s", req.Type, *adminID, req.Reason)
+		amountStr := amount.StringFixed(2)
+
+		var newBalance string
+		if req.Type == "credit" {
+			newBalance, err = walletClient.Credit(c.Context(), playerID, amountStr, currency, description, idempotencyKey)
+		} else {
+			newBalance, err = walletClient.Debit(c.Context(), playerID, amountStr, currency, description, idempotencyKey)
+		}
+		if err != nil {
+			log.Error("balance adjustment failed at wallet service",
+				zap.Error(err),
+				zap.Int64("player_id", playerID),
+				zap.String("type", req.Type),
+				zap.String("amount", amountStr))
+			return c.Status(502).JSON(fiber.Map{"error": "wallet service rejected the adjustment"})
+		}
+
+		logAudit(auditSvc, c, "player.balance.adjust", "player", c.Params("id"), fiber.Map{
+			"amount":         amountStr,
+			"currency":       currency,
+			"type":           req.Type,
+			"reason":         req.Reason,
+			"new_balance":    newBalance,
+			"idempotency_key": idempotencyKey,
+		})
+		return c.JSON(fiber.Map{"success": true, "data": fiber.Map{
+			"player_id":   playerID,
+			"type":        req.Type,
+			"amount":      amountStr,
+			"currency":    currency,
+			"new_balance": newBalance,
+		}})
 	}
 }

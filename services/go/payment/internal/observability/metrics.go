@@ -34,10 +34,11 @@ const (
 
 // Withdrawal lifecycle states for MetricWithdrawalsTotal.
 const (
-	WithdrawalStatusProcessing = "processing"
-	WithdrawalStatusCompleted  = "completed"
-	WithdrawalStatusFailed     = "failed"
-	WithdrawalStatusCancelled  = "cancelled"
+	WithdrawalStatusProcessing    = "processing"
+	WithdrawalStatusPendingReview = "pending_review"
+	WithdrawalStatusCompleted     = "completed"
+	WithdrawalStatusFailed        = "failed"
+	WithdrawalStatusCancelled     = "cancelled"
 )
 
 // Operations for MetricProviderLatency and MetricErrorsTotal.

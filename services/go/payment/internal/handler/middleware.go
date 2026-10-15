@@ -1,12 +1,14 @@
 package handler
 
 import (
+	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog/log"
 )
 
@@ -130,10 +132,82 @@ func LoggingMiddleware() fiber.Handler {
 	}
 }
 
-// RateLimitMiddleware returns a rate limiting middleware placeholder
-func RateLimitMiddleware() fiber.Handler {
-	// TODO: Implement proper rate limiting with Redis
+// RateLimitMiddleware returns a Redis-backed rate limiting middleware.
+//
+// Scope: per authenticated user, falling back to the client IP for
+// unauthenticated callers (webhooks). Fixed-window counters via INCR+EXPIRE:
+// one round trip on the happy path, atomic in Redis, and the window expires
+// on its own — no cleanup job.
+//
+// Limits come from env (PAYMENTS_RATE_LIMIT_MAX / PAYMENTS_RATE_LIMIT_WINDOW_SEC,
+// default 300 requests / 60s per identity). A Redis outage fails OPEN with a
+// loud error log: taking payment endpoints down because a cache hiccuped is
+// worse than briefly exceeding the budget.
+func RateLimitMiddleware(rdb *redis.Client) fiber.Handler {
+	if rdb == nil {
+		log.Warn().Msg("rate limiting disabled: redis client is nil")
+		return func(c *fiber.Ctx) error { return c.Next() }
+	}
+
+	limit := envInt("PAYMENTS_RATE_LIMIT_MAX", 300)
+	window := time.Duration(envInt("PAYMENTS_RATE_LIMIT_WINDOW_SEC", 60)) * time.Second
+
 	return func(c *fiber.Ctx) error {
+		identity := c.IP()
+		if userID, ok := c.Locals("user_id").(int64); ok && userID > 0 {
+			identity = "u:" + strconv.FormatInt(userID, 10)
+		} else if userID, ok := c.Locals("user_id").(string); ok && userID != "" {
+			identity = "u:" + userID
+		}
+
+		key := "ratelimit:payment:" + identity
+		ctx := c.Context()
+
+		count, err := rdb.Incr(ctx, key).Result()
+		if err != nil {
+			// Fail open: a cache outage must not become a payments outage.
+			log.Error().Err(err).Str("identity", identity).Msg("rate limiter redis error — allowing request")
+			return c.Next()
+		}
+		if count == 1 {
+			// First hit in the window: start the TTL. If this EXPIRE fails the
+			// key lives forever, so treat it as a hard error and keep serving.
+			if _, err := rdb.Expire(ctx, key, window).Result(); err != nil {
+				log.Error().Err(err).Str("key", key).Msg("rate limiter expire failed")
+			}
+		}
+		if int(count) > limit {
+			ttl, err := rdb.TTL(ctx, key).Result()
+			if err != nil || ttl < 0 {
+				ttl = window
+			}
+			retryAfter := int(ttl.Seconds())
+			if retryAfter < 1 {
+				retryAfter = 1
+			}
+			c.Set("Retry-After", strconv.Itoa(retryAfter))
+			log.Warn().Str("identity", identity).Int("count", int(count)).Msg("rate limit exceeded")
+			return c.Status(429).JSON(ErrorResponse{
+				Error: ErrorDetail{
+					Code:    4290,
+					Message: "rate limit exceeded",
+				},
+			})
+		}
+
 		return c.Next()
 	}
+}
+
+// envInt reads a positive integer from the environment with a fallback.
+func envInt(key string, fallback int) int {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return fallback
+	}
+	v, err := strconv.Atoi(raw)
+	if err != nil || v <= 0 {
+		return fallback
+	}
+	return v
 }

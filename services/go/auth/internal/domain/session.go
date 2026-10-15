@@ -1,8 +1,13 @@
 package domain
 
 import (
+	"errors"
 	"time"
 )
+
+// ErrSessionNotFound is returned when a session ID does not resolve to an
+// active session (unknown, expired or already revoked).
+var ErrSessionNotFound = errors.New("session not found")
 
 // Session represents an active user session
 type Session struct {

@@ -132,7 +132,7 @@ func (s *reportsService) collectFinancialTotalsFallback(ctx context.Context, fro
 		s.log.Error("financial report deposits fallback failed", zap.Error(err))
 	} else {
 		for _, deposit := range deposits {
-			amount := parseMoney(deposit.Amount)
+			amount := parseMoney(deposit.FiatAmount)
 			bucket := ensureDayTotals(buckets, deposit.CreatedAt.Format("2006-01-02"))
 			bucket.deposits += amount
 			totalDeposits += amount
@@ -144,7 +144,7 @@ func (s *reportsService) collectFinancialTotalsFallback(ctx context.Context, fro
 		s.log.Error("financial report withdrawals fallback failed", zap.Error(err))
 	} else {
 		for _, withdrawal := range withdrawals {
-			amount := parseMoney(withdrawal.Amount)
+			amount := parseMoney(withdrawal.FiatAmount)
 			bucket := ensureDayTotals(buckets, withdrawal.CreatedAt.Format("2006-01-02"))
 			bucket.withdrawals += amount
 			totalWithdrawals += amount
@@ -214,12 +214,12 @@ func (s *reportsService) collectPlayerAnalytics(ctx context.Context, fromT, toT 
 
 	agg := make(map[int64]*playerAnalyticsStats)
 	for _, deposit := range deposits {
-		stats := agg[deposit.PlayerID]
+		stats := agg[deposit.UserID]
 		if stats == nil {
 			stats = &playerAnalyticsStats{}
-			agg[deposit.PlayerID] = stats
+			agg[deposit.UserID] = stats
 		}
-		amount := parseMoney(deposit.Amount)
+		amount := parseMoney(deposit.FiatAmount)
 		stats.totalAmount += amount
 		stats.count++
 		if deposit.CreatedAt.After(stats.lastActive) {

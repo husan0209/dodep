@@ -3,6 +3,7 @@ package handlers
 import (
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
 	"time"
 
@@ -734,19 +735,45 @@ func listCasinoBets(db *gorm.DB, log *zap.Logger) fiber.Handler {
 
 func adminIDString(c *fiber.Ctx) string {
 	adminIDRaw := c.Locals("admin_id")
-	if v, ok := adminIDRaw.(string); ok {
+	switch v := adminIDRaw.(type) {
+	case string:
 		return v
-	}
-	if v, ok := adminIDRaw.(int64); ok {
-		return string(rune(v))
+	case int64:
+		return strconv.FormatInt(v, 10)
+	case float64:
+		// JWT libraries decode numbers to float64 — the AdminAuth
+		// middleware stores the raw claim value.
+		return strconv.FormatInt(int64(v), 10)
+	case int:
+		return strconv.FormatInt(int64(v), 10)
 	}
 	return ""
 }
 
+// adminIDInt64 resolves the acting admin id from the request locals.
+//
+// The AdminAuth middleware stores claims["admin_id"] straight from the parsed
+// JWT, so the concrete type depends on the token library: int64 in tests,
+// float64 with jwt-go's MapClaims, string if a downstream proxy rewrote it.
+// All three are accepted — an unresolved admin id must never silently degrade
+// to "no admin" in audit records or TOTP re-authentication.
 func adminIDInt64(c *fiber.Ctx) *int64 {
-	adminIDRaw := c.Locals("admin_id")
-	if v, ok := adminIDRaw.(int64); ok {
+	switch v := c.Locals("admin_id").(type) {
+	case int64:
 		return &v
+	case float64:
+		id := int64(v)
+		return &id
+	case float32:
+		id := int64(v)
+		return &id
+	case int:
+		id := int64(v)
+		return &id
+	case string:
+		if id, err := strconv.ParseInt(v, 10, 64); err == nil {
+			return &id
+		}
 	}
 	return nil
 }

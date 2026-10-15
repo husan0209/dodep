@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"fmt"
 
 	commonv1 "github.com/opus-casino/proto/gen/go/common/v1"
 	"github.com/opus-casino/admin-bff/internal/client"
@@ -41,18 +40,8 @@ func (s *FinanceService) ListWithdrawals(ctx context.Context, status commonv1.Tr
 	return result, page, nil
 }
 
-func (s *FinanceService) ApproveWithdrawal(ctx context.Context, adminID int64, withdrawalID string) error {
-	// Payment proto currently lacks ApproveWithdrawal; fallback to Cancel or extend proto.
-	// For now this delegates to a future gRPC method or local orchestration.
-	// TODO: extend payment/v1/payment.proto and regenerate when protoc is available.
-	_ = adminID
-	_ = withdrawalID
-	return fmt.Errorf("not implemented: payment proto lacks ApproveWithdrawal RPC")
-}
-
-func (s *FinanceService) RejectWithdrawal(ctx context.Context, adminID int64, withdrawalID, reason string) error {
-	_ = adminID
-	_ = withdrawalID
-	_ = reason
-	return fmt.Errorf("not implemented: payment proto lacks RejectWithdrawal RPC")
-}
+// The manual-review decision flow (approve/reject/hold) lives in the
+// withdrawals HTTP handlers: it writes the decision columns of the shared
+// `withdrawals` table (migration 022), which the payment service reads.
+// Driving it through a payment gRPC RPC would require proto changes; the
+// table-level flow keeps a single source of truth without a contract bump.

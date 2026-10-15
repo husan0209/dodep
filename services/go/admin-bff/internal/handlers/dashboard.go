@@ -158,11 +158,11 @@ func RegisterDashboardRoutes(router fiber.Router, db *gorm.DB, log *zap.Logger, 
 		}
 		for _, d := range deposits {
 			h := d.CreatedAt.Hour()
-			buckets[h]["deposits"] = buckets[h]["deposits"].(float64) + parseMoney(d.Amount)
+			buckets[h]["deposits"] = buckets[h]["deposits"].(float64) + parseMoney(d.FiatAmount)
 		}
 		for _, w := range withdrawals {
 			h := w.CreatedAt.Hour()
-			buckets[h]["withdrawals"] = buckets[h]["withdrawals"].(float64) + parseMoney(w.Amount)
+			buckets[h]["withdrawals"] = buckets[h]["withdrawals"].(float64) + parseMoney(w.FiatAmount)
 		}
 		var result []fiber.Map
 		for h := 0; h < 24; h++ {

@@ -203,16 +203,28 @@ REDPANDA_BROKERS=localhost:9092
 EMAIL_ENABLED=true
 EMAIL_PROVIDER=sendgrid
 EMAIL_FROM=noreply@opuscasino.com
-EMAIL_API_KEY=changeme
+SENDGRID_API_KEY=changeme        # алиас для совместимости: EMAIL_API_KEY
+SENDGRID_API_URL=                # опционально: override endpoint (тесты)
 
 # SMS (Twilio)
 SMS_ENABLED=false
 SMS_PROVIDER=twilio
-SMS_API_KEY=changeme
+TWILIO_ACCOUNT_SID=changeme      # алиас для совместимости: SMS_API_KEY
+TWILIO_AUTH_TOKEN=changeme       # алиас для совместимости: SMS_API_SECRET
+TWILIO_FROM_NUMBER=+10000000001  # алиас для совместимости: SMS_FROM
+TWILIO_API_URL=                  # опционально: override endpoint (тесты)
 
-# Push (Firebase)
+# Push (Firebase Cloud Messaging HTTP v1)
 PUSH_ENABLED=true
-PUSH_FIREBASE_KEY=changeme
+PUSH_PROVIDER=firebase
+FIREBASE_PROJECT_ID=opus-casino
+# Сервисный аккаунт: инлайн JSON, путь через FIREBASE_SERVICE_ACCOUNT_PATH
+# или GOOGLE_APPLICATION_CREDENTIALS (никогда в код; в K8s — mounted Secret)
+FIREBASE_SERVICE_ACCOUNT_JSON='{"client_email":"...","private_key":"..."}'
+FIREBASE_FCM_URL=                # опционально: override endpoint (тесты)
+
+# In-app realtime (WebSocket gateway)
+WS_GATEWAY_URL=                   # напр. http://websocket-gateway:8082
 ```
 
 ---

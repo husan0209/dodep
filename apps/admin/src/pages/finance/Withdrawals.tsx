@@ -65,6 +65,11 @@ export default function Withdrawals() {
 
   const canApprove = hasPermission(permissions, "withdrawal.approve_small");
 
+  // The review queue only offers actions for rows awaiting a decision
+  // (status pending_review); decided rows are read-only.
+  const isReviewable = (status: string) =>
+    status === "pending_review" || status === "pending";
+
   const columns: ColumnsType<Withdrawal> = [
     {
       title: "ID",
@@ -108,7 +113,7 @@ export default function Withdrawals() {
       key: "actions",
       width: 200,
       render: (_, record) => {
-        if (record.status !== "pending" || !canApprove) return "—";
+        if (!isReviewable(record.status) || !canApprove) return "—";
         return (
           <Space>
             <Button

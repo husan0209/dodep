@@ -31,6 +31,7 @@ var (
 	ErrTokenExpired       = errors.New("token expired")
 	ErrTOTPRequired       = errors.New("totp_required")
 	ErrInvalidTOTP        = errors.New("invalid or expired totp challenge")
+	ErrTOTPNotConfigured  = errors.New("totp not configured for this admin")
 )
 
 // LoginResult is returned by Login.
@@ -403,6 +404,37 @@ func (s *AdminAuthService) DisableTOTP(ctx context.Context, adminID int64) error
 		"totp_enabled": false,
 		"updated_at":   time.Now(),
 	}).Error
+}
+
+// ValidateTOTP verifies a code against the admin's stored TOTP secret.
+//
+// Sensitive admin actions (balance adjustments, payout approvals) call this to
+// re-authenticate the operator at the moment of the action, not just at login.
+// The admin must have TOTP enabled: an admin without a configured secret can
+// never pass this check, which is a deliberate fail-closed default.
+func (s *AdminAuthService) ValidateTOTP(ctx context.Context, adminID int64, code string) error {
+	if code == "" {
+		return ErrTOTPRequired
+	}
+
+	var admin models.AdminUser
+	if err := s.db.WithContext(ctx).First(&admin, adminID).Error; err != nil {
+		return fmt.Errorf("find admin: %w", err)
+	}
+
+	if admin.TOTPSecret == nil || !admin.TOTPEnabled {
+		return ErrTOTPNotConfigured
+	}
+
+	secret, err := s.decryptTOTPSecret(ctx, *admin.TOTPSecret)
+	if err != nil {
+		return err
+	}
+
+	if !otptotp.Validate(code, secret) {
+		return ErrInvalidTOTP
+	}
+	return nil
 }
 
 // Me returns the admin profile.
