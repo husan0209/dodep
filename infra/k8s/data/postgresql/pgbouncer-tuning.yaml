@@ -1,0 +1,93 @@
+# PgBouncer Tuning Reference — 10K client connections
+# Author: DATA_ENGINEER
+# Date: 2026-10-15
+# Scope: Этап 3.1 — верификация пункта "PgBouncer (transaction mode, 10K conns)".
+# Additive: НЕ правит существующий Deployment pgbouncer в postgresql.yaml.
+#
+# АУДИТ существующего Deployment (postgresql.yaml, строки 345-400):
+#   POOL_MODE=transaction ............ OK (требование Citus + skills)
+#   MAX_CLIENT_CONN=10000 ............ OK (чеклист 10K conns закрыт)
+#   DEFAULT_POOL_SIZE=50 ............. OK (50 conn/pool per skill)
+#   RESERVE_POOL_SIZE=10 ............. OK
+#   SERVER_IDLE_TIMEOUT=300 .......... OK
+#   CLIENT_IDLE_TIMEOUT=0 ............ OK (отключён — правильно для WS/gateway)
+#   replicas=2 ....................... OK
+#
+# ДЫРЫ, закрываемые этим файлом:
+# 1. Нет явного расчёта server-side соединений против max_connections=200
+#    на coordinator (математика ниже — влезет: 120 < 200).
+# 2. Нет ignore_startup_parameters (клиенты шлют extra options → 500 без него).
+# 3. Нет max_db_connections cap (защита primary от переподписки при scale pgbouncer).
+# 4. Нет stats/limits для observability (Этапы 17-18 evidence).
+#
+# ПРИМЕНЕНИЕ: этот ConfigMap — reference. Чтобы применить без правки
+# postgresql.yaml — смонтировать как /etc/pgbouncer/pgbouncer.ini через
+# Kustomize strategic-merge patch (пример патча в конце файла, закомментирован).
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: data
+  labels:
+    app.kubernetes.io/part-of: opus-casino
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pgbouncer-config
+  namespace: data
+data:
+  pgbouncer.ini: |
+    ;; PgBouncer 1.21 — transaction pooling, 10K clients.
+    ;; Математика server-side соединений:
+    ;;   2 pgbouncer replicas × (default_pool_size=50 + reserve_pool=10) = 120
+    ;;   coordinator max_connections = 200, superuser_reserved = 5
+    ;;   120 + exporter(1) + replication(5) + headroom ≈ 130 < 200  ✓
+    ;; При scale pgbouncer до 3 реплик: 3×60=180 — ВПРИТЫК; сначала поднять
+    ;; max_connections до 300 или держать replicas=2. См. runbook § PgBouncer.
+    [databases]
+    opus_platform = host=pg-coordinator port=5432 dbname=opus_platform
+
+    [pgbouncer]
+    pool_mode = transaction
+    max_client_conn = 10000
+    default_pool_size = 50
+    min_pool_size = 10
+    reserve_pool_size = 10
+    reserve_pool_timeout = 3
+    max_db_connections = 120
+    max_user_connections = 120
+    server_idle_timeout = 300
+    server_lifetime = 3600
+    server_connect_timeout = 15
+    client_idle_timeout = 0
+    client_login_timeout = 60
+    query_timeout = 0
+    query_wait_timeout = 120
+    ;; prepared statements ЗАПРЕЩЕНЫ в transaction mode (PgBouncer skill):
+    ;; клиенты обязаны использовать parse-bind-execute через extended protocol
+    ;; без hold; max_prepared_statements=0 = fail-fast вместо silent misroute.
+    max_prepared_statements = 0
+    ignore_startup_parameters = extra_float_digits,application_name,search_path
+    stats_period = 60
+    admin_users = opus_admin
+    stats_users = opus_admin
+    log_connections = 1
+    log_disconnections = 1
+    verbose = 0
+
+    ;; Пример Kustomize patch для монтирования этого ini (не применять вслепую —
+    ;; сначала сверить env-переменные Deployment, ini имеет приоритет над env):
+    ;; _pgbouncer-patch.yaml_:
+    ;; - op: add
+    ;;   path: /spec/template/spec/containers/0/volumeMounts/-
+    ;;   value: {name: pgbouncer-ini, mountPath: /etc/pgbouncer/pgbouncer.ini, subPath: pgbouncer.ini}
+    ;; volumes: [{name: pgbouncer-ini, configMap: {name: pgbouncer-config}}]
+
+# ServiceMonitor-заглушка как YAML-комментарий (Prometheus operator отсутствует
+# в кластере Этапа 2 — VictoriaMetrics scrape идёт через annotations на Pod;
+# Deployment pgbouncer annotations добавить при apply — см. runbook).
+# Проверка 10K conns (ручная, живой кластер):
+#   k6 run tools/testing/k6/scenarios/pgbouncer-conns.js  # см. runbook § Проверка
+#   SHOW POOLS; SHOW CLIENTS; — через admin console pgbouncer.

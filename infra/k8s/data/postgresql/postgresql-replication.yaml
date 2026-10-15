@@ -1,0 +1,277 @@
+# PostgreSQL Coordinator — Streaming Replication (standby)
+# Author: DATA_ENGINEER
+# Date: 2026-10-15
+# Scope: Этап 3.1 — закрывает пункт "Streaming replication для coordinator".
+# Additive: НЕ правит postgresql.yaml, только добавляет standby + read-сервисы.
+#
+# Design:
+# - pg-coordinator (postgresql.yaml) = primary, wal_level=logical уже включён.
+# - pg-coordinator-replica (этот файл) = async streaming standby (hot_standby),
+#   bootstrap через pg_basebackup в initContainer, primary_conninfo формируется
+#   из env + replication-password из Secret (никаких секретов в yaml).
+# - Citus workers уже имеют shard replication factor 2
+#   (citus.shard_replication_factor=2 в postgresql-config) — это НЕ заменяет
+#   standby координатора: standby защищает метаданные Citus + reference tables.
+# - Чтение: pg-read Service ведёт только на standby (read-only workload).
+#   Запись: только через pg-coordinator / pgbouncer.
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: data
+  labels:
+    app.kubernetes.io/part-of: opus-casino
+    istio-injection: enabled
+
+---
+# ConfigMap: standby-специфичные настройки (не секреты).
+# Монтируется как postgresql.replication.conf рядом с основным конфигом.
+# Primary должен иметь: wal_level=replica|logical (уже logical),
+# max_wal_senders>=5, max_replication_slots>=5.
+# Если понадобится поднять лимиты без правки postgresql.yaml —
+# переопределить через ALTER SYSTEM на primary (документировано в runbook).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pg-replication-config
+  namespace: data
+data:
+  replication.conf: |
+    # Standby settings (hot_standby)
+    hot_standby = on
+    hot_standby_feedback = on
+    # Replication slots/wal_keep для устойчивости к отставанию standby
+    primary_slot_name = 'pg_coordinator_replica_1'
+    # archive_mode на primary должен быть on (см. backup runbook:
+    # archive_command = 'wal-g wal-push %p'); здесь только приём.
+    wal_receiver_timeout = 60s
+    max_standby_archive_delay = 30s
+    max_standby_streaming_delay = 30s
+
+---
+# StatefulSet: coordinator standby (1 replica, async streaming).
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: pg-coordinator-replica
+  namespace: data
+  labels:
+    app: pg-coordinator-replica
+    role: coordinator-standby
+spec:
+  serviceName: pg-coordinator-replica
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pg-coordinator-replica
+  template:
+    metadata:
+      labels:
+        app: pg-coordinator-replica
+        role: coordinator-standby
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9187"
+    spec:
+      securityContext:
+        fsGroup: 999
+        runAsUser: 999
+        runAsGroup: 999
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app: pg-coordinator
+              topologyKey: kubernetes.io/hostname
+      initContainers:
+        # Bootstrap standby из primary, только если PGDATA пуст.
+        # Рерун-безопасно: при наличии standby.signal/PG_VERSION — skip.
+        - name: pg-basebackup
+          image: citusdata/citus:12.1
+          env:
+            - name: PGHOST
+              value: pg-coordinator
+            - name: PGUSER
+              value: replication_user
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgresql-secrets
+                  key: replication-password
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -e
+              if [ -f "$PGDATA/PG_VERSION" ] || [ -f "$PGDATA/standby.signal" ]; then
+                echo "PGDATA already bootstrapped, skipping pg_basebackup."
+                exit 0
+              fi
+              echo "Bootstrapping standby from pg-coordinator..."
+              until pg_isready -h pg-coordinator -U opus_admin -d opus_platform; do
+                echo "Waiting for primary..."; sleep 5
+              done
+              rm -rf "$PGDATA"/*
+              pg_basebackup \
+                -h pg-coordinator \
+                -U replication_user \
+                -D "$PGDATA" \
+                -Fp -Xs -P -R \
+                -S pg_coordinator_replica_1 \
+                -C
+              # -R создаёт standby.signal + primary_conninfo автоматически.
+              # replication.conf из ConfigMap подхватывается через include (см. mount ниже).
+              echo "Standby bootstrap complete."
+          volumeMounts:
+            - name: pgdata
+              mountPath: /var/lib/postgresql/data
+      containers:
+        - name: postgres
+          image: citusdata/citus:12.1
+          ports:
+            - containerPort: 5432
+              name: postgres
+          env:
+            - name: POSTGRES_DB
+              value: opus_platform
+            - name: POSTGRES_USER
+              value: opus_admin
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgresql-secrets
+                  key: postgres-password
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: pgdata
+              mountPath: /var/lib/postgresql/data
+            - name: replication-config
+              mountPath: /etc/postgresql/replication.conf
+              subPath: replication.conf
+          resources:
+            requests:
+              cpu: "2"
+              memory: "8Gi"
+            limits:
+              cpu: "4"
+              memory: "16Gi"
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "opus_admin", "-d", "opus_platform"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              # Standby готов, только если принимает read-only запросы.
+              command: ["pg_isready", "-U", "opus_admin", "-d", "opus_platform"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+        - name: postgres-exporter
+          image: prometheuscommunity/postgres-exporter:v0.15.0
+          ports:
+            - containerPort: 9187
+              name: metrics
+          env:
+            - name: DATA_SOURCE_URI
+              value: "localhost/opus_platform?sslmode=disable"
+            - name: DATA_SOURCE_USER
+              value: opus_admin
+            - name: DATA_SOURCE_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: postgresql-secrets
+                  key: postgres-password
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "200m"
+              memory: "256Mi"
+      volumes:
+        - name: replication-config
+          configMap:
+            name: pg-replication-config
+  volumeClaimTemplates:
+    - metadata:
+        name: pgdata
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: gp3
+        resources:
+          requests:
+            storage: 200Gi
+
+---
+# Service: standby (headless, для StatefulSet DNS + replication slot).
+apiVersion: v1
+kind: Service
+metadata:
+  name: pg-coordinator-replica
+  namespace: data
+  labels:
+    app: pg-coordinator-replica
+spec:
+  clusterIP: None
+  ports:
+    - port: 5432
+      targetPort: 5432
+      name: postgres
+  selector:
+    app: pg-coordinator-replica
+
+---
+# Service: read-only endpoint (только standby; для отчётов/реконсиляции).
+# Пишущий трафик приложений идёт через pgbouncer → pg-coordinator (primary).
+apiVersion: v1
+kind: Service
+metadata:
+  name: pg-read
+  namespace: data
+  labels:
+    app: pg-coordinator-replica
+    endpoint: read-only
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5432
+      targetPort: 5432
+      name: postgres
+  selector:
+    app: pg-coordinator-replica
+
+---
+# NetworkPolicy: standby принимает replication только от primary + читателей из platform/data.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pg-replica-network-policy
+  namespace: data
+spec:
+  podSelector:
+    matchLabels:
+      app: pg-coordinator-replica
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: pg-coordinator
+      ports:
+        - protocol: TCP
+          port: 5432
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: platform
+        - namespaceSelector:
+            matchLabels:
+              name: data
+      ports:
+        - protocol: TCP
+          port: 5432

@@ -455,11 +455,44 @@ func (r *GormAffiliateRepository) GetDashboard(ctx context.Context, affiliateID 
 	dashboard.Registrations = registrations.Count
 	dashboard.FTDCount = registrations.Count
 	dashboard.ActivePlayers = registrations.Count
-	dashboard.GGRAmount = decimal.Zero
-	dashboard.NGRAmount = decimal.Zero
-	dashboard.CommissionAmount = dashboard.EarningsThisMonth
-	dashboard.CommissionReversedAmount = decimal.Zero
-	dashboard.CommissionAdjustedAmount = decimal.Zero
+	// Revenue aggregates come from settled earnings, not placeholders:
+	// GGR/NGR/commission across live states, reversals from reversed rows,
+	// manual adjustments (credit minus debit) from the adjustments ledger.
+	type revenueRow struct {
+		GGR        decimal.Decimal
+		NGR        decimal.Decimal
+		Commission decimal.Decimal
+	}
+	var live revenueRow
+	if err := r.db.WithContext(ctx).Model(&affiliateEarningModel{}).
+		Select("COALESCE(SUM(ggr_amount),0) AS ggr, COALESCE(SUM(ngr_amount),0) AS ngr, COALESCE(SUM(commission_amount),0) AS commission").
+		Where("affiliate_id = ? AND status IN ?", affiliateID, []string{
+			string(domain.EarningStatusAccrued),
+			string(domain.EarningStatusPending),
+			string(domain.EarningStatusAvailable),
+			string(domain.EarningStatusPaid),
+		}).Scan(&live).Error; err != nil {
+		return nil, fmt.Errorf("dashboard revenue: %w", err)
+	}
+	dashboard.GGRAmount = live.GGR
+	dashboard.NGRAmount = live.NGR
+	dashboard.CommissionAmount = live.Commission
+	var reversed revenueRow
+	if err := r.db.WithContext(ctx).Model(&affiliateEarningModel{}).
+		Select("COALESCE(SUM(commission_amount),0) AS commission").
+		Where("affiliate_id = ? AND status = ?", affiliateID, string(domain.EarningStatusReversed)).Scan(&reversed).Error; err != nil {
+		return nil, fmt.Errorf("dashboard reversed: %w", err)
+	}
+	dashboard.CommissionReversedAmount = reversed.Commission
+	var adjusted struct {
+		Amount decimal.Decimal
+	}
+	if err := r.db.WithContext(ctx).Model(&affiliateAdjustmentModel{}).
+		Select("COALESCE(SUM(CASE WHEN type = 'credit' THEN amount ELSE -amount END),0) AS amount").
+		Where("affiliate_id = ?", affiliateID).Scan(&adjusted).Error; err != nil {
+		return nil, fmt.Errorf("dashboard adjustments: %w", err)
+	}
+	dashboard.CommissionAdjustedAmount = adjusted.Amount
 	return dashboard, nil
 }
 
@@ -524,16 +557,40 @@ func (r *GormAffiliateRepository) CreateEarning(ctx context.Context, earning *do
 		if err := tx.Create(&model).Error; err != nil {
 			return fmt.Errorf("create earning: %w", err)
 		}
-		return r.appendOutboxTx(tx, "affiliate_earning", earning.ID.String(), "affiliate.commission.accrued", earning.AffiliateID.String(), map[string]any{
+		if err := r.appendOutboxTx(tx, "affiliate_earning", earning.ID.String(), "affiliate.commission.accrued", earning.AffiliateID.String(), map[string]any{
 			"earning_id":        earning.ID.String(),
 			"affiliate_id":      earning.AffiliateID.String(),
 			"referred_user_id":  earning.ReferredUserID,
+			"ggr_amount":        earning.GGRAmount.String(),
+			"ngr_amount":        earning.NGRAmount.String(),
 			"commission_amount": earning.CommissionAmount.String(),
 			"commission_rate":   earning.CommissionRate.String(),
 			"status":            earning.Status,
 			"hold_until":        earning.HoldUntil,
 			"idempotency_key":   earning.IdempotencyKey,
-		})
+		}); err != nil {
+			return err
+		}
+
+		currency, err := r.profileCurrencyTx(tx, earning.AffiliateID)
+		if err != nil {
+			return err
+		}
+		if err := r.postLedgerTx(tx, earning.AffiliateID, currency, []ledgerPosting{
+			{accountType: "pending", direction: "credit", amount: earning.CommissionAmount, referenceType: "earning_accrual", referenceID: earning.ID.String(), idempotencyKey: "accrue:" + earning.ID.String()},
+		}); err != nil {
+			return err
+		}
+
+		day := time.Date(earning.PeriodEnd.Year(), earning.PeriodEnd.Month(), earning.PeriodEnd.Day(), 0, 0, 0, 0, time.UTC)
+		if err := upsertDailyAggregateTx(tx, earning.AffiliateID, day, DailyAggregateDeltas{
+			GGRAmount:         earning.GGRAmount,
+			NGRAmount:         earning.NGRAmount,
+			CommissionAccrued: earning.CommissionAmount,
+		}); err != nil {
+			return fmt.Errorf("upsert daily aggregate on accrual: %w", err)
+		}
+		return nil
 	})
 }
 
@@ -625,21 +682,40 @@ func (r *GormAffiliateRepository) UpdatePayout(ctx context.Context, payout *doma
 		}
 
 		topic := "affiliate.payout.updated"
-		if payout.Status == domain.PayoutStatusPaid {
+		switch payout.Status {
+		case domain.PayoutStatusApproved:
+			topic = "affiliate.payout.approved"
+		case domain.PayoutStatusPaid:
 			topic = "affiliate.payout.paid"
-		}
-		if payout.Status == domain.PayoutStatusRejected {
+		case domain.PayoutStatusRejected:
 			topic = "affiliate.payout.rejected"
 		}
 
-		return r.appendOutboxTx(tx, "affiliate_payout", payout.ID.String(), topic, payout.AffiliateID.String(), map[string]any{
+		if err := r.appendOutboxTx(tx, "affiliate_payout", payout.ID.String(), topic, payout.AffiliateID.String(), map[string]any{
 			"payout_id":          payout.ID.String(),
 			"affiliate_id":       payout.AffiliateID.String(),
+			"amount":             payout.Amount.String(),
+			"currency":           payout.Currency,
+			"method_id":          payout.MethodID.String(),
 			"status":             payout.Status,
 			"approved_by":        payout.ApprovedBy,
 			"provider_reference": payout.ProviderReference,
 			"rejection_reason":   payout.RejectionReason,
-		})
+		}); err != nil {
+			return err
+		}
+
+		// Terminal payout: move funds available -> paid inside the affiliate
+		// ledger. The player wallet is never touched by this contour.
+		if payout.Status == domain.PayoutStatusPaid {
+			if err := r.postLedgerTx(tx, payout.AffiliateID, payout.Currency, []ledgerPosting{
+				{accountType: "available", direction: "debit", amount: payout.Amount, referenceType: "payout_paid", referenceID: payout.ID.String(), idempotencyKey: "payout-paid:" + payout.ID.String() + ":out"},
+				{accountType: "paid", direction: "credit", amount: payout.Amount, referenceType: "payout_paid", referenceID: payout.ID.String(), idempotencyKey: "payout-paid:" + payout.ID.String() + ":in"},
+			}); err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 }
 
@@ -709,13 +785,64 @@ func (r *GormAffiliateRepository) UpdatePayoutMethod(ctx context.Context, method
 }
 
 func (r *GormAffiliateRepository) ReleaseEligibleEarnings(ctx context.Context, now time.Time) (int64, error) {
-	res := r.db.WithContext(ctx).Model(&affiliateEarningModel{}).
+	// Per-earning release (not a blind bulk UPDATE): every hold expiry must
+	// emit affiliate.commission.released and move pending -> available in the
+	// ledger, otherwise downstream consumers and reconciliation drift.
+	var eligible []affiliateEarningModel
+	if err := r.db.WithContext(ctx).
 		Where("status IN ? AND hold_until <= ?", []string{string(domain.EarningStatusAccrued), string(domain.EarningStatusPending)}, now).
-		Updates(map[string]any{"status": string(domain.EarningStatusAvailable)})
-	if res.Error != nil {
-		return 0, fmt.Errorf("release eligible earnings: %w", res.Error)
+		Find(&eligible).Error; err != nil {
+		return 0, fmt.Errorf("load eligible earnings: %w", err)
 	}
-	return res.RowsAffected, nil
+	if len(eligible) == 0 {
+		return 0, nil
+	}
+
+	var released int64
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		for i := range eligible {
+			e := eligible[i]
+			res := tx.Model(&affiliateEarningModel{}).
+				Where("id = ? AND status IN ?", e.ID, []string{string(domain.EarningStatusAccrued), string(domain.EarningStatusPending)}).
+				Update("status", string(domain.EarningStatusAvailable))
+			if res.Error != nil {
+				return fmt.Errorf("release earning %s: %w", e.ID, res.Error)
+			}
+			if res.RowsAffected == 0 {
+				continue // raced by a concurrent release or reversal
+			}
+
+			currency, err := r.profileCurrencyTx(tx, e.AffiliateID)
+			if err != nil {
+				return err
+			}
+			if err := r.postLedgerTx(tx, e.AffiliateID, currency, []ledgerPosting{
+				{accountType: "pending", direction: "debit", amount: e.CommissionAmount, referenceType: "hold_release", referenceID: e.ID.String(), idempotencyKey: "release:" + e.ID.String() + ":out"},
+				{accountType: "available", direction: "credit", amount: e.CommissionAmount, referenceType: "hold_release", referenceID: e.ID.String(), idempotencyKey: "release:" + e.ID.String() + ":in"},
+			}); err != nil {
+				return err
+			}
+
+			if err := r.appendOutboxTx(tx, "affiliate_earning", e.ID.String(), "affiliate.commission.released", e.AffiliateID.String(), map[string]any{
+				"earning_id":        e.ID.String(),
+				"affiliate_id":      e.AffiliateID.String(),
+				"referred_user_id":  e.ReferredUserID,
+				"commission_amount": e.CommissionAmount.String(),
+				"previous_status":   e.Status,
+				"status":            string(domain.EarningStatusAvailable),
+				"hold_until":        e.HoldUntil,
+				"released_at":       now,
+			}); err != nil {
+				return err
+			}
+			released++
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	return released, nil
 }
 
 func (r *GormAffiliateRepository) ListPendingOutboxEvents(ctx context.Context, limit int) ([]domain.OutboxEvent, error) {
@@ -1169,13 +1296,26 @@ func (r *GormAffiliateRepository) CreateAdjustment(ctx context.Context, adj *dom
 		if err := tx.Create(&model).Error; err != nil {
 			return fmt.Errorf("create adjustment: %w", err)
 		}
-		return r.appendOutboxTx(tx, "affiliate_adjustment", adj.ID.String(), "affiliate.adjustment.created", adj.AffiliateID.String(), map[string]any{
+		if err := r.appendOutboxTx(tx, "affiliate_adjustment", adj.ID.String(), "affiliate.adjustment.created", adj.AffiliateID.String(), map[string]any{
 			"adjustment_id":   adj.ID.String(),
 			"affiliate_id":    adj.AffiliateID.String(),
 			"adjustment_type": adj.AdjustmentType,
 			"amount":          adj.Amount.String(),
+			"currency":        adj.Currency,
 			"reason":          adj.Reason,
 			"created_by":      adj.CreatedBy,
+		}); err != nil {
+			return err
+		}
+		// Manual adjustments move through the adjusted ledger account so the
+		// dashboard and reconciliation reflect them. A credit tops up the
+		// affiliate's adjusted balance; a debit records a write-down.
+		direction := "credit"
+		if adj.AdjustmentType == domain.AdjustmentTypeDebit {
+			direction = "debit"
+		}
+		return r.postLedgerTx(tx, adj.AffiliateID, adj.Currency, []ledgerPosting{
+			{accountType: "adjusted", direction: direction, amount: adj.Amount, referenceType: "manual_adjustment", referenceID: adj.ID.String(), idempotencyKey: "adj:" + adj.ID.String()},
 		})
 	})
 }

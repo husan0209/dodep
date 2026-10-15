@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -74,6 +75,10 @@ type BindReferredUserInput struct {
 	AffiliateID    uuid.UUID
 	ReferredUserID int64
 	ClickID        string
+	// FraudSignals carries optional cross-service identity/payment hashes
+	// (already HMAC-hashed by the caller, never raw PII). Empty means the
+	// signal is unavailable and the matching rule skips.
+	FraudSignals FraudSignals
 }
 
 type RequestPayoutInput struct {
@@ -93,7 +98,10 @@ type CalculateCommissionInput struct {
 	PeriodStart    time.Time
 	PeriodEnd      time.Time
 	GGRAmount      decimal.Decimal
-	NGRAmount      decimal.Decimal
+	// Deductions are subtracted from GGR to obtain NGR:
+	// NGR = GGR - bonuses - payment_fees - chargebacks
+	//     - fraud_writeoffs - taxes - manual_adjustments
+	Deductions     NGRComponents
 	IdempotencyKey string
 }
 
@@ -102,6 +110,9 @@ type ApproveAffiliatePayoutInput struct {
 	PayoutID          uuid.UUID
 	ApprovedBy        string
 	ProviderReference string
+	// KYCApproved is the finance operator's confirmation that the affiliate
+	// passed KYC at approval time. Required when the profile mandates KYC.
+	KYCApproved bool
 }
 
 type RejectAffiliatePayoutInput struct {
@@ -340,7 +351,7 @@ func (s *AffiliateService) BindReferredUser(ctx context.Context, in BindReferred
 	}
 
 	// Automatic anti-fraud screening: flag-first, never blocks the binding.
-	s.ScreenAttribution(ctx, attribution)
+	s.ScreenAttributionWithSignals(ctx, attribution, profile.UserID, in.FraudSignals)
 
 	return attribution, nil
 }
@@ -425,12 +436,32 @@ func (s *AffiliateService) UpdatePayoutMethod(ctx context.Context, in UpdatePayo
 }
 
 func (s *AffiliateService) RequestPayout(ctx context.Context, in RequestPayoutInput) (*domain.AffiliatePayout, error) {
+	if in.IdempotencyKey == "" {
+		return nil, ErrIdempotencyKeyRequired
+	}
 	profile, err := s.repo.GetProfileByID(ctx, in.AffiliateID)
 	if err != nil {
 		return nil, err
 	}
 	if profile == nil {
 		return nil, domain.ErrAffiliateNotFound
+	}
+
+	// Idempotent replay: the same key returns the original payout.
+	if existing, err := s.repo.GetPayoutByIdempotencyKey(ctx, in.IdempotencyKey); err != nil {
+		return nil, err
+	} else if existing != nil {
+		return existing, nil
+	}
+
+	// The payout method must belong to the affiliate and be verified: an
+	// unverified destination never receives affiliate funds.
+	method, err := s.repo.GetPayoutMethodByID(ctx, in.MethodID)
+	if err != nil {
+		return nil, err
+	}
+	if method == nil || method.AffiliateID != in.AffiliateID || !method.IsVerified {
+		return nil, ErrPayoutMethodUnverified
 	}
 
 	available, err := s.repo.GetAvailableBalance(ctx, in.AffiliateID)
@@ -476,6 +507,9 @@ func (s *AffiliateService) RequestPayout(ctx context.Context, in RequestPayoutIn
 }
 
 func (s *AffiliateService) CalculateCommission(ctx context.Context, in CalculateCommissionInput) (*domain.AffiliateEarning, error) {
+	if in.IdempotencyKey == "" {
+		return nil, ErrIdempotencyKeyRequired
+	}
 	profile, err := s.repo.GetProfileByID(ctx, in.AffiliateID)
 	if err != nil {
 		return nil, err
@@ -486,16 +520,27 @@ func (s *AffiliateService) CalculateCommission(ctx context.Context, in Calculate
 	if profile.Status != domain.AffiliateStatusActive {
 		return nil, domain.ErrAffiliateInactive
 	}
-	if in.NGRAmount.LessThanOrEqual(decimal.Zero) {
-		return nil, domain.ErrInvalidCommissionAmount
+
+	// Idempotent replay: same key returns the original earning.
+	if existing, err := s.repo.GetEarningByIdempotencyKey(ctx, in.IdempotencyKey); err != nil {
+		return nil, err
+	} else if existing != nil {
+		return existing, nil
 	}
+
+	// NGR is always derived from settled components, never trusted blindly:
+	// NGR = GGR - bonuses - payment_fees - chargebacks
+	//     - fraud_writeoffs - taxes - manual_adjustments
+	ngr, err := ComputeNGR(in.GGRAmount, in.Deductions)
+	if err != nil {
+		return nil, err
+	}
+
+	// max(0, NGR * rate): no negative carryover in MVP. A non-positive NGR
+	// still persists a zero-amount row so the period stays auditable.
+	commissionAmount := domain.CalculateCommission(ngr, profile.CommissionRate)
 
 	now := time.Now().UTC()
-	commissionAmount := in.NGRAmount.Mul(profile.CommissionRate)
-	if commissionAmount.LessThanOrEqual(decimal.Zero) {
-		return nil, domain.ErrInvalidCommissionAmount
-	}
-
 	earning := &domain.AffiliateEarning{
 		ID:               uuid.New(),
 		AffiliateID:      in.AffiliateID,
@@ -505,7 +550,7 @@ func (s *AffiliateService) CalculateCommission(ctx context.Context, in Calculate
 		PeriodStart:      in.PeriodStart,
 		PeriodEnd:        in.PeriodEnd,
 		GGRAmount:        in.GGRAmount,
-		NGRAmount:        in.NGRAmount,
+		NGRAmount:        ngr,
 		CommissionRate:   profile.CommissionRate,
 		CommissionAmount: commissionAmount,
 		Status:           domain.EarningStatusAccrued,
@@ -527,15 +572,31 @@ func (s *AffiliateService) ApproveAffiliatePayout(ctx context.Context, in Approv
 	if payout == nil {
 		return nil, domain.ErrPayoutNotFound
 	}
-	if _, err := s.requireActiveProfile(ctx, payout.AffiliateID); err != nil {
+	profile, err := s.requireActiveProfile(ctx, payout.AffiliateID)
+	if err != nil {
 		return nil, err
 	}
-	if payout.Status != domain.PayoutStatusRequested && payout.Status != domain.PayoutStatusReviewing && payout.Status != domain.PayoutStatusApproved {
+	if payout.Status != domain.PayoutStatusRequested && payout.Status != domain.PayoutStatusReviewing {
 		return nil, domain.ErrInvalidPayoutStatus
 	}
 
+	// Approval-time gates: KYC and fraud are re-checked at decision time,
+	// not only at request time — a flag raised while the payout queued must
+	// block the approval. Emits affiliate.payout.approved; the PSP leg
+	// finalizes via MarkPayoutPaid (approved -> paid).
+	if profile.KYCRequired && !in.KYCApproved {
+		return nil, domain.ErrAffiliateKYCRequired
+	}
+	flags, err := s.repo.GetOpenFraudFlags(ctx, payout.AffiliateID)
+	if err != nil {
+		return nil, err
+	}
+	if len(flags) > 0 {
+		return nil, domain.ErrAffiliateFraudBlocked
+	}
+
 	now := time.Now().UTC()
-	payout.Status = domain.PayoutStatusPaid
+	payout.Status = domain.PayoutStatusApproved
 	payout.ApprovedBy = in.ApprovedBy
 	payout.ApprovedAt = &now
 	payout.ProviderReference = in.ProviderReference
@@ -751,6 +812,18 @@ func (s *AffiliateService) CreateAdjustment(ctx context.Context, in CreateAdjust
 	}
 	if profile == nil {
 		return nil, domain.ErrAffiliateNotFound
+	}
+	if in.AdjustmentType != domain.AdjustmentTypeCredit && in.AdjustmentType != domain.AdjustmentTypeDebit {
+		return nil, NewValidationError(FieldError{Field: "adjustment_type", Message: "must be credit or debit"})
+	}
+	if in.Amount.LessThanOrEqual(decimal.Zero) {
+		return nil, ErrInvalidAdjustment
+	}
+	if strings.TrimSpace(in.Reason) == "" {
+		return nil, NewValidationError(FieldError{Field: "reason", Message: "adjustment reason is required for audit"})
+	}
+	if strings.TrimSpace(in.CreatedBy) == "" {
+		return nil, NewValidationError(FieldError{Field: "created_by", Message: "adjustment author is required for audit"})
 	}
 
 	adj := &domain.AffiliateAdjustment{

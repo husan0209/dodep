@@ -1,8 +1,30 @@
 # Data Layer — Architecture Overview
 
 **Author:** DATA_ENGINEER
-**Updated:** 2026-03-24
-**Status:** ✅ Complete (Stage 3)
+**Updated:** 2026-10-15
+**Status:** 🟡 Stage 3 — 70% + audit follow-up (replication/backup/PITR артефакты добавлены, живые прогоны pending)
+
+## Статус Этапа 3.1 — Replication / Backup / PITR (обновлено 2026-10-15)
+
+| Пункт чеклиста 3.1 | Статус | Артефакт |
+|---|---|---|
+| Citus кластер 1 coord + 3 workers | ✅ есть | `infra/k8s/data/postgresql/postgresql.yaml` |
+| PgBouncer transaction mode, 10K conns | ✅ конфиг есть, ⏳ живой прогон pending | `postgresql.yaml` + `infra/k8s/data/postgresql/pgbouncer-tuning.yaml` (математика 120<200, `SHOW POOLS` процедура) |
+| Streaming replication coordinator | ✅ артефакт добавлен, ⏳ живой тест pending | `infra/k8s/data/postgresql/postgresql-replication.yaml` (standby + `pg-read` Service) |
+| Backup WAL-G → S3 | ✅ артефакты добавлены, ⏳ первый backup pending | `infra/k8s/data/postgresql/postgresql-backup.yaml` (CronJobs full 02:00 UTC + verify 06:00 UTC, S3 refs via env) |
+| PITR тестирование | ✅ runbook добавлен, ⏳ живой PITR-тест pending | `docs/data/backup-pitr-runbook.md` (RTO/RPO, restore + PITR команды, probe-процедура) |
+| pg_partman autopartition | 🟡 конфиг закомментирован в `004_transactions.sql` | Включить после deploy (команда в миграции) |
+| Миграция 024 (индексы + RLS) | ✅ добавлена, идемпотентна | `libs/migrations/postgresql/024_stage3_hardening.sql` |
+
+Аудит-дыры, подтверждённые сверкой STAGES 3.1-3.4 с файлами (см. runbook §9 и отчёт в сессии):
+`009_outbox` ✅ на месте; `postgresql.yaml` с PgBouncer ✅; `dragonflydb.yaml` ✅;
+`clickhouse.yaml` ✅ (TTL 30d/1-3yr/5yr + 5 MV на месте); `redpanda.yaml` + topics Job ✅
+(14 топиков + отдельный `affiliate-topics-job.yaml`).
+
+## Evidence checklist для Этапов 17-18 (data scope)
+
+То, что CI/CD и Security инженеры должны приложить как доказательства прохождения
+(полный список — внизу файла, раздел «Evidence checklist для Этапов 17-18 (data scope, живой кластер)»).
 
 ## Архитектура данных
 
@@ -112,3 +134,16 @@ data/
 - [ClickHouse Schema](./clickhouse-schema.md) — Аналитические таблицы, Kafka ingestion
 - [DragonflyDB Schema](./dragonfly-schema.md) — Схема кэша, TTL, паттерны
 - [Redpanda Topics](./redpanda-topics.md) — Топики, конфигурация, консьюмеры
+- [Backup & PITR Runbook](./backup-pitr-runbook.md) — WAL-G → S3, restore, PITR, RTO/RPO
+
+## Evidence checklist для Этапов 17-18 (data scope, живой кластер)
+
+- [ ] `wal-g backup-list` показывает daily full < 24ч свежести (CronJob `pg-walg-full-backup`)
+- [ ] `wal-g wal-verify integrity` — 0 errors (CronJob `pg-walg-backup-verify`, логи → ClickHouse)
+- [ ] `pg_stat_archiver.last_failed_wal` пуст, `last_archived_time` < 2 мин
+- [ ] Standby lag `now() - pg_last_xact_replay_timestamp()` < 60s
+- [ ] PITR probe-тест пройден (таблица `pitr_probe` отсутствует после restore на T0)
+- [ ] PgBouncer: `SHOW POOLS` server_conns ≤ 120 при k6 2000 VUs, p99 wait < 50ms
+- [ ] Dragonfly: `TTL cache:odds:*` > 0, `INFO memory` evictions без OOM, snapshot mtime < 6 мин
+- [ ] ClickHouse: MV lag (Kafka consumer) < 1000 msgs, daily GGR dashboard < 3s
+- [ ] Redpanda: consumer lag < 10K, 0 under-replicated partitions, DLQ пуст

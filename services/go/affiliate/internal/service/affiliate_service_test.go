@@ -43,6 +43,11 @@ type mockAffiliateRepository struct {
 	createFraudFlagFunc            func(context.Context, *domain.AffiliateFraudFlag) error
 	getOpenFraudFlagsFunc          func(context.Context, uuid.UUID) ([]domain.AffiliateFraudFlag, error)
 	releaseEligibleEarningsFunc    func(context.Context, time.Time) (int64, error)
+	getEarningByIDFunc             func(context.Context, uuid.UUID) (*domain.AffiliateEarning, error)
+	getEarningByIdempotencyKeyFunc func(context.Context, string) (*domain.AffiliateEarning, error)
+	getPayoutByIdempotencyKeyFunc  func(context.Context, string) (*domain.AffiliatePayout, error)
+	reverseEarningFunc             func(context.Context, uuid.UUID, string) (*domain.AffiliateEarning, error)
+	upsertDailyAggregateFunc       func(context.Context, uuid.UUID, time.Time, repository.DailyAggregateDeltas) error
 
 	// Anti-fraud signal queries (see internal/repository/fraud_signals.go)
 	getClickByClickIDFunc          func(context.Context, string) (*domain.AffiliateClick, error)
@@ -314,6 +319,41 @@ func (m *mockAffiliateRepository) ReleaseEligibleEarnings(ctx context.Context, n
 	return 0, nil
 }
 
+func (m *mockAffiliateRepository) GetEarningByID(ctx context.Context, earningID uuid.UUID) (*domain.AffiliateEarning, error) {
+	if m.getEarningByIDFunc != nil {
+		return m.getEarningByIDFunc(ctx, earningID)
+	}
+	return nil, nil
+}
+
+func (m *mockAffiliateRepository) GetEarningByIdempotencyKey(ctx context.Context, key string) (*domain.AffiliateEarning, error) {
+	if m.getEarningByIdempotencyKeyFunc != nil {
+		return m.getEarningByIdempotencyKeyFunc(ctx, key)
+	}
+	return nil, nil
+}
+
+func (m *mockAffiliateRepository) GetPayoutByIdempotencyKey(ctx context.Context, key string) (*domain.AffiliatePayout, error) {
+	if m.getPayoutByIdempotencyKeyFunc != nil {
+		return m.getPayoutByIdempotencyKeyFunc(ctx, key)
+	}
+	return nil, nil
+}
+
+func (m *mockAffiliateRepository) ReverseEarning(ctx context.Context, earningID uuid.UUID, reason string) (*domain.AffiliateEarning, error) {
+	if m.reverseEarningFunc != nil {
+		return m.reverseEarningFunc(ctx, earningID, reason)
+	}
+	return nil, nil
+}
+
+func (m *mockAffiliateRepository) UpsertDailyAggregate(ctx context.Context, affiliateID uuid.UUID, reportDate time.Time, deltas repository.DailyAggregateDeltas) error {
+	if m.upsertDailyAggregateFunc != nil {
+		return m.upsertDailyAggregateFunc(ctx, affiliateID, reportDate, deltas)
+	}
+	return nil
+}
+
 func (m *mockAffiliateRepository) ListPendingOutboxEvents(_ context.Context, _ int) ([]domain.OutboxEvent, error) {
 	return nil, nil
 }
@@ -392,14 +432,14 @@ func TestAffiliateService_ApproveAffiliate_CreatesProfileWithDefaultPlan(t *test
 		},
 		getDefaultCommissionPlanFunc: func(ctx context.Context) (*domain.AffiliateCommissionPlan, error) {
 			return &domain.AffiliateCommissionPlan{
-				ID:             uuid.New(),
-				Name:           "default",
-				CommissionType: "revshare",
-				CommissionRate: decimal.RequireFromString("0.20"),
-				HoldPeriodDays: 14,
+				ID:              uuid.New(),
+				Name:            "default",
+				CommissionType:  "revshare",
+				CommissionRate:  decimal.RequireFromString("0.20"),
+				HoldPeriodDays:  14,
 				MinPayoutAmount: decimal.RequireFromString("100"),
-				ApprovalMode:   domain.ApprovalModeManual,
-				PayoutSchedule: domain.PayoutScheduleMonthly,
+				ApprovalMode:    domain.ApprovalModeManual,
+				PayoutSchedule:  domain.PayoutScheduleMonthly,
 			}, nil
 		},
 	}
@@ -508,11 +548,11 @@ func TestAffiliateService_TrackAffiliateClick_CreatesClickForAffiliateCode(t *te
 
 	svc := newTestAffiliateService(repo)
 	click, err := svc.TrackAffiliateClick(ctx, TrackAffiliateClickInput{
-		AffiliateCode:  "AFF12345",
-		LandingPage:    "/landing",
-		IPHash:         "ip",
-		UserAgentHash:  "ua",
-		CountryCode:    "DE",
+		AffiliateCode: "AFF12345",
+		LandingPage:   "/landing",
+		IPHash:        "ip",
+		UserAgentHash: "ua",
+		CountryCode:   "DE",
 	})
 	if err != nil {
 		t.Fatalf("expected click tracking to succeed, got %v", err)
@@ -580,9 +620,9 @@ func TestAffiliateService_BindReferredUser_RejectsSelfReferralAndDuplicateBindin
 	repo := &mockAffiliateRepository{
 		getProfileByIDFunc: func(ctx context.Context, id uuid.UUID) (*domain.AffiliateProfile, error) {
 			return &domain.AffiliateProfile{
-				ID:      affiliateID,
-				UserID:  42,
-				Status:  domain.AffiliateStatusActive,
+				ID:       affiliateID,
+				UserID:   42,
+				Status:   domain.AffiliateStatusActive,
 				Currency: "USD",
 			}, nil
 		},
@@ -619,6 +659,7 @@ func TestAffiliateService_BindReferredUser_RejectsSelfReferralAndDuplicateBindin
 func TestAffiliateService_RequestPayout_RequiresEligibilityAndCreatesRequestedPayout(t *testing.T) {
 	ctx := context.Background()
 	affiliateID := uuid.New()
+	methodID := uuid.New()
 	repo := &mockAffiliateRepository{
 		getProfileByIDFunc: func(ctx context.Context, id uuid.UUID) (*domain.AffiliateProfile, error) {
 			return &domain.AffiliateProfile{
@@ -628,6 +669,17 @@ func TestAffiliateService_RequestPayout_RequiresEligibilityAndCreatesRequestedPa
 				MinPayoutAmount: decimal.RequireFromString("100"),
 				Currency:        "USD",
 				KYCRequired:     true,
+			}, nil
+		},
+		getPayoutByIdempotencyKeyFunc: func(ctx context.Context, key string) (*domain.AffiliatePayout, error) {
+			return nil, nil
+		},
+		getPayoutMethodByIDFunc: func(ctx context.Context, id uuid.UUID) (*domain.AffiliatePayoutMethod, error) {
+			return &domain.AffiliatePayoutMethod{
+				ID:          methodID,
+				AffiliateID: affiliateID,
+				MethodType:  domain.PayoutMethodTypeCrypto,
+				IsVerified:  true,
 			}, nil
 		},
 		getAvailableBalanceFunc: func(ctx context.Context, id uuid.UUID) (decimal.Decimal, error) {
@@ -641,12 +693,12 @@ func TestAffiliateService_RequestPayout_RequiresEligibilityAndCreatesRequestedPa
 	svc := newTestAffiliateService(repo)
 
 	payout, err := svc.RequestPayout(ctx, RequestPayoutInput{
-		AffiliateID:  affiliateID,
-		MethodID:     uuid.New(),
-		Amount:       decimal.RequireFromString("120"),
+		AffiliateID:    affiliateID,
+		MethodID:       uuid.New(),
+		Amount:         decimal.RequireFromString("120"),
 		IdempotencyKey: "payout-req-1",
-		KYCApproved:  true,
-		HasOpenFraud: false,
+		KYCApproved:    true,
+		HasOpenFraud:   false,
 	})
 	if err != nil {
 		t.Fatalf("expected payout to succeed, got %v", err)
@@ -673,6 +725,14 @@ func TestAffiliateService_RequestPayout_RejectsAmountGreaterThanAvailable(t *tes
 				Status:          domain.AffiliateStatusActive,
 				MinPayoutAmount: decimal.RequireFromString("100"),
 				Currency:        "USD",
+			}, nil
+		},
+		getPayoutMethodByIDFunc: func(ctx context.Context, id uuid.UUID) (*domain.AffiliatePayoutMethod, error) {
+			return &domain.AffiliatePayoutMethod{
+				ID:          id,
+				AffiliateID: affiliateID,
+				MethodType:  domain.PayoutMethodTypeBankTransfer,
+				IsVerified:  true,
 			}, nil
 		},
 		getAvailableBalanceFunc: func(ctx context.Context, id uuid.UUID) (decimal.Decimal, error) {
@@ -745,7 +805,7 @@ func TestAffiliateService_CalculateCommission_CreatesHeldEarningFromPositiveNGR(
 		PeriodStart:    time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC),
 		PeriodEnd:      time.Date(2026, 4, 1, 23, 59, 59, 0, time.UTC),
 		GGRAmount:      decimal.RequireFromString("200"),
-		NGRAmount:      decimal.RequireFromString("120"),
+		Deductions:     NGRComponents{Bonuses: decimal.RequireFromString("80")},
 		IdempotencyKey: "ngr-1",
 	})
 	if err != nil {
@@ -757,6 +817,10 @@ func TestAffiliateService_CalculateCommission_CreatesHeldEarningFromPositiveNGR(
 	if created.Status != domain.EarningStatusAccrued {
 		t.Fatalf("expected accrued earning, got %s", created.Status)
 	}
+	// NGR = 200 - 80 = 120; commission = max(0, 120 * 0.25) = 30.
+	if !created.NGRAmount.Equal(decimal.RequireFromString("120")) {
+		t.Fatalf("expected NGR 120, got %s", created.NGRAmount)
+	}
 	if !created.CommissionAmount.Equal(decimal.RequireFromString("30")) {
 		t.Fatalf("expected commission amount 30, got %s", created.CommissionAmount)
 	}
@@ -765,7 +829,7 @@ func TestAffiliateService_CalculateCommission_CreatesHeldEarningFromPositiveNGR(
 	}
 }
 
-func TestAffiliateService_ApproveAffiliatePayout_MarksRequestedPayoutAsPaid(t *testing.T) {
+func TestAffiliateService_ApproveAffiliatePayout_MarksRequestedPayoutAsApproved(t *testing.T) {
 	ctx := context.Background()
 	affiliateID := uuid.New()
 	payoutID := uuid.New()
@@ -793,10 +857,10 @@ func TestAffiliateService_ApproveAffiliatePayout_MarksRequestedPayoutAsPaid(t *t
 
 	svc := newTestAffiliateService(repo)
 	payout, err := svc.ApproveAffiliatePayout(ctx, ApproveAffiliatePayoutInput{
-		AffiliateID:        affiliateID,
-		PayoutID:           payoutID,
-		ApprovedBy:         "finance-admin",
-		ProviderReference:  "provider-42",
+		AffiliateID:       affiliateID,
+		PayoutID:          payoutID,
+		ApprovedBy:        "finance-admin",
+		ProviderReference: "provider-42",
 	})
 	if err != nil {
 		t.Fatalf("expected payout approval to succeed, got %v", err)
@@ -804,8 +868,10 @@ func TestAffiliateService_ApproveAffiliatePayout_MarksRequestedPayoutAsPaid(t *t
 	if updated == nil {
 		t.Fatal("expected payout update to be persisted")
 	}
-	if payout.Status != domain.PayoutStatusPaid {
-		t.Fatalf("expected paid status, got %s", payout.Status)
+	// Approval is the finance decision (requested -> approved); the PSP leg
+	// finalizes separately via MarkPayoutPaid (approved -> paid).
+	if payout.Status != domain.PayoutStatusApproved {
+		t.Fatalf("expected approved status, got %s", payout.Status)
 	}
 	if payout.ApprovedBy != "finance-admin" {
 		t.Fatalf("expected approved_by to be set, got %q", payout.ApprovedBy)
@@ -843,10 +909,10 @@ func TestAffiliateService_RejectAffiliatePayout_SetsRejectedStatusAndReason(t *t
 
 	svc := newTestAffiliateService(repo)
 	payout, err := svc.RejectAffiliatePayout(ctx, RejectAffiliatePayoutInput{
-		AffiliateID:      affiliateID,
-		PayoutID:         payoutID,
-		RejectedBy:       "finance-admin",
-		RejectionReason:  "kyc mismatch",
+		AffiliateID:     affiliateID,
+		PayoutID:        payoutID,
+		RejectedBy:      "finance-admin",
+		RejectionReason: "kyc mismatch",
 	})
 	if err != nil {
 		t.Fatalf("expected payout rejection to succeed, got %v", err)

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"os"
 	"strconv"
 	"time"
 
@@ -21,13 +22,57 @@ var errUserIDMissing = errors.New("user_id not found in event data")
 type NotificationService struct {
 	repo *repository.NotificationRepository
 	log  *zap.Logger
+
+	email EmailSender
+	sms   SMSSender
+	push  PushSender
+	inApp InAppPublisher
 }
 
-// NewNotificationService creates a new notification service
+// NewNotificationService creates a new notification service.
+// Channel senders default to env-based stub implementations (log only, no
+// secrets in code); override with SetEmailSender/SetSMSSender/SetPushSender/
+// SetInAppPublisher in production wiring or tests. Signature is unchanged.
 func NewNotificationService(repo *repository.NotificationRepository, log *zap.Logger) *NotificationService {
+	if log == nil {
+		log = zap.NewNop()
+	}
+	cfg := DefaultChannelConfigFromEnv()
 	return &NotificationService{
-		repo: repo,
-		log:  log,
+		repo:  repo,
+		log:   log,
+		email: NewLogEmailSender(cfg, log),
+		sms:   NewLogSMSSender(cfg, log),
+		push:  NewLogPushSender(cfg, log),
+		inApp: NewLogInAppPublisher(log),
+	}
+}
+
+// SetEmailSender overrides the email sender (e.g. real SendGrid client).
+func (s *NotificationService) SetEmailSender(sender EmailSender) {
+	if sender != nil {
+		s.email = sender
+	}
+}
+
+// SetSMSSender overrides the SMS sender (e.g. real Twilio client).
+func (s *NotificationService) SetSMSSender(sender SMSSender) {
+	if sender != nil {
+		s.sms = sender
+	}
+}
+
+// SetPushSender overrides the push sender (e.g. real Firebase client).
+func (s *NotificationService) SetPushSender(sender PushSender) {
+	if sender != nil {
+		s.push = sender
+	}
+}
+
+// SetInAppPublisher overrides the in-app publisher (e.g. WS gateway client).
+func (s *NotificationService) SetInAppPublisher(p InAppPublisher) {
+	if p != nil {
+		s.inApp = p
 	}
 }
 
@@ -326,9 +371,22 @@ func (s *NotificationService) MarkAllAsRead(ctx context.Context, userID uint64, 
 
 // DeleteNotification deletes a notification
 func (s *NotificationService) DeleteNotification(ctx context.Context, id string, userID uint64) error {
+	deleted, err := s.repo.GetNotification(ctx, id)
+	if err != nil {
+		s.log.Error("Failed to load notification for delete", zap.Error(err))
+		return err
+	}
 	if err := s.repo.DeleteNotification(ctx, id, userID); err != nil {
 		s.log.Error("Failed to delete notification", zap.Error(err))
 		return err
+	}
+
+	// Keep the unread counter consistent: it is incremented only for unread
+	// in-app notifications, so decrement only in that same case.
+	if deleted != nil && !deleted.IsRead && deleted.Channel == "in_app" {
+		if err := s.repo.DecrementUnreadCount(ctx, userID); err != nil {
+			s.log.Error("Failed to decrement unread count", zap.Error(err))
+		}
 	}
 
 	s.log.Info("Notification deleted", zap.String("notification_id", id))
@@ -387,6 +445,183 @@ func (s *NotificationService) UpdateNotificationSettings(ctx context.Context, re
 	return toNotificationSettings(settings), nil
 }
 
+// ============ Channel providers ============
+//
+// Real PSP credentials (SendGrid API keys, Twilio SID/token, Firebase service
+// account) NEVER live in code — they come from environment variables only
+// (see DefaultChannelConfigFromEnv). Until production wiring lands, the
+// Log* stubs below preserve the send path with structured logs.
+
+// ChannelConfig carries channel provider settings loaded from the environment.
+type ChannelConfig struct {
+	EmailEnabled  bool
+	EmailProvider string // e.g. "sendgrid"
+	EmailFrom     string
+	SMSEnabled    bool
+	SMSProvider   string // e.g. "twilio"
+	PushEnabled   bool
+	PushProvider  string // e.g. "firebase"
+}
+
+// DefaultChannelConfigFromEnv loads channel settings from the environment.
+// No secrets are defaulted — empty means "not configured, stub only".
+func DefaultChannelConfigFromEnv() ChannelConfig {
+	return ChannelConfig{
+		EmailEnabled:  os.Getenv("EMAIL_ENABLED") != "false",
+		EmailProvider: envOr("EMAIL_PROVIDER", "sendgrid"),
+		EmailFrom:     envOr("EMAIL_FROM", "noreply@opuscasino.com"),
+		SMSEnabled:    os.Getenv("SMS_ENABLED") == "true",
+		SMSProvider:   envOr("SMS_PROVIDER", "twilio"),
+		PushEnabled:   os.Getenv("PUSH_ENABLED") != "false",
+		PushProvider:  envOr("PUSH_PROVIDER", "firebase"),
+	}
+}
+
+func envOr(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
+}
+
+// EmailMessage is a provider-agnostic outbound email.
+type EmailMessage struct {
+	To       string
+	Subject  string
+	Body     string
+	Metadata map[string]string
+}
+
+// SMSMessage is a provider-agnostic outbound SMS.
+type SMSMessage struct {
+	To       string
+	Body     string
+	Metadata map[string]string
+}
+
+// PushMessage is a provider-agnostic push notification.
+type PushMessage struct {
+	UserID   uint64
+	Title    string
+	Body     string
+	Metadata map[string]string
+}
+
+// WSEvent is the real-time envelope published for in-app delivery.
+// The WebSocket gateway fans it out to the user's active connections.
+type WSEvent struct {
+	Event   string            `json:"event"`
+	UserID  uint64            `json:"user_id"`
+	Payload map[string]string `json:"payload"`
+	SentAt  time.Time         `json:"sent_at"`
+}
+
+// EmailSender sends emails (SendGrid/SES in production).
+type EmailSender interface {
+	SendEmail(ctx context.Context, msg EmailMessage) error
+}
+
+// SMSSender sends SMS (Twilio in production).
+type SMSSender interface {
+	SendSMS(ctx context.Context, msg SMSMessage) error
+}
+
+// PushSender sends push notifications (Firebase in production).
+type PushSender interface {
+	SendPush(ctx context.Context, msg PushMessage) error
+}
+
+// InAppPublisher publishes real-time in-app events (WS gateway in production).
+type InAppPublisher interface {
+	PublishInApp(ctx context.Context, event WSEvent) error
+}
+
+// LogEmailSender is the env-based stub: logs instead of calling SendGrid.
+type LogEmailSender struct {
+	cfg ChannelConfig
+	log *zap.Logger
+}
+
+// NewLogEmailSender creates the stub email sender.
+func NewLogEmailSender(cfg ChannelConfig, log *zap.Logger) *LogEmailSender {
+	return &LogEmailSender{cfg: cfg, log: log}
+}
+
+// SendEmail logs the outbound email (stub for SendGrid/SES integration).
+func (s *LogEmailSender) SendEmail(ctx context.Context, msg EmailMessage) error {
+	if !s.cfg.EmailEnabled {
+		return errors.New("email channel is disabled")
+	}
+	s.log.Info("Sending email (stub)",
+		zap.String("provider", s.cfg.EmailProvider),
+		zap.String("from", s.cfg.EmailFrom),
+		zap.String("subject", msg.Subject))
+	return nil
+}
+
+// LogSMSSender is the env-based stub: logs instead of calling Twilio.
+type LogSMSSender struct {
+	cfg ChannelConfig
+	log *zap.Logger
+}
+
+// NewLogSMSSender creates the stub SMS sender.
+func NewLogSMSSender(cfg ChannelConfig, log *zap.Logger) *LogSMSSender {
+	return &LogSMSSender{cfg: cfg, log: log}
+}
+
+// SendSMS logs the outbound SMS (stub for Twilio integration).
+func (s *LogSMSSender) SendSMS(ctx context.Context, msg SMSMessage) error {
+	if !s.cfg.SMSEnabled {
+		return errors.New("sms channel is disabled")
+	}
+	s.log.Info("Sending SMS (stub)",
+		zap.String("provider", s.cfg.SMSProvider))
+	return nil
+}
+
+// LogPushSender is the env-based stub: logs instead of calling Firebase.
+type LogPushSender struct {
+	cfg ChannelConfig
+	log *zap.Logger
+}
+
+// NewLogPushSender creates the stub push sender.
+func NewLogPushSender(cfg ChannelConfig, log *zap.Logger) *LogPushSender {
+	return &LogPushSender{cfg: cfg, log: log}
+}
+
+// SendPush logs the outbound push (stub for Firebase integration).
+func (s *LogPushSender) SendPush(ctx context.Context, msg PushMessage) error {
+	if !s.cfg.PushEnabled {
+		return errors.New("push channel is disabled")
+	}
+	s.log.Info("Sending push notification (stub)",
+		zap.String("provider", s.cfg.PushProvider),
+		zap.Uint64("user_id", msg.UserID),
+		zap.String("title", msg.Title))
+	return nil
+}
+
+// LogInAppPublisher is the default in-app publisher: logs the WS event.
+// Production wiring replaces it with a WebSocket gateway client.
+type LogInAppPublisher struct {
+	log *zap.Logger
+}
+
+// NewLogInAppPublisher creates the default in-app publisher.
+func NewLogInAppPublisher(log *zap.Logger) *LogInAppPublisher {
+	return &LogInAppPublisher{log: log}
+}
+
+// PublishInApp logs the WS event envelope for in-app delivery.
+func (p *LogInAppPublisher) PublishInApp(ctx context.Context, event WSEvent) error {
+	p.log.Info("Publishing in-app event",
+		zap.String("event", event.Event),
+		zap.Uint64("user_id", event.UserID))
+	return nil
+}
+
 // ProcessEvent processes an event from Redpanda and sends appropriate notifications
 func (s *NotificationService) ProcessEvent(ctx context.Context, eventType string, data map[string]string) error {
 	s.log.Info("Processing event", zap.String("event_type", eventType))
@@ -394,13 +629,17 @@ func (s *NotificationService) ProcessEvent(ctx context.Context, eventType string
 	switch eventType {
 	case "bet.settled", "bets.settled":
 		return s.processBetSettled(ctx, data)
-	case "payment.deposit_confirmed", "payments.deposit_confirmed":
+	case "payment.deposit_confirmed", "payments.deposit_confirmed",
+		"payments.deposit.completed":
 		return s.processDepositConfirmed(ctx, data)
-	case "payment.withdrawal_processed", "payments.withdrawal_processed":
+	case "payment.withdrawal_processed", "payments.withdrawal_processed",
+		"payments.withdrawal.completed":
 		return s.processWithdrawalProcessed(ctx, data)
 	case "bonus.activated":
 		return s.processBonusActivated(ctx, data)
-	case "kyc.status_changed", "users.kyc_verified":
+	case "bonus.expiring":
+		return s.processBonusExpiring(ctx, data)
+	case "kyc.status_changed", "users.kyc_verified", "users.kyc.verified":
 		return s.processKYCStatusChanged(ctx, data)
 	default:
 		s.log.Debug("Unknown event type", zap.String("event_type", eventType))
@@ -445,30 +684,60 @@ func (s *NotificationService) isChannelEnabled(settings *repository.Notification
 }
 
 func (s *NotificationService) sendEmail(ctx context.Context, notif *repository.Notification) error {
-	// TODO: Implement email sending via SendGrid/SES
-	s.log.Debug("Sending email",
-		zap.Uint64("user_id", notif.UserID),
-		zap.String("subject", notif.Subject))
-	return nil
+	if s.email == nil {
+		return errors.New("email sender is not configured")
+	}
+	to := ""
+	if notif.Data != nil {
+		to = notif.Data["email"]
+	}
+	return s.email.SendEmail(ctx, EmailMessage{
+		To:       to,
+		Subject:  notif.Subject,
+		Body:     notif.Message,
+		Metadata: notif.Data,
+	})
 }
 
 func (s *NotificationService) sendSMS(ctx context.Context, notif *repository.Notification) error {
-	// TODO: Implement SMS sending via Twilio
-	s.log.Debug("Sending SMS", zap.Uint64("user_id", notif.UserID))
-	return nil
+	if s.sms == nil {
+		return errors.New("sms sender is not configured")
+	}
+	to := ""
+	if notif.Data != nil {
+		to = notif.Data["phone"]
+	}
+	return s.sms.SendSMS(ctx, SMSMessage{
+		To:       to,
+		Body:     notif.Message,
+		Metadata: notif.Data,
+	})
 }
 
 func (s *NotificationService) sendPush(ctx context.Context, notif *repository.Notification) error {
-	// TODO: Implement push notification via Firebase
-	s.log.Debug("Sending push notification", zap.Uint64("user_id", notif.UserID))
-	return nil
+	if s.push == nil {
+		return errors.New("push sender is not configured")
+	}
+	return s.push.SendPush(ctx, PushMessage{
+		UserID:   notif.UserID,
+		Title:    notif.Subject,
+		Body:     notif.Message,
+		Metadata: notif.Data,
+	})
 }
 
 func (s *NotificationService) sendInApp(ctx context.Context, notif *repository.Notification) error {
-	// In-app notifications are already stored in DB
-	// Real-time delivery via WebSocket will be handled by WebSocket Gateway
-	s.log.Debug("Creating in-app notification", zap.Uint64("user_id", notif.UserID))
-	return nil
+	if s.inApp == nil {
+		return errors.New("in-app publisher is not configured")
+	}
+	// In-app notifications are stored in DB (done by the caller) and
+	// delivered in real time via the WebSocket gateway.
+	return s.inApp.PublishInApp(ctx, WSEvent{
+		Event:   "notification.created",
+		UserID:  notif.UserID,
+		Payload: map[string]string{"notification_id": notif.ID, "type": notif.Type},
+		SentAt:  time.Now(),
+	})
 }
 
 // Event processors
@@ -544,6 +813,26 @@ func (s *NotificationService) processBonusActivated(ctx context.Context, data ma
 		Channel:  "in_app",
 		Type:     "bonus_activated",
 		Subject:  "Бонус активирован",
+		Message:  data["bonus_name"],
+		Data:     data,
+		Priority: "normal",
+	}
+
+	_, err := s.SendNotification(ctx, req)
+	return err
+}
+
+func (s *NotificationService) processBonusExpiring(ctx context.Context, data map[string]string) error {
+	userID := getUint64FromData(data, "user_id")
+	if userID == 0 {
+		return errUserIDMissing
+	}
+
+	req := &SendNotificationRequest{
+		UserID:   userID,
+		Channel:  "in_app",
+		Type:     "bonus_expiring",
+		Subject:  "Бонус скоро истечёт",
 		Message:  data["bonus_name"],
 		Data:     data,
 		Priority: "normal",

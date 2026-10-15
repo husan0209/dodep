@@ -38,8 +38,23 @@ func (f fraudStore) CountReferredUsersByIP(ctx context.Context, affiliateID uuid
 	return f.repo.CountReferredUsersByIP(ctx, affiliateID, ipHash, since)
 }
 
-// ScreenAttribution runs the automatic anti-fraud engine over a freshly created
-// attribution and persists one open fraud flag per finding.
+// FraudSignals carries optional cross-service identity/payment hashes into
+// the anti-fraud screen. Values must be opaque hashes (HMAC), never raw PII.
+type FraudSignals struct {
+	AffiliateKYCIdentityHash      string
+	ReferredKYCIdentityHash       string
+	AffiliatePayoutInstrumentHash string
+	ReferredPaymentInstrumentHash string
+}
+
+// ScreenAttribution keeps the original signature: automatic screening with
+// no external signals (device/IP are resolved from the click record).
+func (s *AffiliateService) ScreenAttribution(ctx context.Context, attribution *domain.AffiliateAttribution) {
+	s.ScreenAttributionWithSignals(ctx, attribution, 0, FraudSignals{})
+}
+
+// ScreenAttributionWithSignals runs the automatic anti-fraud engine over a
+// freshly created attribution and persists one open fraud flag per finding.
 //
 // Called by BindReferredUser right after the attribution is written. Two
 // deliberate properties:
@@ -53,16 +68,21 @@ func (f fraudStore) CountReferredUsersByIP(ctx context.Context, affiliateID uuid
 // A critical finding is logged for suspension review but not applied
 // automatically: suspending an affiliate on a single signal would let one
 // false positive stop real earnings.
-func (s *AffiliateService) ScreenAttribution(ctx context.Context, attribution *domain.AffiliateAttribution) {
+func (s *AffiliateService) ScreenAttributionWithSignals(ctx context.Context, attribution *domain.AffiliateAttribution, affiliateUserID int64, signals FraudSignals) {
 	if attribution == nil {
 		return
 	}
 
 	verdict, err := fraud.Evaluate(ctx, fraudStore{repo: s.repo}, s.fraudCfg, fraud.Input{
-		AffiliateID:    attribution.AffiliateID,
-		ReferredUserID: attribution.ReferredUserID,
-		ClickID:        attribution.ClickID,
-		EvaluatedAt:    time.Now().UTC(),
+		AffiliateID:                   attribution.AffiliateID,
+		ReferredUserID:                attribution.ReferredUserID,
+		ClickID:                       attribution.ClickID,
+		EvaluatedAt:                   time.Now().UTC(),
+		AffiliateUserID:               affiliateUserID,
+		AffiliateKYCIdentityHash:      signals.AffiliateKYCIdentityHash,
+		ReferredKYCIdentityHash:       signals.ReferredKYCIdentityHash,
+		AffiliatePayoutInstrumentHash: signals.AffiliatePayoutInstrumentHash,
+		ReferredPaymentInstrumentHash: signals.ReferredPaymentInstrumentHash,
 	})
 	if err != nil {
 		s.logger.Warn("affiliate fraud evaluation failed",

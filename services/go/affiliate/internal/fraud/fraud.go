@@ -34,6 +34,17 @@ const (
 	RuleDeviceSharing        = "device_sharing"
 	RuleIPCluster            = "ip_cluster"
 	RuleClicklessAttribution = "clickless_attribution"
+	// RuleSelfReferral fires when the referred user is the affiliate owner.
+	// The service hard-blocks self-referral at bind time; this rule is
+	// defense-in-depth for direct or backfilled attributions.
+	RuleSelfReferral = "self_referral"
+	// RuleKYCIdentityMatch fires when the referred player resolves to the
+	// same KYC identity as the affiliate owner (same person, two accounts).
+	RuleKYCIdentityMatch = "kyc_identity_match"
+	// RulePaymentInstrumentMatch fires when a referred player's payment
+	// instrument hash equals the affiliate's payout destination hash: the
+	// same card/wallet/bank account on both sides of the RevShare flow.
+	RulePaymentInstrumentMatch = "payment_instrument_match"
 )
 
 // Config holds tunable thresholds and observation windows.
@@ -93,6 +104,20 @@ type Input struct {
 	DeviceFP       string
 	IPHash         string
 	EvaluatedAt    time.Time
+	// AffiliateUserID is the platform user behind the affiliate profile.
+	// When equal to ReferredUserID the attribution is a self-referral.
+	AffiliateUserID int64
+	// KYCIdentityHash / ReferredKYCIdentityHash are opaque identity hashes
+	// (e.g. HMAC of the verified document number) supplied by the caller.
+	// Empty on either side means "signal unavailable" and the rule skips.
+	AffiliateKYCIdentityHash string
+	ReferredKYCIdentityHash  string
+	// AffiliatePayoutInstrumentHash is the hash of the affiliate's verified
+	// payout destination; ReferredPaymentInstrumentHash is the hash of the
+	// referred player's deposit instrument. Equal non-empty hashes mean the
+	// same card/wallet/account sits on both sides of the RevShare flow.
+	AffiliatePayoutInstrumentHash string
+	ReferredPaymentInstrumentHash string
 }
 
 // Finding is one triggered rule.
@@ -149,6 +174,9 @@ func Evaluate(ctx context.Context, store SignalStore, cfg Config, in Input) (*Ve
 		evalDeviceSharing,
 		evalIPCluster,
 		evalClicklessAttribution,
+		evalSelfReferral,
+		evalKYCIdentityMatch,
+		evalPaymentInstrumentMatch,
 	}
 	for _, rule := range rules {
 		f, err := rule(ctx, store, cfg, in)

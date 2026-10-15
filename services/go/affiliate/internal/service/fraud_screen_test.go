@@ -227,3 +227,128 @@ func TestSetFraudConfig_OverridesThresholds(t *testing.T) {
 		t.Fatalf("raised threshold must silence the finding, got %d flags", len(flags))
 	}
 }
+
+func TestBindReferredUser_KYCIdentityMatchRaisesHighFlag(t *testing.T) {
+	ctx := context.Background()
+	var flags []*domain.AffiliateFraudFlag
+	repo := &mockAffiliateRepository{
+		getProfileByIDFunc: func(context.Context, uuid.UUID) (*domain.AffiliateProfile, error) {
+			return activeProfileForFraud(42), nil
+		},
+		getClickByClickIDFunc: func(_ context.Context, clickID string) (*domain.AffiliateClick, error) {
+			return &domain.AffiliateClick{
+				ClickID:           clickID,
+				DeviceFingerprint: "fp-unique-kyc",
+				IPHash:            "ip-unique-kyc",
+			}, nil
+		},
+		createFraudFlagFunc: func(_ context.Context, flag *domain.AffiliateFraudFlag) error {
+			flags = append(flags, flag)
+			return nil
+		},
+	}
+
+	if _, err := NewAffiliateService(repo, nil).BindReferredUser(ctx, BindReferredUserInput{
+		AffiliateID:    uuid.New(),
+		ReferredUserID: 303,
+		ClickID:        "click-kyc-1",
+		FraudSignals: FraudSignals{
+			AffiliateKYCIdentityHash: "hmac-doc-same",
+			ReferredKYCIdentityHash:  "hmac-doc-same",
+		},
+	}); err != nil {
+		t.Fatalf("binding must succeed despite findings, got %v", err)
+	}
+	if len(flags) != 1 {
+		t.Fatalf("expected exactly 1 flag, got %d", len(flags))
+	}
+	if flags[0].FlagType != "kyc_identity_match" {
+		t.Fatalf("expected kyc_identity_match flag, got %q", flags[0].FlagType)
+	}
+	if flags[0].Severity != domain.FraudSeverityHigh {
+		t.Fatalf("expected high severity, got %q", flags[0].Severity)
+	}
+	if flags[0].Status != domain.FraudFlagStatusOpen {
+		t.Fatalf("expected open flag (blocks payout), got %q", flags[0].Status)
+	}
+}
+
+func TestBindReferredUser_PaymentInstrumentMatchRaisesCriticalFlag(t *testing.T) {
+	ctx := context.Background()
+	var flags []*domain.AffiliateFraudFlag
+	repo := &mockAffiliateRepository{
+		getProfileByIDFunc: func(context.Context, uuid.UUID) (*domain.AffiliateProfile, error) {
+			return activeProfileForFraud(42), nil
+		},
+		getClickByClickIDFunc: func(_ context.Context, clickID string) (*domain.AffiliateClick, error) {
+			return &domain.AffiliateClick{
+				ClickID:           clickID,
+				DeviceFingerprint: "fp-unique-pay",
+				IPHash:            "ip-unique-pay",
+			}, nil
+		},
+		createFraudFlagFunc: func(_ context.Context, flag *domain.AffiliateFraudFlag) error {
+			flags = append(flags, flag)
+			return nil
+		},
+	}
+
+	if _, err := NewAffiliateService(repo, nil).BindReferredUser(ctx, BindReferredUserInput{
+		AffiliateID:    uuid.New(),
+		ReferredUserID: 404,
+		ClickID:        "click-pay-1",
+		FraudSignals: FraudSignals{
+			AffiliatePayoutInstrumentHash: "hmac-card-same",
+			ReferredPaymentInstrumentHash: "hmac-card-same",
+		},
+	}); err != nil {
+		t.Fatalf("binding must succeed despite findings, got %v", err)
+	}
+	if len(flags) != 1 {
+		t.Fatalf("expected exactly 1 flag, got %d", len(flags))
+	}
+	if flags[0].FlagType != "payment_instrument_match" {
+		t.Fatalf("expected payment_instrument_match flag, got %q", flags[0].FlagType)
+	}
+	if flags[0].Severity != domain.FraudSeverityCritical {
+		t.Fatalf("expected critical severity, got %q", flags[0].Severity)
+	}
+}
+
+func TestBindReferredUser_DistinctIdentitySignalsRaiseNoFlags(t *testing.T) {
+	ctx := context.Background()
+	var flags []*domain.AffiliateFraudFlag
+	repo := &mockAffiliateRepository{
+		getProfileByIDFunc: func(context.Context, uuid.UUID) (*domain.AffiliateProfile, error) {
+			return activeProfileForFraud(42), nil
+		},
+		getClickByClickIDFunc: func(_ context.Context, clickID string) (*domain.AffiliateClick, error) {
+			return &domain.AffiliateClick{
+				ClickID:           clickID,
+				DeviceFingerprint: "fp-clean",
+				IPHash:            "ip-clean",
+			}, nil
+		},
+		createFraudFlagFunc: func(_ context.Context, flag *domain.AffiliateFraudFlag) error {
+			flags = append(flags, flag)
+			return nil
+		},
+	}
+
+	if _, err := NewAffiliateService(repo, nil).BindReferredUser(ctx, BindReferredUserInput{
+		AffiliateID:    uuid.New(),
+		ReferredUserID: 505,
+		ClickID:        "click-clean-1",
+		FraudSignals: FraudSignals{
+			AffiliateKYCIdentityHash:      "hmac-doc-a",
+			ReferredKYCIdentityHash:       "hmac-doc-b",
+			AffiliatePayoutInstrumentHash: "hmac-card-a",
+			ReferredPaymentInstrumentHash: "hmac-card-b",
+		},
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(flags) != 0 {
+		t.Fatalf("distinct identities must not raise flags, got %d", len(flags))
+	}
+}

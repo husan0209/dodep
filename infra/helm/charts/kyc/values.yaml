@@ -1,7 +1,8 @@
 # KYC Service Helm Chart Values
-# Сервис верификации (Know Your Customer)
+# Сервис верификации личности, PEP/sanctions скрининга и compliance
+# Ports per CONVENTIONS.md — kyc: 8089 HTTP / 50059 gRPC.
 
-replicaCount: 2
+replicaCount: 3
 
 image:
   repository: ghcr.io/opus-casino/kyc
@@ -30,10 +31,10 @@ securityContext:
 
 service:
   type: ClusterIP
-  httpPort: 8080
-  httpTargetPort: 8080
-  grpcPort: 9090
-  grpcTargetPort: 9090
+  httpPort: 8089
+  httpTargetPort: 8089
+  grpcPort: 50059
+  grpcTargetPort: 50059
 
 ingress:
   enabled: true
@@ -63,8 +64,8 @@ resources:
 
 autoscaling:
   enabled: true
-  minReplicas: 2
-  maxReplicas: 8
+  minReplicas: 3
+  maxReplicas: 15
   targetCPUUtilizationPercentage: 60
   targetMemoryUtilizationPercentage: 70
 
@@ -73,7 +74,7 @@ nodeSelector:
 
 healthCheck:
   path: /health
-  port: 8080
+  port: 8089
   liveness:
     initialDelaySeconds: 10
     periodSeconds: 10
@@ -85,9 +86,11 @@ healthCheck:
     timeoutSeconds: 3
     failureThreshold: 3
 
+# Secrets are referenced, NEVER inlined (CONVENTIONS NEVER-5).
+# kyc-secrets must provide: database-url, redis-addr, redis-password,
+# jwt-secret-key, kyc-field-key, sumsub-webhook-secret,
+# sumsub-api-key, sumsub-api-secret, complyadvantage-api-key.
 env:
-  - name: GIN_MODE
-    value: "release"
   - name: APP_ENV
     valueFrom:
       configMapKeyRef:
@@ -98,25 +101,40 @@ env:
       secretKeyRef:
         name: kyc-secrets
         key: database-url
-  - name: REDIS_URL
+  - name: REDIS_ADDR
     valueFrom:
       secretKeyRef:
         name: kyc-secrets
-        key: redis-url
-  - name: REDPANDA_BROKERS
-    valueFrom:
-      configMapKeyRef:
-        name: kyc-config
-        key: redpanda-brokers
-  - name: JUMIO_API_TOKEN
+        key: redis-addr
+  - name: REDIS_PASSWORD
     valueFrom:
       secretKeyRef:
         name: kyc-secrets
-        key: jumio-api-token
+        key: redis-password
+  - name: JWT_SECRET_KEY
+    valueFrom:
+      secretKeyRef:
+        name: kyc-secrets
+        key: jwt-secret-key
+  - name: KYC_FIELD_KEY
+    valueFrom:
+      secretKeyRef:
+        name: kyc-secrets
+        key: kyc-field-key
+  - name: SUMSUB_WEBHOOK_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: kyc-secrets
+        key: sumsub-webhook-secret
+  - name: COMPLYADVANTAGE_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: kyc-secrets
+        key: complyadvantage-api-key
 
 podDisruptionBudget:
   enabled: true
-  minAvailable: 1
+  minAvailable: 2
 
 networkPolicy:
   enabled: true
@@ -130,9 +148,9 @@ networkPolicy:
               name: monitoring
       ports:
         - protocol: TCP
-          port: 8080
+          port: 8089
         - protocol: TCP
-          port: 9090
+          port: 50059
   egress:
     - to:
         - namespaceSelector:
@@ -143,8 +161,6 @@ networkPolicy:
           port: 5432
         - protocol: TCP
           port: 6379
-        - protocol: TCP
-          port: 9092
     - to: []
       ports:
         - protocol: TCP
@@ -156,3 +172,17 @@ serviceMonitor:
   scrapeTimeout: 10s
   path: /metrics
   port: metrics
+
+# KYC-specific settings
+kyc:
+  providers:
+    sumsub:
+      enabled: true
+      base_url: "https://api.sumsub.com"
+    complyadvantage:
+      enabled: false # stub provider until PSP credentials land
+      base_url: "https://api.complyadvantage.com"
+  cache:
+    status_ttl: 60s # NEVER cache KYC level longer than 1 minute
+  documents:
+    address_freshness_days: 90

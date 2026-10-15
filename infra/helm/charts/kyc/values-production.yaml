@@ -1,7 +1,6 @@
 # KYC Service - Production Environment Values
-# Production окружение - верификация с внешними API
 
-replicaCount: 4
+replicaCount: 6
 
 image:
   tag: "v1.0.0"
@@ -22,14 +21,14 @@ resources:
 
 autoscaling:
   enabled: true
-  minReplicas: 4
-  maxReplicas: 16
+  minReplicas: 6
+  maxReplicas: 30
   targetCPUUtilizationPercentage: 50
   targetMemoryUtilizationPercentage: 60
 
 podDisruptionBudget:
   enabled: true
-  minAvailable: 2
+  minAvailable: 4
 
 networkPolicy:
   enabled: true
@@ -46,9 +45,9 @@ networkPolicy:
               name: production
       ports:
         - protocol: TCP
-          port: 8080
+          port: 8089
         - protocol: TCP
-          port: 9090
+          port: 50059
   egress:
     - to:
         - namespaceSelector:
@@ -59,16 +58,6 @@ networkPolicy:
           port: 5432
         - protocol: TCP
           port: 6379
-        - protocol: TCP
-          port: 9092
-        - protocol: TCP
-          port: 9093
-        - protocol: TCP
-          port: 9094
-    - to: []
-      ports:
-        - protocol: TCP
-          port: 443
     - to:
         - namespaceSelector:
             matchLabels:
@@ -76,6 +65,10 @@ networkPolicy:
       ports:
         - protocol: TCP
           port: 4317
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 443
 
 serviceMonitor:
   enabled: true
@@ -132,8 +125,6 @@ tolerations:
     effect: "NoSchedule"
 
 env:
-  - name: GIN_MODE
-    value: "release"
   - name: APP_ENV
     value: "production"
   - name: DATABASE_URL
@@ -141,19 +132,46 @@ env:
       secretKeyRef:
         name: kyc-secrets-production
         key: database-url
-  - name: REDIS_URL
+  - name: REDIS_ADDR
     valueFrom:
       secretKeyRef:
         name: kyc-secrets-production
-        key: redis-url
-  - name: REDPANDA_BROKERS
-    value: "redpanda.data.svc.cluster.local:9092,redpanda.data.svc.cluster.local:9093,redpanda.data.svc.cluster.local:9094"
-  - name: JUMIO_API_TOKEN
+        key: redis-addr
+  - name: REDIS_PASSWORD
     valueFrom:
       secretKeyRef:
         name: kyc-secrets-production
-        key: jumio-api-token
-  - name: OTEL_EXPORTER_OTLP_ENDPOINT
-    value: "http://otel-collector.monitoring.svc.cluster.local:4317"
-  - name: OTEL_SERVICE_NAME
-    value: "kyc-production"
+        key: redis-password
+  - name: JWT_SECRET_KEY
+    valueFrom:
+      secretKeyRef:
+        name: kyc-secrets-production
+        key: jwt-secret-key
+  - name: KYC_FIELD_KEY
+    valueFrom:
+      secretKeyRef:
+        name: kyc-secrets-production
+        key: kyc-field-key
+  - name: SUMSUB_WEBHOOK_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: kyc-secrets-production
+        key: sumsub-webhook-secret
+  - name: COMPLYADVANTAGE_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: kyc-secrets-production
+        key: complyadvantage-api-key
+
+kyc:
+  providers:
+    sumsub:
+      enabled: true
+      base_url: "https://api.sumsub.com"
+    complyadvantage:
+      enabled: true
+      base_url: "https://api.complyadvantage.com"
+  cache:
+    status_ttl: 60s
+  documents:
+    address_freshness_days: 90

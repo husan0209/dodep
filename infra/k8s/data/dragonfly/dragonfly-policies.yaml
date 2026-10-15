@@ -1,0 +1,64 @@
+# DragonflyDB Cache Policies — TTL / Eviction reference
+# Author: DATA_ENGINEER
+# Date: 2026-10-15
+# Scope: Этап 3.2 — документирует TTL и eviction политики рядом с манифестом.
+# Additive: НЕ правит dragonflydb.yaml; рабочий конфиг уже содержит:
+#   --maxmemory=64gb --cache_mode=true --save_schedule=*:300 --maxclients=10000
+# Этот ConfigMap — единый источник TTL-контрактов для backend-инженеров
+# (Rust fred / Go go-redis клиенты обязаны соблюдать TTL из таблицы ниже).
+# Проверка соответствия skill dragonflydb-caching.skill.md + architecture-overview § Caching.
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: data
+  labels:
+    app.kubernetes.io/part-of: opus-casino
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dragonfly-policies
+  namespace: data
+data:
+  # TTL-контракты (секунды). Нарушение = риск memory leak / stale odds.
+  # Источник истины для кода: эта таблица + dragonflydb-caching.skill.md.
+  ttl-policies.table: |
+    namespace | key pattern                          | type   | TTL (sec) | TTL (human)     | notes
+    ----------|----------------------------------------|--------|-----------|-----------------|--------------------------------------
+    session:  | session:{user_id}                      | Hash   | 604800    | 7 days          | max 5 sessions/user, evict oldest
+    session:  | session:refresh:{token}                | String | 604800    | 7 days          | refresh rotation invalidates old
+    cache:    | cache:odds:{event}:{market}            | String | 5 / 30    | live 5s / prematch 30s | write-through from Betting Engine
+    cache:    | cache:user:{user_id}                   | String | 300       | 5 min           | cache-aside, delete on write (never update)
+    cache:    | cache:games:page:{n}                   | String | 600       | 10 min          | paginated, never >5MB per value
+    cache:    | cache:{entity}:{id} = NOT_FOUND        | String | 60        | 1 min           | negative caching
+    rl:       | rl:{action}:{id}:{window}              | String | = window  | per action      | login 10/min, bet.place 60/min, see docs
+    idem:     | idem:{uuid}                            | String | 86400     | 24 hours        | + DB UNIQUE safety net
+    lock:     | lock:{resource}:{id}                  | String | 30        | 30s (+ renewal)| SET NX EX; release via Lua owner-check
+    lb:       | lb:{type}:{period}                     | ZSET   | none*     | *expires at period end | daily keys EXPIRE at 00:05 UTC next day
+    ff:       | ff:{flag}                              | String | none      | pub/sub refresh | 60s fallback poll
+    ws:       | ws:conn:{user_id}                      | Set    | 3600      | 1h (heartbeat refresh) |
+    counter:  | counter:{metric}:{id}                 | String | = window  | atomic INCR     |
+
+  # Eviction / persistence (соответствует флагам dragonflydb.yaml):
+  eviction-persistence.note: |
+    cache_mode=true  → Dragonfly работает как кэш: при достижении maxmemory=64gb
+                       вытеснение LRU (не OOM). Финансовые данные НЕ хранятся
+                       только в кэше — source of truth всегда PostgreSQL.
+    maxmemory=64gb   → лимит на pod (limits.memory=72Gi оставляет 8Gi headroom).
+    save_schedule=*:300 → snapshot каждые 5 минут в /data (PVC 100Gi) — RPO ~5 мин.
+    dbnum=1, hz=100, maxclients=10000 — см. dragonflydb.yaml.
+    replicas: 3 pods StatefulSet; клиенты ходят через Service dragonfly-cluster:6379.
+
+  # Проверки на живом кластере (evidence для Этапов 17-18):
+  verification.commands: |
+    # 1. Eviction режим и память:
+    redis-cli -h dragonfly-cluster -p 6379 INFO memory | grep -E 'maxmemory|evicted'
+    redis-cli -h dragonfly-cluster -p 6379 CONFIG GET maxmemory
+    # 2. TTL выборочных ключей (должен вернуть >0, не -1/-2):
+    redis-cli -h dragonfly-cluster -p 6379 TTL "cache:odds:789:456"
+    redis-cli -h dragonfly-cluster -p 6379 TTL "session:12345"
+    redis-cli -h dragonfly-cluster -p 6379 TTL "idem:<uuid>"
+    # 3. P99 latency (цель <1ms) — через VictoriaMetrics: dragonfly_command_latency_seconds
+    # 4. Snapshot свежесть: ls -l /data (внутри pod dragonfly-0), mtime < 6 мин.

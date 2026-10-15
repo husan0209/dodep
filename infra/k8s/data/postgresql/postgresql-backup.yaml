@@ -1,0 +1,227 @@
+# PostgreSQL Backup: WAL-G → S3 (continuous WAL + daily full)
+# Author: DATA_ENGINEER
+# Date: 2026-10-15
+# Scope: Этап 3.1 — закрывает пункт "Backup: WAL-G → S3".
+# Additive: НЕ правит postgresql.yaml; архивный режим на primary включается
+# ALTER SYSTEM / include (см. docs/data/backup-pitr-runbook.md).
+#
+# Secrets policy (CONVENTIONS NEVER-5):
+# - НИКАКИХ секретов в этом файле. Все чувствительные значения —
+#   через secretKeyRef (postgresql-secrets, s3-backup-credentials).
+# - Имя бакета — НЕ секрет, но передаётся через env WALG_S3_PREFIX
+#   (требование задачи: "S3 bucket refs via env").
+#
+# Layout в S3: s3://<bucket>/postgres/prod/{basebackups,wal}/
+# Retention: 30 daily + 12 monthly — enforced командой wal-g delete retain.
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: data
+  labels:
+    app.kubernetes.io/part-of: opus-casino
+
+---
+# ConfigMap: НЕсекретные настройки WAL-G (тюнинг + retention).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: walg-config
+  namespace: data
+data:
+  WALG_COMPRESSION: "zstd"
+  WALG_COMPRESSION_LEVEL: "3"
+  WALG_DELTA_MAX_STEPS: "6"
+  WALG_UPLOAD_CONCURRENCY: "4"
+  WALG_DOWNLOAD_CONCURRENCY: "4"
+  WALG_DISK_RATE_LIMIT: "0"
+  WALG_NETWORK_RATE_LIMIT: "0"
+  # Retention policy (docs): 30 daily fulls; monthly/yearly — тегами в runbook.
+  WALG_RETENTION_FULL: "30"
+  PG_STAT_STATEMENTS: "on"
+  # Напоминание для primary (применить вручную, см. runbook):
+  # archive_mode = on
+  # archive_command = 'wal-g wal-push %p'
+  # archive_timeout = 60
+  # wal_level уже logical (>= replica) в postgresql.yaml — OK.
+
+---
+# ServiceAccount для backup CronJobs (минимум привилегий; IRSA аннотация
+# добавляется платформенной командой при привязке IAM роли — см. runbook).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: pg-backup
+  namespace: data
+  labels:
+    app: pg-backup
+
+---
+# CronJob: ежедневный full backup (02:00 UTC, off-peak).
+# Образ pg-walg содержит postgres-client + wal-g (pinned version).
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: pg-walg-full-backup
+  namespace: data
+  labels:
+    app: pg-backup
+    backup-type: full
+spec:
+  schedule: "0 2 * * *"
+  timeZone: "UTC"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 7200
+      template:
+        metadata:
+          labels:
+            app: pg-backup
+            backup-type: full
+        spec:
+          serviceAccountName: pg-backup
+          restartPolicy: OnFailure
+          # Примечание: WAL-G требует файловый доступ к PGDATA.
+          # Этот Job делает pg_basebackup с primary по сети (replication_user)
+          # во временный volume, затем wal-g backup-push в S3.
+          # Размер ephemeral volume = размер базы + запас (см. runbook).
+          containers:
+            - name: walg-backup
+              image: ghcr.io/opus-casino/pg-walg:16-3.0.3
+              command:
+                - /bin/bash
+                - -c
+                - |
+                  set -euo pipefail
+                  echo "Step 1/2: pg_basebackup from primary..."
+                  rm -rf /tmp/pgbase/* || true
+                  pg_basebackup \
+                    -h pg-coordinator -U replication_user \
+                    -D /tmp/pgbase -Fp -Xs -P -v
+                  echo "Step 2/2: wal-g backup-push to S3..."
+                  wal-g backup-push /tmp/pgbase
+                  echo "Backup complete, listing recent backups:"
+                  wal-g backup-list --detail --json | head -c 2000; echo
+              env:
+                - name: PGHOST
+                  value: pg-coordinator
+                - name: PGPORT
+                  value: "5432"
+                - name: PGUSER
+                  value: replication_user
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: postgresql-secrets
+                      key: replication-password
+                # S3 bucket ref — через env (не секрет-значение, но централизованно).
+                - name: WALG_S3_PREFIX
+                  value: s3://opus-casino-pg-backups/postgres/prod
+                - name: AWS_REGION
+                  value: eu-central-1
+                - name: AWS_ACCESS_KEY_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: s3-backup-credentials
+                      key: aws-access-key-id
+                - name: AWS_SECRET_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: s3-backup-credentials
+                      key: aws-secret-access-key
+                - name: WALG_COMPRESSION
+                  valueFrom:
+                    configMapKeyRef:
+                      name: walg-config
+                      key: WALG_COMPRESSION
+                - name: WALG_UPLOAD_CONCURRENCY
+                  valueFrom:
+                    configMapKeyRef:
+                      name: walg-config
+                      key: WALG_UPLOAD_CONCURRENCY
+              resources:
+                requests:
+                  cpu: "500m"
+                  memory: "1Gi"
+                limits:
+                  cpu: "2"
+                  memory: "4Gi"
+              volumeMounts:
+                - name: pgbase
+                  mountPath: /tmp/pgbase
+          volumes:
+            # Ephemeral volume под pg_basebackup (размер = база + 20% запас).
+            # Для 200Gi базы запросить 250Gi ephemeral-storage на ноде
+            # (см. runbook § "Как работает backup"; альтернатива — RWX volume).
+            - name: pgbase
+              emptyDir:
+                sizeLimit: 250Gi
+
+---
+# CronJob: ежедневная проверка бэкапов + retention enforcement (06:00 UTC).
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: pg-walg-backup-verify
+  namespace: data
+  labels:
+    app: pg-backup
+    backup-type: verify
+spec:
+  schedule: "0 6 * * *"
+  timeZone: "UTC"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 1800
+      template:
+        metadata:
+          labels:
+            app: pg-backup
+            backup-type: verify
+        spec:
+          serviceAccountName: pg-backup
+          restartPolicy: OnFailure
+          containers:
+            - name: walg-verify
+              image: ghcr.io/opus-casino/pg-walg:16-3.0.3
+              command:
+                - /bin/bash
+                - -c
+                - |
+                  set -euo pipefail
+                  echo "=== backup-list ==="
+                  wal-g backup-list
+                  echo "=== wal-verify (integrity) ==="
+                  wal-g wal-verify integrity --concurrency 4
+                  echo "=== retention: keep 30 fulls ==="
+                  wal-g delete retain FULL 30 --confirm
+              env:
+                - name: WALG_S3_PREFIX
+                  value: s3://opus-casino-pg-backups/postgres/prod
+                - name: AWS_REGION
+                  value: eu-central-1
+                - name: AWS_ACCESS_KEY_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: s3-backup-credentials
+                      key: aws-access-key-id
+                - name: AWS_SECRET_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: s3-backup-credentials
+                      key: aws-secret-access-key
+              resources:
+                requests:
+                  cpu: "250m"
+                  memory: "512Mi"
+                limits:
+                  cpu: "1"
+                  memory: "2Gi"

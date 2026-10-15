@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "kyc.fullname" . }}-config
+  labels:
+    {{- include "kyc.labels" . | nindent 4 }}
+data:
+  app-env: {{ .Values.env | dig 0 "value" "development" | quote }}
+  grpc-port: "{{ .Values.service.grpcTargetPort }}"
+
+  # KYC provider configurations (credentials come from Secrets, never here)
+  kyc.providers.sumsub.enabled: "{{ .Values.kyc.providers.sumsub.enabled }}"
+  kyc.providers.sumsub.base-url: "{{ .Values.kyc.providers.sumsub.base_url }}"
+  kyc.providers.complyadvantage.enabled: "{{ .Values.kyc.providers.complyadvantage.enabled }}"
+  kyc.providers.complyadvantage.base-url: "{{ .Values.kyc.providers.complyadvantage.base_url }}"
+  kyc.cache.status-ttl: "{{ .Values.kyc.cache.status_ttl }}"
+  kyc.documents.address-freshness-days: "{{ .Values.kyc.documents.address_freshness_days }}"

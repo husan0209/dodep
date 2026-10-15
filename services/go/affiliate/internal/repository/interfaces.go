@@ -60,6 +60,11 @@ type AffiliateRepository interface {
 	ListAllFraudFlags(ctx context.Context, status domain.FraudFlagStatus, limit, offset int) ([]domain.AffiliateFraudFlag, int64, error)
 
 	ReleaseEligibleEarnings(ctx context.Context, now time.Time) (int64, error)
+	GetEarningByID(ctx context.Context, earningID uuid.UUID) (*domain.AffiliateEarning, error)
+	GetEarningByIdempotencyKey(ctx context.Context, key string) (*domain.AffiliateEarning, error)
+	GetPayoutByIdempotencyKey(ctx context.Context, key string) (*domain.AffiliatePayout, error)
+	ReverseEarning(ctx context.Context, earningID uuid.UUID, reason string) (*domain.AffiliateEarning, error)
+	UpsertDailyAggregate(ctx context.Context, affiliateID uuid.UUID, reportDate time.Time, deltas DailyAggregateDeltas) error
 
 	ListPendingOutboxEvents(ctx context.Context, limit int) ([]domain.OutboxEvent, error)
 	MarkOutboxEventPublished(ctx context.Context, eventID int64) error
